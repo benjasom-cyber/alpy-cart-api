@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/cart.js": {
+      "memory": 128,
+      "maxDuration": 5
+    }
+  }
+}
