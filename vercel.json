@@ -1,9 +1,6 @@
 {
   "functions": {
     "api/cart.js":           { "memory": 128, "maxDuration": 5 },
-    "api/get-booking.js":    { "memory": 128, "maxDuration": 10 },
-    "api/cancel-booking.js": { "memory": 128, "maxDuration": 10 },
-    "api/resend-voucher.js": { "memory": 128, "maxDuration": 10 },
     "api/generate-quote.js": { "memory": 128, "maxDuration": 10 }
   }
 }
