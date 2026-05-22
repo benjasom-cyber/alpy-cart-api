@@ -12,7 +12,7 @@
  *   lang      - language code (optional, defaults to 'en')
  *   promoCode - promo code (optional)
  *
- * Returns: { cartUrl, shopName, shopId, resort, summary }
+ * Returns: { cartUrl, shopUrl, shopName, shopId, resort, summary }
  */
 const SHOPS_URL = 'https://raw.githubusercontent.com/benjasom-cyber/alpy-cart-api/main/api/shops_data.json';
 let _shopsCache = null;
@@ -38,7 +38,7 @@ function getDefinitionId(age, skill, equipment) {
   return PRODUCTS[cat][eq][sk];
 }
 function norm(s) {
-  return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[''`']/g,'').replace(/[.\-_]/g,' ').replace(/\s+/g,' ').trim();
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[''`']/g,'').replace(/[.\-_]/g,' ').replace(/\s+/g,' ').trim();
 }
 function findShop(shops, resort) {
   if (!resort) return null;
@@ -73,8 +73,9 @@ export default async function handler(req, res) {
   if (missing.length) return res.status(400).json({ error: 'Missing: '+missing.join(', ') });
   const cartPersons = persons.map(p => ({ age: parseInt(p.age)||35, skill: p.skill==='intermediate'?'advanced':(p.skill||'advanced'), products: [{ definitionId: getDefinitionId(p.age,p.skill,p.equipment), addons:[1] }] }));
   const cart = { promotionCode: promoCode||'', persons: cartPersons, insurances: [] };
-  const cartUrl = 'https://www.alpy.com/'+lang+'/ski-rental/'+shop.country+'/'+shop.region+'/'+shop.slug+'/'+shop.id+'/products?cart='+encodeURIComponent(JSON.stringify(cart))+'&startDate='+startDate+'&endDate='+endDate;
+  const shopUrl  = 'https://www.alpy.com/'+lang+'/ski-rental/'+shop.country+'/'+shop.region+'/'+shop.slug+'/'+shop.id;
+  const cartUrl  = shopUrl+'/products?cart='+encodeURIComponent(JSON.stringify(cart))+'&startDate='+startDate+'&endDate='+endDate;
   const personsDesc = persons.map(p => p.age+'yr '+(p.skill||'intermediate')+' '+(p.equipment||'ski')).join(', ');
   const days = Math.ceil((new Date(endDate)-new Date(startDate))/86400000);
-  return res.status(200).json({ cartUrl, shopName: shop.name, shopId: shop.id, resort: shop.town, summary: { shopId:shop.id, shopName:shop.name, resort:shop.town, country:shop.country, startDate, endDate, days, persons:persons.length, personsDetail:personsDesc, lang } });
+  return res.status(200).json({ cartUrl, shopUrl, shopName: shop.name, shopId: shop.id, resort: shop.town, summary: { shopId:shop.id, shopName:shop.name, resort:shop.town, country:shop.country, startDate, endDate, days, persons:persons.length, personsDetail:personsDesc, lang } });
 }
