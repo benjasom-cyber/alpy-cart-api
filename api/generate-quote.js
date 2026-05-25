@@ -17,6 +17,7 @@
  *   promoCode     - promo code (optional)
  *   claude_json   - full Claude JSON output from Zendesk flow (optional shorthand)
  *                   replaces resort/startDate/endDate/persons when provided
+ *                   also auto-detected when resolved_resort_town_name starts with {
  *
  * Returns: { cartUrl, shopUrl, shopName, shopId, resort, summary }
  */
@@ -89,9 +90,14 @@ function findShop(shops, resort) {
   return null;
 }
 
+/**
+ * Try to parse a Claude "Detect quote intent" JSON output.
+ * Strips markdown code fences if present.
+ * Only accepts objects that have a 'resort' field (quote-intent shape).
+ */
 function tryParseClaudeJson(raw) {
   if (!raw) return null;
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  const cleaned = String(raw).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
   try {
     const parsed = JSON.parse(cleaned);
     if (typeof parsed === 'object' && parsed !== null && 'resort' in parsed) return parsed;
@@ -105,41 +111,47 @@ export default async function handler(req, res) {
 
   const params = req.method === 'POST' ? req.body : req.query;
 
-  // Support claude_json: full Claude JSON string from Zendesk Action Flow step
+  // ── Detect Claude JSON shorthand ─────────────────────────────────────────────
+  // Supports three entry points:
+  //   1. params.claude_json          — explicit single-param mode
+  //   2. params.resolved_resort_town_name starting with "{"  — all 4 fields set to content
+  //   3. params.resort starting with "{"                     — fallback
   let claudeParsed = null;
   if (params.claude_json) {
     claudeParsed = tryParseClaudeJson(params.claude_json);
   }
   if (!claudeParsed && params.resolved_resort_town_name) {
-    const v = params.resolved_resort_town_name.trim();
+    const v = String(params.resolved_resort_town_name).trim();
     if (v.startsWith('{')) claudeParsed = tryParseClaudeJson(v);
   }
   if (!claudeParsed && params.resort) {
-    const v = params.resort.trim();
+    const v = String(params.resort).trim();
     if (v.startsWith('{')) claudeParsed = tryParseClaudeJson(v);
   }
 
-  const {
-    resort:                    resortParam,
-    resolved_resort_town_name: resortAlt,
-    shopId:                    shopIdParam,
-    lang                     = 'en',
-    startDate:                 startDateParam,
-    start_date:                startDateAlt,
-    endDate:                   endDateParam,
-    end_date:                  endDateAlt,
-    promoCode = '',
-  } = params;
+  const { shopId: shopIdParam, lang = 'en', promoCode = '' } = params;
 
-  const resort    = resortParam    || resortAlt    || (claudeParsed && claudeParsed.resort)     || null;
-  const startDate = startDateParam || startDateAlt || (claudeParsed && claudeParsed.start_date) || null;
-  const endDate   = endDateParam   || endDateAlt   || (claudeParsed && claudeParsed.end_date)   || null;
+  // When claudeParsed is set, use ONLY its values so raw JSON strings don't
+  // leak into individual fields (start_date / end_date / persons would otherwise
+  // contain the full JSON blob when all 4 Zendesk fields are mapped to content).
+  let resort, startDate, endDate, persons;
+  if (claudeParsed) {
+    resort    = claudeParsed.resort     || null;
+    startDate = claudeParsed.start_date || null;
+    endDate   = claudeParsed.end_date   || null;
+    persons   = claudeParsed.persons    || null;
+  } else {
+    resort    = params.resort || params.resolved_resort_town_name || null;
+    startDate = params.startDate || params.start_date || null;
+    endDate   = params.endDate   || params.end_date   || null;
+    persons   = params.persons || null;
+  }
 
-  let persons = params.persons || (claudeParsed && claudeParsed.persons) || null;
   if (typeof persons === 'string') {
     try { persons = JSON.parse(persons); } catch { persons = null; }
   }
 
+  // ── Resolve shop ──────────────────────────────────────────────────────────────
   let shop = null;
   const shops = await getShops();
 
@@ -153,7 +165,7 @@ export default async function handler(req, res) {
     shop = findShop(shops, String(resort));
     if (!shop) {
       return res.status(404).json({
-        error: 'No shop found for resort: "' + resort + '". Check spelling or use alpy.com to find a valid resort name.',
+        error: 'No shop found for resort: "' + resort + '". Check spelling or use alpy.com.',
         hint: 'Examples: "Chamonix", "Morzine", "Zermatt", "Val d'Isere", "Les Deux Alpes", "St Anton"'
       });
     }
@@ -165,6 +177,7 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── Validate ──────────────────────────────────────────────────────────────────
   const missing = [];
   if (!startDate) missing.push('startDate');
   if (!endDate)   missing.push('endDate');
@@ -178,15 +191,16 @@ export default async function handler(req, res) {
     });
   }
 
+  // ── Build cart URL ────────────────────────────────────────────────────────────
   const cartPersons = persons.map(p => ({
     age:      parseInt(p.age) || 35,
     skill:    p.skill === 'intermediate' ? 'advanced' : (p.skill || 'advanced'),
     products: [{ definitionId: getDefinitionId(p.age, p.skill, p.equipment), addons: [1] }]
   }));
 
-  const cart = { promotionCode: promoCode || '', persons: cartPersons, insurances: [] };
-  const shopUrl  = 'https://www.alpy.com/' + lang + '/ski-rental/' + shop.country + '/' + shop.region + '/' + shop.slug + '/' + shop.id;
-  const cartUrl  = shopUrl + '/products?cart=' + encodeURIComponent(JSON.stringify(cart)) + '&startDate=' + startDate + '&endDate=' + endDate;
+  const cart    = { promotionCode: promoCode || '', persons: cartPersons, insurances: [] };
+  const shopUrl = 'https://www.alpy.com/' + lang + '/ski-rental/' + shop.country + '/' + shop.region + '/' + shop.slug + '/' + shop.id;
+  const cartUrl = shopUrl + '/products?cart=' + encodeURIComponent(JSON.stringify(cart)) + '&startDate=' + startDate + '&endDate=' + endDate;
 
   const personsDesc = persons.map(p =>
     (p.age || 35) + 'yr ' + (p.skill || 'intermediate') + ' ' + (p.equipment || 'ski')
@@ -205,4 +219,4 @@ export default async function handler(req, res) {
       startDate, endDate, days, persons: persons.length, personsDetail: personsDesc, lang
     }
   });
-    }
+      }
