@@ -1,0 +1,9 @@
+# These 6 files are replaced by api/support.js + api/_*.js (underscore = not a function).
+# Excluding them keeps the deployment within Vercel Hobby's 12-function limit.
+# odin-auth.js is intentionally NOT excluded — it's still imported by other functions.
+api/check-date-change.js
+api/check-shop-change.js
+api/find-nearest-shop.js
+api/update-personal-info.js
+api/unsubscribe-newsletter.js
+api/large-group-quote.js
