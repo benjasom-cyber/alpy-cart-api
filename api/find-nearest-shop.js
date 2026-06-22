@@ -137,13 +137,23 @@ function buildCartUrl(shopUrl, persons, startDate, endDate) {
   return `${shopUrl}/products?cart=${encodeURIComponent(JSON.stringify(cart))}&startDate=${startDate}&endDate=${endDate}`;
 }
 
+// ── Claude JSON blob normalizer ───────────────────────────────────────────────
+function expandBlob(raw) {
+  const b = { ...raw };
+  const blob = Object.values(b).find(v => typeof v === 'string' && v.trim().startsWith('{'));
+  if (blob) { try { Object.assign(b, JSON.parse(blob)); } catch {} }
+  const LC = { startdate:'startDate', enddate:'endDate' };
+  for (const [lc, cc] of Object.entries(LC)) if (b[lc] !== undefined && b[cc] === undefined) b[cc] = b[lc];
+  return b;
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed. Use POST.' });
 
-  const body = req.body || {};
+  const body = expandBlob(req.body || {});
   const {
     resort,
     accommodationAddress,
