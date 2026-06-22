@@ -6,25 +6,57 @@
  *
  * Body params:
  *   resort        - resort / town name (required unless shopId given)
- *                   e.g. "Chamonix", "Val d'Isere", "Zermatt", "St Anton"
- *   shopId        - Odin legacy shop ID (optional — overrides resort lookup)
+ *   shopId        - Odin legacy shop ID (optional)
  *   startDate     - rental start date YYYY-MM-DD (required)
  *   endDate       - rental end date YYYY-MM-DD (required)
  *   persons       - JSON array [{age, skill, equipment}] (required)
- *                   skill: beginner | intermediate | expert
- *                   equipment: ski | snowboard
  *   lang          - language code (optional, defaults to 'en')
  *   promoCode     - promo code (optional)
- *   claude_json   - full Claude JSON output from Zendesk flow (optional shorthand)
- *                   replaces resort/startDate/endDate/persons when provided
- *                   also auto-detected when resolved_resort_town_name starts with {
  *
- * Returns: { cartUrl, shopUrl, shopName, shopId, resort, summary }
+ * Returns: { cartUrl, shopName, shopId, resort, summary, pricing? }
+ *   pricing: { cheapestTotalPrice, currency, pricePerPerson, shopName, rentalDays }
  */
+
+import { getOdinToken } from './odin-auth.js';
+
+const ODIN_BASE = 'https://odin.alpy.com';
+
+async function fetchCheapestPrice({ townPath, startDate, endDate, persons, currency = 'EUR', countryCode = 'FR', promoCode }) {
+  try {
+    const token = await getOdinToken();
+    const rentalDays = Math.ceil((new Date(endDate) - new Date(startDate)) / 86400000);
+    const ages = persons.map(p => parseInt(p.age) || 35);
+    const startDateISO = new Date(startDate).toISOString();
+    const offerParams = new URLSearchParams({ currency, startDate: startDateISO, rentalDays, countryCode });
+    ages.forEach(a => offerParams.append('ages[]', a));
+    if (promoCode) offerParams.set('promoCode', promoCode);
+    const res = await fetch(
+      ODIN_BASE + '/api/v2/location/town/' + encodeURIComponent(townPath) + '/offers?' + offerParams,
+      { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const offerList = Array.isArray(data) ? data : data.data || data.offers || [];
+    if (!offerList.length) return null;
+    let best = null;
+    let bestTotal = Infinity;
+    for (const offer of offerList) {
+      const total = offer.totalPrice ?? offer.price ?? offer.total ?? offer.amount;
+      if (typeof total === 'number' && total < bestTotal) { bestTotal = total; best = offer; }
+    }
+    if (!best) return null;
+    return {
+      cheapestTotalPrice: bestTotal,
+      pricePerPerson: persons.length > 0 ? Math.round((bestTotal / persons.length) * 100) / 100 : bestTotal,
+      currency,
+      rentalDays,
+      shopName: best.shopName || best.shop?.name || null,
+    };
+  } catch { return null; }
+}
 
 const SHOPS_URL = 'https://raw.githubusercontent.com/benjasom-cyber/alpy-cart-api/main/api/shops_data.json';
 let _shopsCache = null;
-
 async function getShops() {
   if (_shopsCache) return _shopsCache;
   const r = await fetch(SHOPS_URL);
@@ -65,7 +97,7 @@ function norm(s) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[''\u0060\u2019]/g, '')
+    .replace(/[\u2019\u2018\u0060\u0027]/g, '')
     .replace(/[.\-_]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -75,33 +107,9 @@ function findShop(shops, resort) {
   if (!resort) return null;
   const q   = norm(resort);
   const qNS = q.replace(/\s/g, '');
-  for (const s of shops) {
-    const t = norm(s.town);
-    if (t === q || t.replace(/\s/g, '') === qNS) return s;
-  }
-  for (const s of shops) {
-    const tl = norm(s.town);
-    if (tl.includes(q) || tl.replace(/\s/g, '').includes(qNS)) return s;
-  }
-  for (const s of shops) {
-    const nl = norm(s.name);
-    if (nl.includes(q) || nl.replace(/\s/g, '').includes(qNS)) return s;
-  }
-  return null;
-}
-
-/**
- * Try to parse a Claude "Detect quote intent" JSON output.
- * Strips markdown code fences if present.
- * Only accepts objects that have a 'resort' field (quote-intent shape).
- */
-function tryParseClaudeJson(raw) {
-  if (!raw) return null;
-  const cleaned = String(raw).replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    if (typeof parsed === 'object' && parsed !== null && 'resort' in parsed) return parsed;
-  } catch { /* ignore */ }
+  for (const s of shops) { const t = norm(s.town); if (t === q || t.replace(/\s/g, '') === qNS) return s; }
+  for (const s of shops) { const tl = norm(s.town); if (tl.includes(q) || tl.replace(/\s/g, '').includes(qNS)) return s; }
+  for (const s of shops) { const nl = norm(s.name); if (nl.includes(q) || nl.replace(/\s/g, '').includes(qNS)) return s; }
   return null;
 }
 
@@ -111,87 +119,80 @@ export default async function handler(req, res) {
 
   const params = req.method === 'POST' ? req.body : req.query;
 
-  // ── Detect Claude JSON shorthand ─────────────────────────────────────────────
-  // Supports three entry points:
-  //   1. params.claude_json          — explicit single-param mode
-  //   2. params.resolved_resort_town_name starting with "{"  — all 4 fields set to content
-  //   3. params.resort starting with "{"                     — fallback
   let claudeParsed = null;
-  if (params.claude_json) {
-    claudeParsed = tryParseClaudeJson(params.claude_json);
+  function tryParseClaudeJson(raw) {
+    if (!raw) return null;
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (typeof parsed === 'object' && parsed !== null && 'resort' in parsed) return parsed;
+    } catch { return null; }
+    return null;
   }
+
+  if (params.claude_json) claudeParsed = tryParseClaudeJson(params.claude_json);
   if (!claudeParsed && params.resolved_resort_town_name) {
-    const v = String(params.resolved_resort_town_name).trim();
+    const v = params.resolved_resort_town_name.trim();
     if (v.startsWith('{')) claudeParsed = tryParseClaudeJson(v);
   }
   if (!claudeParsed && params.resort) {
-    const v = String(params.resort).trim();
+    const v = params.resort.trim();
     if (v.startsWith('{')) claudeParsed = tryParseClaudeJson(v);
   }
 
-  const { shopId: shopIdParam, lang = 'en', promoCode = '' } = params;
+  const {
+    resort:                    resortParam,
+    resolved_resort_town_name: resortAlt,
+    shopId:                    shopIdParam,
+    lang                     = 'en',
+    startDate:                 startDateParam,
+    start_date:                startDateAlt,
+    endDate:                   endDateParam,
+    end_date:                  endDateAlt,
+    promoCode = '',
+  } = params;
 
-  // When claudeParsed is set, use ONLY its values so raw JSON strings don't
-  // leak into individual fields (start_date / end_date / persons would otherwise
-  // contain the full JSON blob when all 4 Zendesk fields are mapped to content).
-  let resort, startDate, endDate, persons;
-  if (claudeParsed) {
-    resort    = claudeParsed.resort     || null;
-    startDate = claudeParsed.start_date || null;
-    endDate   = claudeParsed.end_date   || null;
-    persons   = claudeParsed.persons    || null;
-  } else {
-    resort    = params.resort || params.resolved_resort_town_name || null;
-    startDate = params.startDate || params.start_date || null;
-    endDate   = params.endDate   || params.end_date   || null;
-    persons   = params.persons || null;
-  }
+  const resort    = resortParam    || resortAlt    || (claudeParsed && claudeParsed.resort)     || null;
+  const startDate = startDateParam || startDateAlt || (claudeParsed && claudeParsed.start_date) || null;
+  const endDate   = endDateParam   || endDateAlt   || (claudeParsed && claudeParsed.end_date)   || null;
 
+  let persons = params.persons || (claudeParsed && claudeParsed.persons) || null;
   if (typeof persons === 'string') {
     try { persons = JSON.parse(persons); } catch { persons = null; }
   }
 
-  // ── Resolve shop ──────────────────────────────────────────────────────────────
   let shop = null;
   const shops = await getShops();
 
   if (shopIdParam) {
     const id = parseInt(shopIdParam);
-    shop = shops.find(s => s.id === id) || {
-      id, slug: 'shop', country: 'france', region: 'region',
-      town: 'Shop ' + id, name: 'Shop ' + id
-    };
+    shop = shops.find(s => s.id === id) || { id, slug: 'shop', country: 'france', region: 'region', town: 'Shop ' + id, name: 'Shop ' + id };
   } else if (resort) {
     shop = findShop(shops, String(resort));
     if (!shop) {
       return res.status(404).json({
         error: 'No shop found for resort: "' + resort + '". Check spelling or use alpy.com.',
-        hint: 'Examples: "Chamonix", "Morzine", "Zermatt", "Val d'Isere", "Les Deux Alpes", "St Anton"'
+        hint: 'Examples: "Chamonix", "Morzine", "Zermatt", "Val d\'Isere", "St Anton"'
       });
     }
   } else {
     return res.status(400).json({
       error: 'Missing required param: resort (or shopId)',
-      example: { resort: 'Chamonix', startDate: '2026-03-21', endDate: '2026-03-28',
-                 persons: [{ age: 35, skill: 'intermediate', equipment: 'ski' }] }
+      example: { resort: 'Chamonix', startDate: '2026-03-21', endDate: '2026-03-28', persons: [{ age: 35, skill: 'intermediate', equipment: 'ski' }] }
     });
   }
 
-  // ── Validate ──────────────────────────────────────────────────────────────────
   const missing = [];
   if (!startDate) missing.push('startDate');
   if (!endDate)   missing.push('endDate');
   if (!persons || !Array.isArray(persons) || persons.length === 0) missing.push('persons');
-
   if (missing.length) {
     return res.status(400).json({
       error: 'Missing required params: ' + missing.join(', '),
-      example: { resort: 'Chamonix', startDate: '2026-03-21', endDate: '2026-03-28',
-                 persons: [{ age: 35, skill: 'intermediate', equipment: 'ski' }] }
+      example: { resort: 'Chamonix', startDate: '2026-03-21', endDate: '2026-03-28', persons: [{ age: 35, skill: 'intermediate', equipment: 'ski' }] }
     });
   }
 
-  // ── Build cart URL ────────────────────────────────────────────────────────────
   const cartPersons = persons.map(p => ({
     age:      parseInt(p.age) || 35,
     skill:    p.skill === 'intermediate' ? 'advanced' : (p.skill || 'advanced'),
@@ -201,12 +202,12 @@ export default async function handler(req, res) {
   const cart    = { promotionCode: promoCode || '', persons: cartPersons, insurances: [] };
   const shopUrl = 'https://www.alpy.com/' + lang + '/ski-rental/' + shop.country + '/' + shop.region + '/' + shop.slug + '/' + shop.id;
   const cartUrl = shopUrl + '/products?cart=' + encodeURIComponent(JSON.stringify(cart)) + '&startDate=' + startDate + '&endDate=' + endDate;
-
-  const personsDesc = persons.map(p =>
-    (p.age || 35) + 'yr ' + (p.skill || 'intermediate') + ' ' + (p.equipment || 'ski')
-  ).join(', ');
-
+  const personsDesc = persons.map(p => p.age + 'yr ' + (p.skill || 'intermediate') + ' ' + (p.equipment || 'ski')).join(', ');
   const days = Math.ceil((new Date(endDate) - new Date(startDate)) / 86400000);
+
+  const townPath    = shop.country + '/' + shop.region + '/' + shop.slug;
+  const countryCode = shop.country === 'france' ? 'FR' : shop.country === 'austria' ? 'AT' : shop.country === 'switzerland' ? 'CH' : shop.country === 'italy' ? 'IT' : shop.country === 'germany' ? 'DE' : 'FR';
+  const pricing     = await fetchCheapestPrice({ townPath, startDate, endDate, persons, currency: params.currency || 'EUR', countryCode, promoCode });
 
   return res.status(200).json({
     cartUrl,
@@ -214,9 +215,11 @@ export default async function handler(req, res) {
     shopName: shop.name,
     shopId:   shop.id,
     resort:   shop.town,
+    pricing:  pricing || null,
     summary: {
       shopId: shop.id, shopName: shop.name, resort: shop.town, country: shop.country,
-      startDate, endDate, days, persons: persons.length, personsDetail: personsDesc, lang
+      startDate, endDate, days, persons: persons.length, personsDetail: personsDesc, lang,
+      ...(pricing && { cheapestTotalPrice: pricing.cheapestTotalPrice, pricePerPerson: pricing.pricePerPerson, currency: pricing.currency }),
     }
   });
-      }
+}
