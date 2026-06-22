@@ -1,0 +1,12 @@
+{
+  "name": "alpy-cart-api",
+  "version": "1.0.0",
+  "description": "Alpy.com cart URL generator API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
