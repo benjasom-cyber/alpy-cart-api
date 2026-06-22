@@ -208,13 +208,27 @@ export default async function handler(req, res) {
   const townPath    = shop.country + '/' + shop.region + '/' + shop.slug;
   const countryCode = shop.country === 'france' ? 'FR' : shop.country === 'austria' ? 'AT' : shop.country === 'switzerland' ? 'CH' : shop.country === 'italy' ? 'IT' : shop.country === 'germany' ? 'DE' : 'FR';
   const pricing     = await fetchCheapestPrice({ townPath, startDate, endDate, persons, currency: params.currency || 'EUR', countryCode, promoCode });
-
+  // Expose pricing at top level for Zendesk Action Flow variables
+    const topLevelPricing = pricing ? {
+          cheapestTotalPrice: pricing.cheapestTotalPrice,
+    pricePerPerson:     pricing.pricePerPerson,
+          currency:           pricing.currency,
+          rentalDays:         pricing.rentalDays,
+          pricingAvailable:   true,
+    } : {
+          cheapestTotalPrice: null,
+          pricePerPerson:     null,
+          currency:           'EUR',
+          rentalDays:         days,
+          pricingAvailable:   false,
+    };
   return res.status(200).json({
     cartUrl,
     shopUrl,
     shopName: shop.name,
     shopId:   shop.id,
     resort:   shop.town,
+        ...topLevelPricing,
     pricing:  pricing || null,
     summary: {
       shopId: shop.id, shopName: shop.name, resort: shop.town, country: shop.country,
