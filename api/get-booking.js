@@ -24,6 +24,12 @@
  * This file now calls those endpoints directly instead of going through
  * getOdinToken() / odin-auth.js.
  *
+ * Real Odin /api/v2/booking/{ref} response shape (confirmed live 2026-07-03):
+ *   { bookingReference, id, bookingStatus, rentalPeriod: {from, to, durationInDays},
+ *     shop: {id, coreId, name, address}, basePrice: {amount, currency} (in cents),
+ *     discount, onlinePayment, total: {amount, currency} (remaining balance, in cents),
+ *     customer: {name, email, country, phone}, equipment: [...] }
+ *
  * @author Alpy Support Team
  */
 
@@ -35,12 +41,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-/**
- * Parse an ISO datetime string (or date string) to a YYYY-MM-DD string.
- * Returns null if the value is falsy or unparseable.
- * @param {string|null|undefined} value
- * @returns {string|null}
- */
 function toDateString(value) {
   if (!value) return null;
   try {
@@ -52,27 +52,14 @@ function toDateString(value) {
   }
 }
 
-/**
- * Calculate the number of rental days between two YYYY-MM-DD strings (inclusive).
- * Returns null if either date is missing.
- * @param {string|null} from
- * @param {string|null} to
- * @returns {number|null}
- */
 function calcRentalDays(from, to) {
   if (!from || !to) return null;
   const msPerDay = 1000 * 60 * 60 * 24;
   const diff = new Date(to) - new Date(from);
   if (isNaN(diff)) return null;
-  return Math.round(diff / msPerDay) + 1; // inclusive of both start and end
+  return Math.round(diff / msPerDay) + 1;
 }
 
-/**
- * Safely extract a field that might live under booking.customer.X or booking.customerX.
- * @param {object} booking
- * @param {string} subKey e.g. "name" or "email"
- * @returns {string|null}
- */
 function customerField(booking, subKey) {
   return (
     booking?.customer?.[subKey] ||
@@ -81,32 +68,30 @@ function customerField(booking, subKey) {
   );
 }
 
-/**
- * Flatten a raw Odin booking object into the standardised response shape.
- * Reads both the real Odin field names (bookingStatus, rentalPeriod.from/to)
- * and the older flat names as a fallback, in case the shape varies.
- * @param {object} booking Raw booking from Odin
- * @returns {object}
- */
 function flattenBooking(booking) {
   const rentalFrom = toDateString(booking.rentalPeriod?.from ?? booking.rentalFrom);
   const rentalTo = toDateString(booking.rentalPeriod?.to ?? booking.rentalTo);
   const rentalDays =
     booking.rentalPeriod?.durationInDays ?? calcRentalDays(rentalFrom, rentalTo);
 
-  const items = Array.isArray(booking.items) ? booking.items : [];
-  // personsCount: try filtering equipment items first; fall back to all items
+  const items = Array.isArray(booking.items)
+    ? booking.items
+    : Array.isArray(booking.equipment)
+    ? booking.equipment
+    : [];
   const equipmentItems = items.filter(
     (i) => i?.type?.toLowerCase() === 'equipment' || i?.category?.toLowerCase() === 'equipment'
   );
   const personsCount = equipmentItems.length > 0 ? equipmentItems.length : items.length;
 
+  // Odin amounts (basePrice / total / price) are in cents.
+  const moneyObj =
+    booking.basePrice ?? booking.total ?? booking.price ?? booking.pricing ?? null;
   const totalPrice =
-    booking.totalPrice ??
-    booking.price?.total ??
-    booking.pricing?.total ??
-    booking.grandTotal ??
-    null;
+    moneyObj && moneyObj.amount != null
+      ? moneyObj.amount / 100
+      : booking.totalPrice ?? booking.grandTotal ?? null;
+  const currency = moneyObj?.currency ?? booking.currency ?? null;
 
   return {
     found: true,
@@ -124,7 +109,7 @@ function flattenBooking(booking) {
     rentalTo,
     rentalDays,
     totalPrice: totalPrice !== null ? Number(totalPrice) : null,
-    currency: booking.currency ?? booking.price?.currency ?? null,
+    currency,
     personsCount,
     items,
     raw: booking,
@@ -132,13 +117,11 @@ function flattenBooking(booking) {
 }
 
 export default async function handler(req, res) {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, CORS_HEADERS);
     return res.end();
   }
 
-  // Method guard
   if (req.method !== 'POST') {
     res.writeHead(405, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }));
@@ -146,7 +129,6 @@ export default async function handler(req, res) {
 
   const { bookingReference, customerName, customerEmail, customerLastName } = req.body || {};
 
-  // Determine which combo to use
   const hasComboA = bookingReference && customerName;
   const hasComboB = customerEmail && customerLastName;
 
@@ -164,8 +146,6 @@ export default async function handler(req, res) {
     let booking = null;
 
     if (hasComboA) {
-      // Combo A: public endpoint, no auth needed — proven working pattern
-      // (same one used successfully by the SKIBOT ZAF app's own get-booking.js).
       const ref = bookingReference.trim().toUpperCase();
       const r = await fetch(`${ODIN_BASE}/api/v2/booking/${encodeURIComponent(ref)}`, {
         headers: { Accept: 'application/json' },
@@ -177,11 +157,6 @@ export default async function handler(req, res) {
         throw new Error(`Odin booking lookup failed (${r.status}): ${body.slice(0, 200)}`);
       }
     } else {
-      // Combo B: best-effort by email. Odin's /api/v2/customer route requires
-      // a customer JWT to actually return data server-side (known limitation,
-      // documented in ODIN_INFRASTRUCTURE.md) — kept here for parity with the
-      // ZAF app, but may legitimately 401 until Odin exposes an admin-scoped
-      // search endpoint.
       const r = await fetch(`${ODIN_BASE}/api/v2/customer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
