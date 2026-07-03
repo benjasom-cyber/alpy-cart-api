@@ -1,21 +1,22 @@
 {
   "functions": {
-    "api/cart.js":               { "memory": 128, "maxDuration": 5  },
-    "api/get-booking.js":        { "memory": 128, "maxDuration": 10 },
-    "api/cancel-booking.js":     { "memory": 128, "maxDuration": 10 },
-    "api/generate-quote.js":     { "memory": 128, "maxDuration": 10 },
-    "api/search-bookings.js":    { "memory": 128, "maxDuration": 15 },
-    "api/get-cheapest-shop.js":  { "memory": 128, "maxDuration": 15 },
+    "api/cart.js": { "memory": 128, "maxDuration": 5 },
+    "api/get-booking.js": { "memory": 128, "maxDuration": 10 },
+    "api/cancel-booking.js": { "memory": 128, "maxDuration": 10 },
+    "api/generate-quote.js": { "memory": 128, "maxDuration": 10 },
+    "api/search-bookings.js": { "memory": 128, "maxDuration": 15 },
+    "api/get-cheapest-shop.js": { "memory": 128, "maxDuration": 15 },
     "api/execute-date-change.js":{ "memory": 128, "maxDuration": 15 },
-    "api/odin-auth.js":          { "memory": 128, "maxDuration": 10 },
-    "api/support.js":            { "memory": 256, "maxDuration": 30 }
+    "api/odin-auth.js": { "memory": 128, "maxDuration": 10 },
+    "api/support.js": { "memory": 256, "maxDuration": 30 }
   },
   "rewrites": [
-    { "source": "/api/check-date-change",      "destination": "/api/support?action=check-date-change"      },
-    { "source": "/api/check-shop-change",      "destination": "/api/support?action=check-shop-change"      },
-    { "source": "/api/find-nearest-shop",      "destination": "/api/support?action=find-nearest-shop"      },
-    { "source": "/api/update-personal-info",   "destination": "/api/support?action=update-personal-info"   },
+    { "source": "/api/check-date-change", "destination": "/api/support?action=check-date-change" },
+    { "source": "/api/check-shop-change", "destination": "/api/support?action=check-shop-change" },
+    { "source": "/api/find-nearest-shop", "destination": "/api/support?action=find-nearest-shop" },
+    { "source": "/api/update-personal-info", "destination": "/api/support?action=update-personal-info" },
     { "source": "/api/unsubscribe-newsletter", "destination": "/api/support?action=unsubscribe-newsletter" },
-    { "source": "/api/large-group-quote",      "destination": "/api/support?action=large-group-quote"      }
+    { "source": "/api/large-group-quote", "destination": "/api/support?action=large-group-quote" },
+    { "source": "/api/resend-voucher", "destination": "/api/support?action=resend-voucher" }
   ]
 }
