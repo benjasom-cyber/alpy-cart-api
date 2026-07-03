@@ -10,12 +10,19 @@
  * Only bookingReference is strictly required — customerEmail is resolved
  * automatically from the booking record if not supplied.
  *
- * NOTE (2026-07-03): new file, mirrors the proven-working pattern used in
- * production by the SKIBOT ZAF app (see ODIN_INFRASTRUCTURE.md /
- * api/resend-voucher.js) — a direct POST to Odin's webhook with a static
- * X-Webhook-Secret. If bookingReference is given without a known email, this
- * first resolves the booking via the public, unauthenticated
- * GET /api/v2/booking/{ref} endpoint to find the customer's real email.
+ * NOTE (2026-07-03): mirrors the proven-working pattern used in production by
+ * the SKIBOT ZAF app (see ODIN_INFRASTRUCTURE.md / api/resend-voucher.js) —
+ * a direct POST to Odin's webhook. If bookingReference is given without a
+ * known email, this first resolves the booking via the public,
+ * unauthenticated GET /api/v2/booking/{ref} endpoint to find the customer's
+ * real email.
+ *
+ * NOTE (2026-07-03, follow-up): a live test returned 401 Unauthorized (HTML
+ * gateway page) from Odin when authenticating with only the
+ * 'X-Webhook-Secret' header. ODIN_INFRASTRUCTURE.md documents the same
+ * secret being sent as 'Authorization: Bearer <secret>' instead. Sending
+ * BOTH header forms here so whichever one Odin's gateway actually expects
+ * will be accepted, and to gather more evidence for the correct one.
  *
  * @author Alpy Support Team
  */
@@ -103,6 +110,7 @@ export async function handler(req, res) {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-Webhook-Secret': WEBHOOK_SECRET,
+        'Authorization': `Bearer ${WEBHOOK_SECRET}`,
       },
       body: JSON.stringify(payload),
     });
