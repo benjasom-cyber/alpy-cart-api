@@ -1,29 +1,31 @@
 /**
  * @file cancel-booking.js
- * @description Vercel API endpoint — cancels an Alpy booking via Odin.
+ * @description Vercel API endpoint — cancels an Alpy booking via Odin's webhook.
  *
  * POST /api/cancel-booking
  *
- * Accepted body (one identifier combo required):
- *   { bookingId: string }                                           — direct UUID
- *   { bookingReference: string, customerName: string }             — Combo A
- *   { customerEmail: string, customerLastName: string }            — Combo B
+ * Accepted body (from the Zendesk "cancel_booking" custom action):
+ * { bookingReference, customerName, customerEmail, customerLastName, reason }
+ * Only bookingReference is strictly required — customerEmail is resolved
+ * automatically from the booking record if not supplied.
  *
- * Optional:
- *   { reason: string }   — free-text cancellation reason
+ * NOTE (2026-07-03): mirrors the proven-working pattern used in production by
+ * the SKIBOT ZAF app (see ODIN_INFRASTRUCTURE.md / api/cancel-booking.js) — a
+ * direct POST to Odin's webhook with a static X-Webhook-Secret, NOT the
+ * broken OAuth/client_credentials flow the old version of this file used
+ * (see get-booking.js notes for why that never worked: no valid Odin OAuth
+ * endpoint exists for server-to-server calls).
  *
- * Pre-flight checks before calling Odin cancel:
- *   1. Booking must not already be CANCELED or EXPIRED.
- *   2. rentalFrom must be in the future (> now).
- *
- * Cancellation strategy: tries POST /cancel first, falls back to DELETE.
+ * If bookingReference is given without a known email, this first resolves
+ * the booking via the public, unauthenticated GET /api/v2/booking/{ref}
+ * endpoint to find the customer's real email and to check the booking isn't
+ * already cancelled.
  *
  * @author Alpy Support Team
  */
 
-import { getOdinToken } from './odin-auth.js';
-
 const ODIN_BASE = 'https://odin.alpy.com';
+const WEBHOOK_SECRET = 's6Xubrfc46ZZ8JHvQiYn';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -31,19 +33,8 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-/** Statuses that mean the booking is already finished / cancelled. */
 const TERMINAL_STATUSES = ['CANCELED', 'CANCELLED', 'EXPIRED'];
 
-// ---------------------------------------------------------------------------
-// Helpers shared with get-booking logic (inlined to keep files self-contained)
-// ---------------------------------------------------------------------------
-
-/**
- * Safely extract a customer field that may be nested or flat on the booking.
- * @param {object} booking
- * @param {string} subKey  e.g. "name" or "email"
- * @returns {string|null}
- */
 function customerField(booking, subKey) {
   return (
     booking?.customer?.[subKey] ||
@@ -52,261 +43,147 @@ function customerField(booking, subKey) {
   );
 }
 
-/**
- * Search Odin for bookings and return the raw bookings array.
- * @param {string} token  Bearer token
- * @param {URLSearchParams} params  Query parameters
- * @returns {Promise<object[]>}
- */
-async function odinSearch(token, params) {
-  const url = `${ODIN_BASE}/api/v2/bookings?${params.toString()}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+function parseBody(req) {
+  if (req.body && typeof req.body === 'object') return req.body;
+  if (typeof req.body === 'string' && req.body.trim()) {
+    try { return JSON.parse(req.body); } catch (_) {}
+  }
+  return {};
+}
+
+async function lookupBookingByRef(ref) {
+  const r = await fetch(`${ODIN_BASE}/api/v2/booking/${encodeURIComponent(ref)}`, {
+    headers: { Accept: 'application/json' },
   });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Odin search failed (${res.status}): ${body}`);
-  }
-
-  const data = await res.json();
-  return Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+  if (!r.ok) return null;
+  return r.json().catch(() => null);
 }
 
-/**
- * Resolve a booking object from the request body identifiers.
- * Returns the raw booking object, or throws/returns null on failure.
- * @param {string} token
- * @param {object} body  Parsed request body
- * @returns {Promise<{booking: object|null, error: string|null}>}
- */
-async function resolveBooking(token, body) {
-  const { bookingReference, customerName, customerEmail, customerLastName } = body;
-
-  // If we already have a bookingId we still need the full object for pre-flight checks
-  if (body.bookingId) {
-    const res = await fetch(`${ODIN_BASE}/api/v2/bookings/${body.bookingId}`, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) {
-      if (res.status === 404) return { booking: null, error: 'Booking not found.' };
-      const text = await res.text();
-      throw new Error(`Odin fetch failed (${res.status}): ${text}`);
-    }
-    const data = await res.json();
-    // Odin may wrap in { data: ... }
-    const booking = data?.data ?? data;
-    return { booking, error: null };
+// Fetch Odin without ever throwing — returns a structured result.
+// Odin returns an empty body on success, so never call r.json() directly.
+async function odinFetch(url, options) {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (netErr) {
+    return { ok: false, status: 0, networkError: netErr.message, raw: '', parsed: null };
   }
-
-  const hasComboA = bookingReference && customerName;
-  const hasComboB = customerEmail && customerLastName;
-
-  if (!hasComboA && !hasComboB) {
-    return {
-      booking: null,
-      error:
-        'Provide bookingId, or (bookingReference + customerName), or (customerEmail + customerLastName).',
-    };
-  }
-
-  let bookings = [];
-
-  if (hasComboA) {
-    const params = new URLSearchParams({
-      bookingReference: bookingReference.trim().toUpperCase(),
-      limit: '1',
-    });
-    bookings = await odinSearch(token, params);
-  } else {
-    const params = new URLSearchParams({
-      customerEmail: customerEmail.trim().toLowerCase(),
-      customerName: customerLastName.trim(),
-      limit: '5',
-    });
-    bookings = await odinSearch(token, params);
-
-    if (bookings.length > 1) {
-      const needle = customerLastName.trim().toLowerCase();
-      const match = bookings.find((b) => {
-        const name = (customerField(b, 'name') || '').toLowerCase();
-        return name.includes(needle);
-      });
-      if (match) bookings = [match];
-    }
-  }
-
-  if (!bookings || bookings.length === 0) {
-    return { booking: null, error: 'No booking found for the provided details.' };
-  }
-
-  return { booking: bookings[0], error: null };
+  let raw = '';
+  try { raw = await response.text(); } catch (_) {}
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : {}; } catch (_) {}
+  return { ok: response.ok, status: response.status, networkError: null, raw, parsed };
 }
-
-/**
- * Attempt to cancel a booking via Odin.
- * Tries POST /cancel first; on 404/405 falls back to DELETE.
- * @param {string} token
- * @param {string} bookingId
- * @param {string|undefined} reason
- * @returns {Promise<{ok: boolean, status: number, body: object|string}>}
- */
-async function callOdinCancel(token, bookingId, reason) {
-  const headers = {
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-
-  // Strategy A: POST /api/v2/bookings/{id}/cancel
-  const postRes = await fetch(`${ODIN_BASE}/api/v2/bookings/${bookingId}/cancel`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(reason ? { reason } : {}),
-  });
-
-  if (postRes.ok) {
-    let body;
-    try { body = await postRes.json(); } catch { body = {}; }
-    return { ok: true, status: postRes.status, body };
-  }
-
-  // Only fall back on 404 (endpoint doesn't exist) or 405 (method not allowed)
-  if (postRes.status === 404 || postRes.status === 405) {
-    // Strategy B: DELETE /api/v2/bookings/{id}
-    const deleteRes = await fetch(`${ODIN_BASE}/api/v2/bookings/${bookingId}`, {
-      method: 'DELETE',
-      headers,
-      body: JSON.stringify(reason ? { reason } : {}),
-    });
-
-    let body;
-    try { body = await deleteRes.json(); } catch { body = {}; }
-    return { ok: deleteRes.ok, status: deleteRes.status, body };
-  }
-
-  // POST failed for another reason — surface that error
-  let body;
-  try { body = await postRes.json(); } catch { body = await postRes.text(); }
-  return { ok: false, status: postRes.status, body };
-}
-
-// ---------------------------------------------------------------------------
-// Main handler
-// ---------------------------------------------------------------------------
 
 export default async function handler(req, res) {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, CORS_HEADERS);
     return res.end();
   }
-
-  // Method guard
   if (req.method !== 'POST') {
     res.writeHead(405, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }));
   }
 
-  const body = req.body || {};
-  const { reason } = body;
+  const body = parseBody(req);
+  const { bookingReference, reason } = body;
+  let customerEmail = body.customerEmail;
+
+  if (!bookingReference) {
+    res.writeHead(400, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: false, error: 'Missing bookingReference.' }));
+  }
 
   try {
-    const token = await getOdinToken();
+    // Resolve the booking to confirm it exists, find the customer's real
+    // email if we don't already have one, and guard against double-cancel.
+    const booking = await lookupBookingByRef(bookingReference.trim().toUpperCase());
 
-    // --- Step 1: Resolve the booking ---
-    const { booking, error: resolveError } = await resolveBooking(token, body);
-
-    if (resolveError || !booking) {
+    if (!booking) {
       res.writeHead(404, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
       return res.end(
-        JSON.stringify({ success: false, error: resolveError || 'Booking not found.' })
+        JSON.stringify({ success: false, error: 'No booking found for that reference.' })
       );
     }
 
-    const bookingId = booking.id;
-    const bookingReference = booking.bookingReference ?? null;
-    const cName = customerField(booking, 'name');
-    const status = (booking.status || '').toUpperCase();
-
-    // --- Step 2: Guard — already cancelled/expired ---
+    const status = (booking.bookingStatus || booking.status || '').toUpperCase();
     if (TERMINAL_STATUSES.includes(status)) {
       res.writeHead(409, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
       return res.end(
         JSON.stringify({
           success: false,
           error: 'Booking is already cancelled.',
-          bookingReference,
-          status: booking.status,
+          bookingreference: booking.bookingReference,
+          status,
         })
       );
     }
 
-    // --- Step 3: Guard — rental period has started ---
-    const rentalFromRaw = booking.rentalFrom;
-    if (rentalFromRaw) {
-      const rentalStart = new Date(rentalFromRaw);
-      if (!isNaN(rentalStart.getTime()) && rentalStart <= new Date()) {
-        res.writeHead(409, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
-        return res.end(
-          JSON.stringify({
-            success: false,
-            error:
-              'The rental period has already started — online cancellation is not possible.',
-            bookingReference,
-            rentalFrom: rentalFromRaw,
-          })
-        );
-      }
+    if (!customerEmail) {
+      customerEmail = customerField(booking, 'email');
+    }
+    if (!customerEmail) {
+      res.writeHead(400, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
+      return res.end(
+        JSON.stringify({ success: false, error: 'Could not determine the customer email for this booking.' })
+      );
     }
 
-    // --- Step 4: Call Odin to cancel ---
-    const cancelResult = await callOdinCancel(token, bookingId, reason);
+    const resolvedRef = booking.bookingReference || bookingReference.trim().toUpperCase();
+    const payload = {
+      customerEmail,
+      bookingReference: resolvedRef,
+      reference: 'https://skisupport.zendesk.com',
+      ...(reason ? { reason } : {}),
+    };
 
-    if (!cancelResult.ok) {
-      const details =
-        typeof cancelResult.body === 'string'
-          ? cancelResult.body
-          : JSON.stringify(cancelResult.body);
+    console.log('[cancel-booking] ->', JSON.stringify(payload));
 
+    const result = await odinFetch(`${ODIN_BASE}/webhook/booking-cancellation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Webhook-Secret': WEBHOOK_SECRET,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    console.log('[cancel-booking] odin status:', result.status,
+      '| network error:', result.networkError || 'none',
+      '| raw:', result.raw.slice(0, 400));
+
+    if (result.networkError) {
       res.writeHead(502, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ success: false, error: 'Failed to reach Odin', details: result.networkError }));
+    }
+
+    if (!result.ok) {
+      const snippet = result.raw.slice(0, 300);
+      res.writeHead(result.status || 502, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
       return res.end(
         JSON.stringify({
           success: false,
-          error: 'Odin returned an error when attempting cancellation.',
-          odinStatus: cancelResult.status,
-          details,
+          error: 'Odin rejected the cancellation.',
+          odinStatus: result.status,
+          odinMessage: result.parsed || snippet,
         })
       );
     }
-
-    // --- Step 5: Build success response ---
-    const odinBody = typeof cancelResult.body === 'object' ? cancelResult.body : {};
-    const refundInfo =
-      odinBody.refund?.message ||
-      odinBody.refundInfo ||
-      odinBody.refund?.amount !== undefined
-        ? `Refund amount: ${odinBody.refund?.amount} ${odinBody.refund?.currency || booking.currency || ''}`
-        : undefined;
-
-    const cancelledAt = odinBody.cancelledAt || odinBody.canceledAt || new Date().toISOString();
 
     res.writeHead(200, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
     return res.end(
       JSON.stringify({
         success: true,
-        bookingReference,
-        customerName: cName,
-        message: `Booking ${bookingReference || bookingId} has been successfully cancelled.`,
-        ...(refundInfo ? { refundInfo } : {}),
-        cancelledAt,
+        bookingreference: resolvedRef,
+        message: `Booking ${resolvedRef} has been successfully cancelled.`,
+        cancelledat: new Date().toISOString(),
+        ...(result.parsed || {}),
       })
     );
   } catch (err) {
     console.error('[cancel-booking] Error:', err);
     res.writeHead(500, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ error: 'Internal server error.', details: err.message }));
+    return res.end(JSON.stringify({ success: false, error: 'Internal server error.', details: err.message }));
   }
 }
