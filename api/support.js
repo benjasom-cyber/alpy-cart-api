@@ -11,25 +11,28 @@
  *   update-personal-info    → POST /api/update-personal-info
  *   unsubscribe-newsletter  → POST /api/unsubscribe-newsletter
  *   large-group-quote       → POST /api/large-group-quote
+ *   resend-voucher          → POST /api/resend-voucher
  *
  * Vercel rewrites in vercel.json forward the legacy endpoint paths here,
  * so all existing Zendesk custom action URLs continue to work unchanged.
  */
 
-import { handler as checkDateChange }      from './_check-date-change.js';
-import { handler as checkShopChange }      from './_check-shop-change.js';
-import { handler as findNearestShop }      from './_find-nearest-shop.js';
-import { handler as updatePersonalInfo }   from './_update-personal-info.js';
+import { handler as checkDateChange } from './_check-date-change.js';
+import { handler as checkShopChange } from './_check-shop-change.js';
+import { handler as findNearestShop } from './_find-nearest-shop.js';
+import { handler as updatePersonalInfo } from './_update-personal-info.js';
 import { handler as unsubscribeNewsletter } from './_unsubscribe-newsletter.js';
-import { handler as largeGroupQuote }      from './_large-group-quote.js';
+import { handler as largeGroupQuote } from './_large-group-quote.js';
+import { handler as resendVoucher } from './_resend-voucher.js';
 
 const HANDLERS = {
-  'check-date-change':      checkDateChange,
-  'check-shop-change':      checkShopChange,
-  'find-nearest-shop':      findNearestShop,
-  'update-personal-info':   updatePersonalInfo,
+  'check-date-change': checkDateChange,
+  'check-shop-change': checkShopChange,
+  'find-nearest-shop': findNearestShop,
+  'update-personal-info': updatePersonalInfo,
   'unsubscribe-newsletter': unsubscribeNewsletter,
-  'large-group-quote':      largeGroupQuote,
+  'large-group-quote': largeGroupQuote,
+  'resend-voucher': resendVoucher,
 };
 
 export default async function handler(req, res) {
