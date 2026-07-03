@@ -5,16 +5,27 @@
  * POST /api/get-booking
  *
  * Accepted body combinations (one required):
- *   Combo A: { bookingReference: string, customerName: string }
- *   Combo B: { customerEmail: string, customerLastName: string }
+ * Combo A: { bookingReference: string, customerName: string }
+ * Combo B: { customerEmail: string, customerLastName: string }
  *
  * Returns a flattened booking object with derived fields (rentalDays, personsCount, etc.)
  * or a 404 JSON error if no matching booking is found.
  *
+ * NOTE (2026-07-03): Odin's REST API has no working OAuth / client_credentials
+ * integration for server-to-server calls — confirmed live: POST /oauth/token
+ * rejects our client with 401 invalid_client ("Client authentication failed"),
+ * and Odin has no documented login/OAuth endpoint at all. The only
+ * proven-working, unauthenticated path — used successfully in production by
+ * the SKIBOT ZAF app (see ODIN_INFRASTRUCTURE.md) — is:
+ *   - GET  /api/v2/booking/{ref}   (public, lookup by reference) OK
+ *   - POST /api/v2/customer        (public route, but Odin requires a
+ *     customer JWT server-side to actually return data for this one —
+ *     known limitation, kept here as best-effort only, same as the ZAF app)
+ * This file now calls those endpoints directly instead of going through
+ * getOdinToken() / odin-auth.js.
+ *
  * @author Alpy Support Team
  */
-
-import { getOdinToken } from './odin-auth.js';
 
 const ODIN_BASE = 'https://odin.alpy.com';
 
@@ -59,7 +70,7 @@ function calcRentalDays(from, to) {
 /**
  * Safely extract a field that might live under booking.customer.X or booking.customerX.
  * @param {object} booking
- * @param {string} subKey  e.g. "name" or "email"
+ * @param {string} subKey e.g. "name" or "email"
  * @returns {string|null}
  */
 function customerField(booking, subKey) {
@@ -72,13 +83,16 @@ function customerField(booking, subKey) {
 
 /**
  * Flatten a raw Odin booking object into the standardised response shape.
- * @param {object} booking  Raw booking from Odin
+ * Reads both the real Odin field names (bookingStatus, rentalPeriod.from/to)
+ * and the older flat names as a fallback, in case the shape varies.
+ * @param {object} booking Raw booking from Odin
  * @returns {object}
  */
 function flattenBooking(booking) {
-  const rentalFrom = toDateString(booking.rentalFrom);
-  const rentalTo = toDateString(booking.rentalTo);
-  const rentalDays = calcRentalDays(rentalFrom, rentalTo);
+  const rentalFrom = toDateString(booking.rentalPeriod?.from ?? booking.rentalFrom);
+  const rentalTo = toDateString(booking.rentalPeriod?.to ?? booking.rentalTo);
+  const rentalDays =
+    booking.rentalPeriod?.durationInDays ?? calcRentalDays(rentalFrom, rentalTo);
 
   const items = Array.isArray(booking.items) ? booking.items : [];
   // personsCount: try filtering equipment items first; fall back to all items
@@ -90,6 +104,8 @@ function flattenBooking(booking) {
   const totalPrice =
     booking.totalPrice ??
     booking.price?.total ??
+    booking.pricing?.total ??
+    booking.grandTotal ??
     null;
 
   return {
@@ -98,7 +114,7 @@ function flattenBooking(booking) {
     bookingReference: booking.bookingReference ?? null,
     customerName: customerField(booking, 'name'),
     customerEmail: customerField(booking, 'email'),
-    status: booking.status ?? null,
+    status: booking.bookingStatus ?? booking.status ?? null,
     shopName: booking.shop?.name ?? null,
     shopId: booking.shop?.id ?? null,
     shopSlug: booking.shop?.slug ?? null,
@@ -108,36 +124,11 @@ function flattenBooking(booking) {
     rentalTo,
     rentalDays,
     totalPrice: totalPrice !== null ? Number(totalPrice) : null,
-    currency: booking.currency ?? null,
+    currency: booking.currency ?? booking.price?.currency ?? null,
     personsCount,
     items,
     raw: booking,
   };
-}
-
-/**
- * Search Odin for bookings and return the raw bookings array.
- * @param {string} token  Bearer token
- * @param {URLSearchParams} params  Query parameters for the Odin search
- * @returns {Promise<object[]>}
- */
-async function odinSearch(token, params) {
-  const url = `${ODIN_BASE}/api/v2/bookings?${params.toString()}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Odin search failed (${res.status}): ${body}`);
-  }
-
-  const data = await res.json();
-  // Odin may return { data: [...] } or a bare array
-  return Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
 }
 
 export default async function handler(req, res) {
@@ -170,47 +161,66 @@ export default async function handler(req, res) {
   }
 
   try {
-    const token = await getOdinToken();
-    let bookings = [];
+    let booking = null;
 
     if (hasComboA) {
-      // Combo A: look up by booking reference (should be unique)
-      const params = new URLSearchParams({
-        bookingReference: bookingReference.trim().toUpperCase(),
-        limit: '1',
+      // Combo A: public endpoint, no auth needed — proven working pattern
+      // (same one used successfully by the SKIBOT ZAF app's own get-booking.js).
+      const ref = bookingReference.trim().toUpperCase();
+      const r = await fetch(`${ODIN_BASE}/api/v2/booking/${encodeURIComponent(ref)}`, {
+        headers: { Accept: 'application/json' },
       });
-      bookings = await odinSearch(token, params);
+      if (r.ok) {
+        booking = await r.json().catch(() => null);
+      } else if (r.status !== 404) {
+        const body = await r.text();
+        throw new Error(`Odin booking lookup failed (${r.status}): ${body.slice(0, 200)}`);
+      }
     } else {
-      // Combo B: search by email + last name
-      const params = new URLSearchParams({
-        customerEmail: customerEmail.trim().toLowerCase(),
-        customerName: customerLastName.trim(),
-        limit: '5',
+      // Combo B: best-effort by email. Odin's /api/v2/customer route requires
+      // a customer JWT to actually return data server-side (known limitation,
+      // documented in ODIN_INFRASTRUCTURE.md) — kept here for parity with the
+      // ZAF app, but may legitimately 401 until Odin exposes an admin-scoped
+      // search endpoint.
+      const r = await fetch(`${ODIN_BASE}/api/v2/customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ email: customerEmail.trim().toLowerCase() }),
       });
-      bookings = await odinSearch(token, params);
+      const text = await r.text();
+      let body;
+      try {
+        body = text ? JSON.parse(text) : {};
+      } catch {
+        body = {};
+      }
 
-      // Prefer the booking whose customerName contains the supplied last name
-      if (bookings.length > 1) {
+      if (!r.ok) {
+        console.error('[get-booking] Odin /api/v2/customer', r.status, text.slice(0, 200));
+      } else {
+        let bookings = [];
+        if (Array.isArray(body)) bookings = body;
+        else if (Array.isArray(body.bookings)) bookings = body.bookings;
+        else if (Array.isArray(body.data)) bookings = body.data;
+        else if (body.bookingReference) bookings = [body];
+
         const needle = customerLastName.trim().toLowerCase();
         const match = bookings.find((b) => {
           const name = (customerField(b, 'name') || '').toLowerCase();
           return name.includes(needle);
         });
-        if (match) bookings = [match];
-        // else keep the first result (handled below)
+        booking = match || bookings[0] || null;
       }
     }
 
-    if (!bookings || bookings.length === 0) {
+    if (!booking) {
       res.writeHead(404, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
       return res.end(
         JSON.stringify({ found: false, error: 'No booking found for the provided details.' })
       );
     }
 
-    const booking = bookings[0];
     const result = flattenBooking(booking);
-
     res.writeHead(200, { ...CORS_HEADERS, 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(result));
   } catch (err) {
