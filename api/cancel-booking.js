@@ -21,6 +21,13 @@
  * endpoint to find the customer's real email and to check the booking isn't
  * already cancelled.
  *
+ * NOTE (2026-07-03, follow-up): a live test of the twin resend-voucher
+ * endpoint returned 401 Unauthorized from Odin when authenticating with only
+ * the 'X-Webhook-Secret' header. ODIN_INFRASTRUCTURE.md documents the same
+ * secret being sent as 'Authorization: Bearer <secret>' instead. Sending
+ * BOTH header forms here too so whichever one Odin's gateway expects will be
+ * accepted (confirmed fix: 401 -> 422 on resend-voucher after this change).
+ *
  * @author Alpy Support Team
  */
 
@@ -145,6 +152,7 @@ export default async function handler(req, res) {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-Webhook-Secret': WEBHOOK_SECRET,
+        'Authorization': `Bearer ${WEBHOOK_SECRET}`,
       },
       body: JSON.stringify(payload),
     });
