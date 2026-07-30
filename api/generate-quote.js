@@ -4,7 +4,26 @@
  * Generates a direct Alpy.com booking link for a customer quote.
  * Called from Zendesk Action Flows or SKIBOT.
  *
- * Body params:
+ * ─── WHY quoteLine EXISTS ────────────────────────────────────────────────────
+ *
+ * A Zendesk generative procedure has NO deterministic binding between a custom
+ * action's output and a procedure parameter. A "Collect parameter" step is an
+ * LLM inference slot, not a wire. Observed in production on 30/07/2026:
+ *   - shopname was filled with "la plagne" (the customer's resort input)
+ *     instead of "Ski Republic Montchavin Village" (this API's shopName);
+ *   - cartpricecomplete was not filled at all, so the Check condition that
+ *     tests it evaluated false and every quote fell to the failure path,
+ *     while this API had the correct price all along.
+ *
+ * So we stop asking the procedure to read fields, test a boolean and pick a
+ * branch. The decision does not disappear, it MOVES: the `if` lives here, in
+ * code, where it cannot be misread. The API returns one ready-to-send sentence
+ * and the procedure's only job is to relay it.
+ *
+ * The procedure may translate and politely wrap `quoteLine`, but must never
+ * alter the figures or the link.
+ *
+ * ─── Body params ────────────────────────────────────────────────────────────
  *   resort        - resort / town name (required unless shopId given)
  *   shopId        - Odin legacy shop ID (optional - overrides resort lookup)
  *   startDate     - rental start date YYYY-MM-DD (required)
@@ -26,26 +45,18 @@
  *   groupSize     - total people, if larger than persons.length sample
  *
  * PRECEDENCE: the scalar inputs WIN whenever adults or children_ages is
- * supplied. That is deliberate. A generative caller reliably gets a head count
- * right and reliably gets a hand-written array wrong - observed in production:
- * a "2 adults + 3 children" request arrived as a two-element `persons` array
- * while group_size said 5, which both shrank the cart and inflated the price by
- * the 5/2 scale ratio. Trusting `persons` first would preserve that bug, so we
- * do not. `personsSource` in the response says which path was taken.
+ * supplied. A generative caller reliably gets a head count right and reliably
+ * gets a hand-written array wrong - observed: a "2 adults + 3 children" request
+ * arrived as a two-element `persons` array while group_size said 5, which both
+ * shrank the cart and inflated the price by the 5/2 scale ratio.
  *
- * PRICING - two independent figures are returned:
- *
- *   cheapestTotalPrice  the historical estimate, from Odin's /offers endpoint.
- *                       It is the cheapest GENERIC basket for a set of ages in
- *                       the resort, so it never matches the cart the customer
- *                       is sent to. Kept for backward compatibility only.
- *
- *   cartInStorePrice    the EXACT price of the cart we just built, computed the
- *   cartOnlinePrice     same way the alpy.com cart page computes it: sum
- *                       price[rentalDays] over every product and every addon,
- *                       from core.alpy.com/core/cart/products-information.
- *                       Announce these, never cheapestTotalPrice.
- *                       Both are null unless cartPriceComplete is true.
+ * PRICING
+ *   cartInStorePrice / cartOnlinePrice  the EXACT price of the cart we built,
+ *     computed the way the alpy.com cart page computes it: sum price[rentalDays]
+ *     over every product and every addon, from
+ *     core.alpy.com/core/cart/products-information.
+ *   cheapestTotalPrice  legacy generic estimate from Odin /offers. Never matches
+ *     the cart. Kept for backward compatibility. Do not announce it.
  *
  * Two traps in that grid, both handled below:
  *   - addon prices are per product. Boots for 6 days cost 5000 on an adult ski,
@@ -55,10 +66,11 @@
  *     ski" (a product) and "helmet" (an addon). Products and addons therefore
  *     live in separate namespaces here.
  *
- * Returns: { cartUrl, shopName, shopId, resort, cartInStorePrice,
- *            cartOnlinePrice, cartPriceComplete, personsCount, personsSource,
- *            groupSizeMismatch, cheapestTotalPrice, shopPrice, discountAmount,
- *            pricePerPerson, couponValue, couponMessage, summary, pricing? }
+ * Returns: { quoteLine, quoteHasPrice, cartUrl, shopName, shopId, resort,
+ *            cartInStorePrice, cartOnlinePrice, cartPriceComplete, personsCount,
+ *            personsSource, groupSizeMismatch, cheapestTotalPrice, shopPrice,
+ *            discountAmount, pricePerPerson, couponValue, couponMessage,
+ *            summary, pricing? }
  */
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
@@ -215,8 +227,8 @@ function indexProducts(grid) {
 /**
  * Sum price[days] over every product and its selected addons, reading each
  * addon price from the person's own product node.
- * Returns amounts in major units. `complete` is false as soon as one lookup
- * fails - the caller must then announce nothing rather than a wrong figure.
+ * `complete` is false as soon as one lookup fails - we then announce nothing
+ * rather than a wrong figure.
  */
 function computeCartPrice({ grid, persons, addons, days }) {
       const products = indexProducts(grid);
@@ -249,6 +261,64 @@ function computeCartPrice({ grid, persons, addons, days }) {
               missing: Array.from(new Set(missing)),
               complete: missing.length === 0,
       };
+}
+
+// ── The ready-to-send sentence ───────────────────────────────────────────────
+
+const CURRENCY_SYMBOL = { EUR: 'EUR', CHF: 'CHF', GBP: 'GBP', USD: 'USD', CZK: 'CZK' };
+
+function formatMoney(amount, currency) {
+      return amount.toFixed(2).replace('.', ',') + ' ' + (CURRENCY_SYMBOL[currency] || currency || 'EUR');
+}
+
+function formatDate(iso) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+      return m ? m[3] + '/' + m[2] + '/' + m[1] : String(iso || '');
+}
+
+/** "2 adults and 3 children (6, 8, 12 years old)" */
+function describeGroup(persons) {
+      const adults = persons.filter(p => getCategory(parseInt(p.age) || 35) === 'adult').length;
+      const kids   = persons.filter(p => getCategory(parseInt(p.age) || 35) !== 'adult')
+                            .map(p => parseInt(p.age))
+                            .filter(n => Number.isFinite(n))
+                            .sort((a, b) => a - b);
+
+      const bits = [];
+      if (adults) bits.push(adults + (adults > 1 ? ' adults' : ' adult'));
+      if (kids.length) bits.push(kids.length + (kids.length > 1 ? ' children' : ' child') + ' (' + kids.join(', ') + ' years old)');
+      return bits.join(' and ') || persons.length + ' people';
+}
+
+function describeEquipment(addons, persons) {
+      const eq = (persons[0] && persons[0].equipment === 'snowboard') ? 'snowboard' : 'skis';
+      const bits = [eq];
+      if (addons.includes(ADDON_BOOTS))  bits.push('boots');
+      if (addons.includes(ADDON_HELMET)) bits.push('helmets');
+      return bits.join(' + ');
+}
+
+/**
+ * One sentence, ready to send. The price is included only when it was computed
+ * exactly; otherwise the sentence points at the basket instead. This is the `if`
+ * that used to live in the procedure, and that the model kept getting wrong.
+ */
+function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price, currency, cartUrl, couponValue }) {
+      const head = 'Selected partner shop: ' + shop.name + ', in ' + shop.town + '. ' +
+                   'Group of ' + persons.length + ' (' + describeGroup(persons) + '), ' +
+                   'from ' + formatDate(startDate) + ' to ' + formatDate(endDate) +
+                   ' (' + days + (days > 1 ? ' days' : ' day') + '), ' +
+                   describeEquipment(addons, persons) + '.';
+
+      const priceBit = price != null
+        ? ' Online price for the whole group: ' + formatMoney(price, currency) + '.'
+              : ' The exact price is shown in the basket at the link below.';
+
+      const couponBit = (price != null && couponValue > 0)
+        ? ' A coupon worth ' + couponValue + ' EUR can be applied just before payment.'
+              : '';
+
+      return head + priceBit + couponBit + ' Book directly here: ' + cartUrl;
 }
 
 const COUPON_TIERS = [
@@ -368,9 +438,7 @@ export default async function handler(req, res) {
       const endDate   = endDateParam   || endDateAlt   || (claudeParsed && claudeParsed.end_date)   || null;
 
   // ── Group composition ────────────────────────────────────────────────────
-      // Scalar inputs win. See the PRECEDENCE note at the top of this file: a
-      // generative caller gets a head count right and gets a hand-written JSON
-      // array wrong, so trusting the array first would preserve that bug.
+      // Scalar inputs win. See the PRECEDENCE note at the top of this file.
       let persons = null;
       let personsSource = 'none';
 
@@ -479,6 +547,7 @@ export default async function handler(req, res) {
       }
 
   const cartPriceComplete = !!(cartPrice && cartPrice.complete);
+      const cartPriceCurrency = cartPrice ? cartPrice.currency : 'EUR';
       const cartInStorePrice = cartPriceComplete ? cartPrice.inStore : null;
       const cartOnlinePrice  = (cartInStorePrice != null && onlineDiscountRate != null)
         ? Math.round(cartInStorePrice * (1 - onlineDiscountRate) * 100) / 100
@@ -488,18 +557,14 @@ export default async function handler(req, res) {
               console.error('generate-quote: price grid lookups failed for shop ' + shop.id, cartPrice.missing);
       }
 
-  // Only the legacy array path may be a sample that needs scaling. When we
-      // assembled the array here it is exhaustive, so the ratio is pinned to 1.
+  // Only the legacy array path may be a sample that needs scaling.
       const declaredGroupSize = hasValue(groupSizeParam) ? parseInt(groupSizeParam, 10)
                               : hasValue(groupSizeAlt)   ? parseInt(groupSizeAlt, 10)
                               : null;
 
-      const groupSize = personsBuiltFromScalars
-        ? persons.length
-              : (declaredGroupSize || persons.length);
+      const groupSize = personsBuiltFromScalars ? persons.length : (declaredGroupSize || persons.length);
       const scaleRatio = personsBuiltFromScalars ? 1 : (persons.length > 0 ? groupSize / persons.length : 1);
 
-      // Surfaced so a caller can spot a composition it got wrong.
       const groupSizeMismatch = declaredGroupSize != null && declaredGroupSize !== persons.length;
       if (groupSizeMismatch) {
               console.error('generate-quote: declared group size ' + declaredGroupSize +
@@ -530,11 +595,22 @@ export default async function handler(req, res) {
         ? 'For this basket amount, we can offer a coupon code worth ' + couponValue + ' EUR, to be entered just before payment.'
               : null;
 
+  // ── The sentence the procedure only has to relay ──────────────────────────
+      const quoteHasPrice = cartOnlinePrice != null;
+      const quoteLine = buildQuoteLine({
+              shop, persons, addons: cartAddons, startDate, endDate, days,
+              price: cartOnlinePrice, currency: cartPriceCurrency, cartUrl, couponValue,
+      });
+
   const topLevelPricing = {
-          // Announce these two, and only when cartPriceComplete is true.
+          // Relay this verbatim. Translation and polite wrapping are fine;
+          // changing the figures or the link is not.
+          quoteLine,
+          quoteHasPrice,
+          // Kept for reporting and for the internal note.
           cartInStorePrice,
           cartOnlinePrice,
-          cartPriceCurrency: cartPrice ? cartPrice.currency : null,
+          cartPriceCurrency,
           cartPriceComplete,
           cartPriceMissingDefinitionIds: cartPrice ? cartPrice.missing : null,
           // Legacy generic estimate - does not match the cart. Do not announce.
