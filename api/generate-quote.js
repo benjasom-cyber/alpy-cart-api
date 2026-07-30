@@ -9,13 +9,27 @@
  *   shopId        - Odin legacy shop ID (optional - overrides resort lookup)
  *   startDate     - rental start date YYYY-MM-DD (required)
  *   endDate       - rental end date YYYY-MM-DD (required)
- *   persons       - JSON array [{age, skill, equipment}] (required)
- *   groupSize     - total people, if larger than persons.length sample (optional)
  *   lang          - language code (optional, defaults to 'en')
  *   promoCode     - promo code (optional)
  *
+ *   Group composition - EITHER the legacy array:
+ *   persons       - JSON array [{age, skill, equipment}]
+ *   groupSize     - total people, if larger than persons.length sample (optional)
+ *
+ *   OR the preferred scalar inputs (the API assembles the array itself, so a
+ *   generative caller never has to emit a JSON structure):
+ *   adults        - integer count of adults (age defaults to ADULT_DEFAULT_AGE)
+ *   children_ages - comma separated ages, e.g. "6,8,12"
+ *   skill         - beginner | intermediate | expert, applied to the whole group
+ *   equipment     - ski | snowboard, applied to the whole group
+ *   with_boots    - true/false (default true)
+ *   with_helmets  - true/false (default false)
+ *
+ * `persons` wins when both are supplied, so existing callers are unaffected.
+ *
  * Returns: { cartUrl, shopName, shopId, resort, cheapestTotalPrice, shopPrice,
- *            discountAmount, pricePerPerson, couponValue, couponMessage, summary, pricing? }
+ *            discountAmount, pricePerPerson, personsCount, couponValue,
+ *            couponMessage, summary, pricing? }
  */
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
@@ -38,6 +52,13 @@ const PRODUCTS = {
       child:  { ski: { beginner: 80,  intermediate: 80, expert: 81 }, snowboard: { beginner: 38, intermediate: 38, expert: 43 } }
 };
 
+// Accessory definition ids, as returned by Odin on a booking item.
+const ADDON_BOOTS  = 1;
+const ADDON_HELMET = 2;
+
+// Age used for an adult when the customer only gives a head count.
+const ADULT_DEFAULT_AGE = 35;
+
 const CORS = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -56,6 +77,58 @@ function getDefinitionId(age, skill, equipment) {
       const equip = equipment === 'snowboard' ? 'snowboard' : 'ski';
       const sk    = ['beginner', 'intermediate', 'expert'].includes(skill) ? skill : 'intermediate';
       return PRODUCTS[cat][equip][sk];
+}
+
+function isTruthy(v) {
+      return v === true || v === 1 || v === '1' ||
+             (typeof v === 'string' && ['true', 'yes', 'y', 'oui'].includes(v.trim().toLowerCase()));
+}
+
+function isFalsy(v) {
+      return v === false || v === 0 || v === '0' ||
+             (typeof v === 'string' && ['false', 'no', 'n', 'non'].includes(v.trim().toLowerCase()));
+}
+
+/** "6,8,12" | "6; 8 / 12" -> [6, 8, 12] */
+function parseAgeList(raw) {
+      if (raw === undefined || raw === null || raw === '') return [];
+      if (Array.isArray(raw)) raw = raw.join(',');
+      return String(raw)
+        .split(/[^0-9]+/)
+        .map(s => parseInt(s, 10))
+        .filter(n => Number.isFinite(n) && n >= 0 && n < 100);
+}
+
+/**
+ * Build the persons array from scalar inputs.
+ * A head count cannot lose an entry the way a hand-written JSON array can.
+ */
+function buildPersonsFromScalars({ adults, childrenAges, skill, equipment }) {
+      const nAdults = Math.max(0, parseInt(adults, 10) || 0);
+      const ages    = parseAgeList(childrenAges);
+      const sk      = ['beginner', 'intermediate', 'expert'].includes(String(skill || '').trim().toLowerCase())
+                        ? String(skill).trim().toLowerCase()
+                        : 'intermediate';
+      const eq      = String(equipment || '').trim().toLowerCase() === 'snowboard' ? 'snowboard' : 'ski';
+
+      const out = [];
+      for (let i = 0; i < nAdults; i++) out.push({ age: ADULT_DEFAULT_AGE, skill: sk, equipment: eq });
+      for (const a of ages) out.push({ age: a, skill: sk, equipment: eq });
+      return out;
+}
+
+/**
+ * Resolve which accessories go on every product.
+ * When neither flag is supplied we keep the historical default (boots only),
+ * so existing callers see no change.
+ */
+function buildAddons({ withBoots, withHelmets }) {
+      if (withBoots === undefined && withHelmets === undefined) return [ADDON_BOOTS];
+
+      const addons = [];
+      if (!isFalsy(withBoots)) addons.push(ADDON_BOOTS);   // boots default to on
+      if (isTruthy(withHelmets)) addons.push(ADDON_HELMET);
+      return addons.length ? addons : [ADDON_BOOTS];
 }
 
 const COUPON_TIERS = [
@@ -161,6 +234,12 @@ export default async function handler(req, res) {
           end_date: endDateAlt,
           promoCode = '',
           groupSize: groupSizeParam,
+          adults: adultsParam,
+          children_ages: childrenAgesParam,
+          skill: skillParam,
+          equipment: equipmentParam,
+          with_boots: withBootsParam,
+          with_helmets: withHelmetsParam,
   } = params;
 
   const resort    = resortParam    || resortAlt    || (claudeParsed && claudeParsed.resort)     || null;
@@ -170,6 +249,21 @@ export default async function handler(req, res) {
   let persons = params.persons || (claudeParsed && claudeParsed.persons) || null;
       if (typeof persons === 'string') {
               try { persons = JSON.parse(persons); } catch { persons = null; }
+      }
+
+  // No usable array supplied: assemble it here from the scalar inputs.
+      let personsBuiltFromScalars = false;
+      if (!persons || !Array.isArray(persons) || persons.length === 0) {
+              const built = buildPersonsFromScalars({
+                        adults: adultsParam,
+                        childrenAges: childrenAgesParam,
+                        skill: skillParam,
+                        equipment: equipmentParam,
+              });
+              if (built.length) {
+                        persons = built;
+                        personsBuiltFromScalars = true;
+              }
       }
 
   let shop = null;
@@ -196,7 +290,10 @@ export default async function handler(req, res) {
                                 resort: 'Chamonix',
                                 startDate: '2026-03-21',
                                 endDate: '2026-03-28',
-                                persons: [{ age: 35, skill: 'intermediate', equipment: 'ski' }]
+                                adults: 2,
+                                children_ages: '6,8,12',
+                                skill: 'intermediate',
+                                equipment: 'ski'
                     }
           });
   }
@@ -204,20 +301,22 @@ export default async function handler(req, res) {
   const missing = [];
       if (!startDate) missing.push('startDate');
       if (!endDate)   missing.push('endDate');
-      if (!persons || !Array.isArray(persons) || persons.length === 0) missing.push('persons');
+      if (!persons || !Array.isArray(persons) || persons.length === 0) missing.push('persons (or adults / children_ages)');
 
   if (missing.length) {
           return res.status(400).json({
                     error: 'Missing required params: ' + missing.join(', '),
                     example: { resort: 'Chamonix', startDate: '2026-03-21', endDate: '2026-03-28',
-                                               persons: [{ age: 35, skill: 'intermediate', equipment: 'ski' }] }
+                                               adults: 2, children_ages: '6,8,12', skill: 'intermediate', equipment: 'ski' }
           });
   }
+
+  const cartAddons = buildAddons({ withBoots: withBootsParam, withHelmets: withHelmetsParam });
 
   const cartPersons = persons.map(p => ({
           age: parseInt(p.age) || 35,
           skill: p.skill === 'intermediate' ? 'advanced' : (p.skill || 'advanced'),
-          products: [{ definitionId: getDefinitionId(p.age, p.skill, p.equipment), addons: [1] }]
+          products: [{ definitionId: getDefinitionId(p.age, p.skill, p.equipment), addons: cartAddons }]
   }));
 
   const cart = { promotionCode: promoCode || '', persons: cartPersons, insurances: [] };
@@ -237,8 +336,12 @@ export default async function handler(req, res) {
           promoCode,
   });
 
-  const groupSize = groupSizeParam ? parseInt(groupSizeParam) : persons.length;
-      const scaleRatio = groupSize / persons.length;
+  // When we assembled the array ourselves it is exhaustive, so never scale it:
+      // scaling only exists for the legacy case where `persons` was a sample.
+      const groupSize = personsBuiltFromScalars
+        ? persons.length
+              : (groupSizeParam ? parseInt(groupSizeParam) : persons.length);
+      const scaleRatio = persons.length > 0 ? groupSize / persons.length : 1;
 
   let estimatedTotal = null;
       let shopPrice = null;
@@ -270,6 +373,7 @@ export default async function handler(req, res) {
           rentalDays: pricing ? pricing.rentalDays : days,
           pricingAvailable,
           groupSize,
+          personsCount: persons.length,
           couponValue,
           couponCurrency: 'EUR',
           couponMessage,
@@ -286,6 +390,7 @@ export default async function handler(req, res) {
           summary: {
                     shopId: shop.id, shopName: shop.name, resort: shop.town, country: shop.country,
                     startDate, endDate, days, persons: persons.length, personsDetail: personsDesc, lang,
+                    addons: cartAddons,
                     cheapestTotalPrice: estimatedTotal,
                     shopPrice,
                     pricePerPerson,
