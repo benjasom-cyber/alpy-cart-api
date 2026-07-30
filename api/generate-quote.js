@@ -12,12 +12,8 @@
  *   lang          - language code (optional, defaults to 'en')
  *   promoCode     - promo code (optional)
  *
- *   Group composition - EITHER the legacy array:
- *   persons       - JSON array [{age, skill, equipment}]
- *   groupSize     - total people, if larger than persons.length sample (optional)
- *
- *   OR the preferred scalar inputs (the API assembles the array itself, so a
- *   generative caller never has to emit a JSON structure):
+ *   Group composition - PREFERRED, scalar inputs. The API assembles the array
+ *   itself, so a generative caller never has to emit a JSON structure:
  *   adults        - integer count of adults (age defaults to ADULT_DEFAULT_AGE)
  *   children_ages - comma separated ages, e.g. "6,8,12"
  *   skill         - beginner | intermediate | expert, applied to the whole group
@@ -25,7 +21,17 @@
  *   with_boots    - true/false (default true)
  *   with_helmets  - true/false (default false)
  *
- * `persons` wins when both are supplied, so existing callers are unaffected.
+ *   Legacy, still accepted:
+ *   persons       - JSON array [{age, skill, equipment}]
+ *   groupSize     - total people, if larger than persons.length sample
+ *
+ * PRECEDENCE: the scalar inputs WIN whenever adults or children_ages is
+ * supplied. That is deliberate. A generative caller reliably gets a head count
+ * right and reliably gets a hand-written array wrong - observed in production:
+ * a "2 adults + 3 children" request arrived as a two-element `persons` array
+ * while group_size said 5, which both shrank the cart and inflated the price by
+ * the 5/2 scale ratio. Trusting `persons` first would preserve that bug, so we
+ * do not. `personsSource` in the response says which path was taken.
  *
  * PRICING - two independent figures are returned:
  *
@@ -50,9 +56,9 @@
  *     live in separate namespaces here.
  *
  * Returns: { cartUrl, shopName, shopId, resort, cartInStorePrice,
- *            cartOnlinePrice, cartPriceComplete, cheapestTotalPrice, shopPrice,
- *            discountAmount, pricePerPerson, personsCount, couponValue,
- *            couponMessage, summary, pricing? }
+ *            cartOnlinePrice, cartPriceComplete, personsCount, personsSource,
+ *            groupSizeMismatch, cheapestTotalPrice, shopPrice, discountAmount,
+ *            pricePerPerson, couponValue, couponMessage, summary, pricing? }
  */
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
@@ -115,6 +121,10 @@ function isFalsy(v) {
              (typeof v === 'string' && ['false', 'no', 'n', 'non'].includes(v.trim().toLowerCase()));
 }
 
+function hasValue(v) {
+      return v !== undefined && v !== null && String(v).trim() !== '';
+}
+
 /** "6,8,12" | "6; 8 / 12" -> [6, 8, 12] */
 function parseAgeList(raw) {
       if (raw === undefined || raw === null || raw === '') return [];
@@ -135,7 +145,7 @@ function buildPersonsFromScalars({ adults, childrenAges, skill, equipment }) {
       const sk      = ['beginner', 'intermediate', 'expert'].includes(String(skill || '').trim().toLowerCase())
                         ? String(skill).trim().toLowerCase()
                         : 'intermediate';
-      const eq      = String(equipment || '').trim().toLowerCase() === 'snowboard' ? 'snowboard' : 'ski';
+      const eq      = String(equipment || '').trim().toLowerCase().includes('snowboard') ? 'snowboard' : 'ski';
 
       const out = [];
       for (let i = 0; i < nAdults; i++) out.push({ age: ADULT_DEFAULT_AGE, skill: sk, equipment: eq });
@@ -344,6 +354,7 @@ export default async function handler(req, res) {
           end_date: endDateAlt,
           promoCode = '',
           groupSize: groupSizeParam,
+          group_size: groupSizeAlt,
           adults: adultsParam,
           children_ages: childrenAgesParam,
           skill: skillParam,
@@ -356,25 +367,35 @@ export default async function handler(req, res) {
       const startDate = startDateParam || startDateAlt || (claudeParsed && claudeParsed.start_date) || null;
       const endDate   = endDateParam   || endDateAlt   || (claudeParsed && claudeParsed.end_date)   || null;
 
-  let persons = params.persons || (claudeParsed && claudeParsed.persons) || null;
-      if (typeof persons === 'string') {
-              try { persons = JSON.parse(persons); } catch { persons = null; }
-      }
+  // ── Group composition ────────────────────────────────────────────────────
+      // Scalar inputs win. See the PRECEDENCE note at the top of this file: a
+      // generative caller gets a head count right and gets a hand-written JSON
+      // array wrong, so trusting the array first would preserve that bug.
+      let persons = null;
+      let personsSource = 'none';
 
-  // No usable array supplied: assemble it here from the scalar inputs.
-      let personsBuiltFromScalars = false;
-      if (!persons || !Array.isArray(persons) || persons.length === 0) {
-              const built = buildPersonsFromScalars({
-                        adults: adultsParam,
-                        childrenAges: childrenAgesParam,
-                        skill: skillParam,
-                        equipment: equipmentParam,
-              });
-              if (built.length) {
-                        persons = built;
-                        personsBuiltFromScalars = true;
+      const scalarPersons = buildPersonsFromScalars({
+              adults: adultsParam,
+              childrenAges: childrenAgesParam,
+              skill: skillParam,
+              equipment: equipmentParam,
+      });
+
+      if (scalarPersons.length && (hasValue(adultsParam) || hasValue(childrenAgesParam))) {
+              persons = scalarPersons;
+              personsSource = 'scalars';
+      } else {
+              let legacy = params.persons || (claudeParsed && claudeParsed.persons) || null;
+              if (typeof legacy === 'string') {
+                        try { legacy = JSON.parse(legacy); } catch { legacy = null; }
+              }
+              if (Array.isArray(legacy) && legacy.length) {
+                        persons = legacy;
+                        personsSource = 'array';
               }
       }
+
+      const personsBuiltFromScalars = personsSource === 'scalars';
 
   let shop = null;
       const shops = await getShops();
@@ -411,7 +432,7 @@ export default async function handler(req, res) {
   const missing = [];
       if (!startDate) missing.push('startDate');
       if (!endDate)   missing.push('endDate');
-      if (!persons || !Array.isArray(persons) || persons.length === 0) missing.push('persons (or adults / children_ages)');
+      if (!persons || !Array.isArray(persons) || persons.length === 0) missing.push('adults / children_ages (or persons)');
 
   if (missing.length) {
           return res.status(400).json({
@@ -467,12 +488,23 @@ export default async function handler(req, res) {
               console.error('generate-quote: price grid lookups failed for shop ' + shop.id, cartPrice.missing);
       }
 
-  // When we assembled the array ourselves it is exhaustive, so never scale it:
-      // scaling only exists for the legacy case where `persons` was a sample.
+  // Only the legacy array path may be a sample that needs scaling. When we
+      // assembled the array here it is exhaustive, so the ratio is pinned to 1.
+      const declaredGroupSize = hasValue(groupSizeParam) ? parseInt(groupSizeParam, 10)
+                              : hasValue(groupSizeAlt)   ? parseInt(groupSizeAlt, 10)
+                              : null;
+
       const groupSize = personsBuiltFromScalars
         ? persons.length
-              : (groupSizeParam ? parseInt(groupSizeParam) : persons.length);
-      const scaleRatio = persons.length > 0 ? groupSize / persons.length : 1;
+              : (declaredGroupSize || persons.length);
+      const scaleRatio = personsBuiltFromScalars ? 1 : (persons.length > 0 ? groupSize / persons.length : 1);
+
+      // Surfaced so a caller can spot a composition it got wrong.
+      const groupSizeMismatch = declaredGroupSize != null && declaredGroupSize !== persons.length;
+      if (groupSizeMismatch) {
+              console.error('generate-quote: declared group size ' + declaredGroupSize +
+                            ' but built ' + persons.length + ' persons (source: ' + personsSource + ')');
+      }
 
   let estimatedTotal = null;
       let shopPrice = null;
@@ -515,6 +547,8 @@ export default async function handler(req, res) {
           pricingAvailable,
           groupSize,
           personsCount: persons.length,
+          personsSource,
+          groupSizeMismatch,
           couponValue,
           couponCurrency: 'EUR',
           couponMessage,
@@ -531,6 +565,7 @@ export default async function handler(req, res) {
           summary: {
                     shopId: shop.id, shopName: shop.name, resort: shop.town, country: shop.country,
                     startDate, endDate, days, persons: persons.length, personsDetail: personsDesc, lang,
+                    personsSource,
                     addons: cartAddons,
                     cartInStorePrice,
                     cartOnlinePrice,
