@@ -27,7 +27,22 @@
  *
  * `persons` wins when both are supplied, so existing callers are unaffected.
  *
- * Returns: { cartUrl, shopName, shopId, resort, cheapestTotalPrice, shopPrice,
+ * PRICING - two independent figures are returned:
+ *
+ *   cheapestTotalPrice  the historical estimate, from Odin's /offers endpoint.
+ *                       It is the cheapest GENERIC basket for a set of ages in
+ *                       the resort, so it never matches the cart the customer
+ *                       is sent to. Kept for backward compatibility.
+ *
+ *   cartInStorePrice    the EXACT price of the cart we just built, computed the
+ *   cartOnlinePrice     same way the alpy.com cart page computes it: sum
+ *                       price[rentalDays] over every product and every addon,
+ *                       from core.alpy.com/core/cart/products-information.
+ *                       Announce these, not cheapestTotalPrice.
+ *                       Both are null unless cartPriceComplete is true.
+ *
+ * Returns: { cartUrl, shopName, shopId, resort, cartInStorePrice,
+ *            cartOnlinePrice, cartPriceComplete, cheapestTotalPrice, shopPrice,
  *            discountAmount, pricePerPerson, personsCount, couponValue,
  *            couponMessage, summary, pricing? }
  */
@@ -58,6 +73,9 @@ const ADDON_HELMET = 2;
 
 // Age used for an adult when the customer only gives a head count.
 const ADULT_DEFAULT_AGE = 35;
+
+// Price grid used by the alpy.com cart page. No authentication required.
+const PRODUCTS_INFO_URL = 'https://core.alpy.com/core/cart/products-information';
 
 const CORS = {
       'Access-Control-Allow-Origin': '*',
@@ -129,6 +147,88 @@ function buildAddons({ withBoots, withHelmets }) {
       if (!isFalsy(withBoots)) addons.push(ADDON_BOOTS);   // boots default to on
       if (isTruthy(withHelmets)) addons.push(ADDON_HELMET);
       return addons.length ? addons : [ADDON_BOOTS];
+}
+
+// ── Exact cart price ─────────────────────────────────────────────────────────
+// The alpy.com cart page does not ask a server for its total: it downloads a
+// price grid once and adds it up in the browser. We do the same arithmetic here
+// so the quote can announce the figure the customer will actually see.
+
+async function fetchPriceGrid(shopId) {
+      try {
+              const r = await fetch(PRODUCTS_INFO_URL + '?shopId=' + shopId, { headers: { Accept: 'application/json' } });
+              if (!r.ok) return null;
+              return await r.json();
+      } catch (e) {
+              console.error('generate-quote: price grid fetch failed for shop ' + shopId, e);
+              return null;
+      }
+}
+
+/** Flatten the grid into definitionId -> { price, currency }, products and addons alike. */
+function indexPriceGrid(grid) {
+      const map = new Map();
+      const visit = (node) => {
+              if (!node || typeof node !== 'object') return;
+              if (Array.isArray(node)) { node.forEach(visit); return; }
+              if (node.definitionId != null && node.price && typeof node.price === 'object' && !map.has(node.definitionId)) {
+                        map.set(node.definitionId, { price: node.price, currency: node.priceCurrencyCode || 'EUR' });
+              }
+              if (node.products) visit(node.products);
+              if (node.addons)   visit(node.addons);
+      };
+      visit(grid && grid.products);
+      return map;
+}
+
+/** price is a table keyed by rental days, in minor units, plus a plusDay rate. */
+function priceForDays(table, days) {
+      if (!table) return null;
+      const d = Math.max(1, parseInt(days, 10) || 1);
+      if (table[d] != null) return Number(table[d]);
+      if (table[String(d)] != null) return Number(table[String(d)]);
+
+      const keys = Object.keys(table).filter(k => /^\d+$/.test(k)).map(Number).sort((a, b) => a - b);
+      if (!keys.length) return null;
+      const maxK = keys[keys.length - 1];
+      const base = Number(table[maxK] != null ? table[maxK] : table[String(maxK)]);
+      const plus = Number(table.plusDay || 0);
+      return d > maxK ? base + (d - maxK) * plus : base;
+}
+
+/**
+ * Sum price[days] over every product and every addon of the cart.
+ * Returns amounts in major units. `complete` is false as soon as one
+ * definitionId is absent from the grid - in that case the caller must not
+ * announce a figure rather than announce a wrong one.
+ */
+function computeCartPrice({ grid, persons, addons, days }) {
+      const idx = indexPriceGrid(grid);
+      if (!idx.size) return null;
+
+      let minor = 0;
+      const missing = [];
+
+      for (const p of persons) {
+              const defId = getDefinitionId(p.age, p.skill, p.equipment);
+              const entry = idx.get(defId);
+              const v     = entry ? priceForDays(entry.price, days) : null;
+              if (v == null) missing.push(defId); else minor += v;
+
+              for (const a of addons) {
+                        const ae = idx.get(a);
+                        const av = ae ? priceForDays(ae.price, days) : null;
+                        if (av == null) missing.push(a); else minor += av;
+              }
+      }
+
+      const first = idx.values().next().value;
+      return {
+              inStore: Math.round(minor) / 100,
+              currency: (first && first.currency) || 'EUR',
+              missing: Array.from(new Set(missing)),
+              complete: missing.length === 0,
+      };
 }
 
 const COUPON_TIERS = [
@@ -336,6 +436,27 @@ export default async function handler(req, res) {
           promoCode,
   });
 
+  // ── Exact cart price, from the same grid the cart page uses ───────────────
+      const grid = await fetchPriceGrid(shop.id);
+      const cartPrice = grid ? computeCartPrice({ grid, persons, addons: cartAddons, days }) : null;
+
+  // Online discount rate, derived from the live pricing block when present.
+      let onlineDiscountRate = null;
+      if (pricing && pricing.discountAmount != null && pricing.cheapestTotalPrice) {
+              const gross = pricing.cheapestTotalPrice + pricing.discountAmount;
+              if (gross > 0) onlineDiscountRate = pricing.discountAmount / gross;
+      }
+
+  const cartPriceComplete = !!(cartPrice && cartPrice.complete);
+      const cartInStorePrice = cartPriceComplete ? cartPrice.inStore : null;
+      const cartOnlinePrice  = (cartInStorePrice != null && onlineDiscountRate != null)
+        ? Math.round(cartInStorePrice * (1 - onlineDiscountRate) * 100) / 100
+              : null;
+
+      if (cartPrice && !cartPrice.complete) {
+              console.error('generate-quote: definitionIds absent from price grid for shop ' + shop.id, cartPrice.missing);
+      }
+
   // When we assembled the array ourselves it is exhaustive, so never scale it:
       // scaling only exists for the legacy case where `persons` was a sample.
       const groupSize = personsBuiltFromScalars
@@ -365,6 +486,13 @@ export default async function handler(req, res) {
               : null;
 
   const topLevelPricing = {
+          // Announce these two.
+          cartInStorePrice,
+          cartOnlinePrice,
+          cartPriceCurrency: cartPrice ? cartPrice.currency : null,
+          cartPriceComplete,
+          cartPriceMissingDefinitionIds: cartPrice ? cartPrice.missing : null,
+          // Legacy generic estimate - does not match the cart.
           cheapestTotalPrice: estimatedTotal,
           shopPrice,
           discountAmount,
@@ -391,6 +519,8 @@ export default async function handler(req, res) {
                     shopId: shop.id, shopName: shop.name, resort: shop.town, country: shop.country,
                     startDate, endDate, days, persons: persons.length, personsDetail: personsDesc, lang,
                     addons: cartAddons,
+                    cartInStorePrice,
+                    cartOnlinePrice,
                     cheapestTotalPrice: estimatedTotal,
                     shopPrice,
                     pricePerPerson,
