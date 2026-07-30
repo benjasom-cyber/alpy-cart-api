@@ -32,14 +32,22 @@
  *   cheapestTotalPrice  the historical estimate, from Odin's /offers endpoint.
  *                       It is the cheapest GENERIC basket for a set of ages in
  *                       the resort, so it never matches the cart the customer
- *                       is sent to. Kept for backward compatibility.
+ *                       is sent to. Kept for backward compatibility only.
  *
  *   cartInStorePrice    the EXACT price of the cart we just built, computed the
  *   cartOnlinePrice     same way the alpy.com cart page computes it: sum
  *                       price[rentalDays] over every product and every addon,
  *                       from core.alpy.com/core/cart/products-information.
- *                       Announce these, not cheapestTotalPrice.
+ *                       Announce these, never cheapestTotalPrice.
  *                       Both are null unless cartPriceComplete is true.
+ *
+ * Two traps in that grid, both handled below:
+ *   - addon prices are per product. Boots for 6 days cost 5000 on an adult ski,
+ *     4000 on a junior, 3000 on a child. They must be read from the person's
+ *     own product node, never from a global lookup.
+ *   - definitionId is not unique across kinds. Id 2 is BOTH "adult beginner
+ *     ski" (a product) and "helmet" (an addon). Products and addons therefore
+ *     live in separate namespaces here.
  *
  * Returns: { cartUrl, shopName, shopId, resort, cartInStorePrice,
  *            cartOnlinePrice, cartPriceComplete, cheapestTotalPrice, shopPrice,
@@ -157,28 +165,15 @@ function buildAddons({ withBoots, withHelmets }) {
 async function fetchPriceGrid(shopId) {
       try {
               const r = await fetch(PRODUCTS_INFO_URL + '?shopId=' + shopId, { headers: { Accept: 'application/json' } });
-              if (!r.ok) return null;
+              if (!r.ok) {
+                        console.error('generate-quote: price grid HTTP ' + r.status + ' for shop ' + shopId);
+                        return null;
+              }
               return await r.json();
       } catch (e) {
               console.error('generate-quote: price grid fetch failed for shop ' + shopId, e);
               return null;
       }
-}
-
-/** Flatten the grid into definitionId -> { price, currency }, products and addons alike. */
-function indexPriceGrid(grid) {
-      const map = new Map();
-      const visit = (node) => {
-              if (!node || typeof node !== 'object') return;
-              if (Array.isArray(node)) { node.forEach(visit); return; }
-              if (node.definitionId != null && node.price && typeof node.price === 'object' && !map.has(node.definitionId)) {
-                        map.set(node.definitionId, { price: node.price, currency: node.priceCurrencyCode || 'EUR' });
-              }
-              if (node.products) visit(node.products);
-              if (node.addons)   visit(node.addons);
-      };
-      visit(grid && grid.products);
-      return map;
 }
 
 /** price is a table keyed by rental days, in minor units, plus a plusDay rate. */
@@ -196,36 +191,51 @@ function priceForDays(table, days) {
       return d > maxK ? base + (d - maxK) * plus : base;
 }
 
+/** Products only, from grid.products[].products[]. Addons are NOT indexed here. */
+function indexProducts(grid) {
+      const map = new Map();
+      for (const cat of (grid && grid.products) || []) {
+              for (const p of (cat && cat.products) || []) {
+                        if (p && p.definitionId != null && p.price && !map.has(p.definitionId)) map.set(p.definitionId, p);
+              }
+      }
+      return map;
+}
+
 /**
- * Sum price[days] over every product and every addon of the cart.
- * Returns amounts in major units. `complete` is false as soon as one
- * definitionId is absent from the grid - in that case the caller must not
- * announce a figure rather than announce a wrong one.
+ * Sum price[days] over every product and its selected addons, reading each
+ * addon price from the person's own product node.
+ * Returns amounts in major units. `complete` is false as soon as one lookup
+ * fails - the caller must then announce nothing rather than a wrong figure.
  */
 function computeCartPrice({ grid, persons, addons, days }) {
-      const idx = indexPriceGrid(grid);
-      if (!idx.size) return null;
+      const products = indexProducts(grid);
+      if (!products.size) return null;
 
       let minor = 0;
+      let currency = 'EUR';
       const missing = [];
 
-      for (const p of persons) {
-              const defId = getDefinitionId(p.age, p.skill, p.equipment);
-              const entry = idx.get(defId);
-              const v     = entry ? priceForDays(entry.price, days) : null;
-              if (v == null) missing.push(defId); else minor += v;
+      for (const person of persons) {
+              const defId = getDefinitionId(person.age, person.skill, person.equipment);
+              const node  = products.get(defId);
+              if (!node) { missing.push('product:' + defId); continue; }
 
-              for (const a of addons) {
-                        const ae = idx.get(a);
-                        const av = ae ? priceForDays(ae.price, days) : null;
-                        if (av == null) missing.push(a); else minor += av;
+              currency = node.priceCurrencyCode || currency;
+
+              const base = priceForDays(node.price, days);
+              if (base == null) missing.push('product:' + defId); else minor += base;
+
+              for (const addonId of addons) {
+                        const a  = ((node.addons) || []).find(x => x && x.definitionId === addonId);
+                        const av = a ? priceForDays(a.price, days) : null;
+                        if (av == null) missing.push('addon:' + addonId + '@product:' + defId); else minor += av;
               }
       }
 
-      const first = idx.values().next().value;
       return {
               inStore: Math.round(minor) / 100,
-              currency: (first && first.currency) || 'EUR',
+              currency,
               missing: Array.from(new Set(missing)),
               complete: missing.length === 0,
       };
@@ -454,7 +464,7 @@ export default async function handler(req, res) {
               : null;
 
       if (cartPrice && !cartPrice.complete) {
-              console.error('generate-quote: definitionIds absent from price grid for shop ' + shop.id, cartPrice.missing);
+              console.error('generate-quote: price grid lookups failed for shop ' + shop.id, cartPrice.missing);
       }
 
   // When we assembled the array ourselves it is exhaustive, so never scale it:
@@ -480,19 +490,22 @@ export default async function handler(req, res) {
           }
   }
 
-  const couponValue = pricingAvailable ? calculateCoupon(estimatedTotal) : 0;
+  // Coupon tiers are keyed on the basket amount: use the exact cart price when
+      // we have it, and only fall back to the generic estimate otherwise.
+      const couponBasis = cartInStorePrice != null ? cartInStorePrice : estimatedTotal;
+      const couponValue = couponBasis != null ? calculateCoupon(couponBasis) : 0;
       const couponMessage = couponValue > 0
         ? 'For this basket amount, we can offer a coupon code worth ' + couponValue + ' EUR, to be entered just before payment.'
               : null;
 
   const topLevelPricing = {
-          // Announce these two.
+          // Announce these two, and only when cartPriceComplete is true.
           cartInStorePrice,
           cartOnlinePrice,
           cartPriceCurrency: cartPrice ? cartPrice.currency : null,
           cartPriceComplete,
           cartPriceMissingDefinitionIds: cartPrice ? cartPrice.missing : null,
-          // Legacy generic estimate - does not match the cart.
+          // Legacy generic estimate - does not match the cart. Do not announce.
           cheapestTotalPrice: estimatedTotal,
           shopPrice,
           discountAmount,
