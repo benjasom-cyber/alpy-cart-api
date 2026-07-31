@@ -606,6 +606,7 @@ export default async function handler(req, res) {
           // Relay this verbatim. Translation and polite wrapping are fine;
           // changing the figures or the link is not.
           quoteLine,
+          quoteline: quoteLine,
           quoteHasPrice,
           // Kept for reporting and for the internal note.
           cartInStorePrice,
