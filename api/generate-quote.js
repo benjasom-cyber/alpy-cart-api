@@ -4,73 +4,58 @@
  * Generates a direct Alpy.com booking link for a customer quote.
  * Called from Zendesk Action Flows or SKIBOT.
  *
+ * ─── TWO WAYS TO PASS THE REQUEST ───────────────────────────────────────────
+ *
+ * A) Individual scalar params (SKIBOT / direct callers):
+ *      adults, children_ages, skill, equipment, with_boots, with_helmets,
+ *      resort, startDate, endDate
+ *
+ * B) One JSON blob in `claude_json` (Zendesk action flows):
+ *      A Zendesk "Send prompt" step returns a single blob, and the variable
+ *      picker only ever offers "Entire output" - it never exposes the fields
+ *      inside. So the whole object is passed in one input and parsed here.
+ *      Recognised keys:
+ *        resort, start_date, end_date, adults, children_ages, skill,
+ *        equipment, with_boots, with_helmets, language
+ *
+ * Individual params always win over claude_json, field by field.
+ *
  * ─── WHY quoteLine EXISTS ────────────────────────────────────────────────────
  *
- * A Zendesk generative procedure has NO deterministic binding between a custom
- * action's output and a procedure parameter. A "Collect parameter" step is an
- * LLM inference slot, not a wire. Observed in production on 30/07/2026:
- *   - shopname was filled with "la plagne" (the customer's resort input)
- *     instead of "Ski Republic Montchavin Village" (this API's shopName);
- *   - cartpricecomplete was not filled at all, so the Check condition that
- *     tests it evaluated false and every quote fell to the failure path,
- *     while this API had the correct price all along.
+ * A Zendesk generative PROCEDURE cannot read a custom action's output: a
+ * "Collect parameter" step is an LLM inference slot, not a wire. Observed on
+ * 30/07/2026: shopname was filled with "la plagne" (the customer's own words)
+ * instead of "Ski Republic Montchavin Village"; a declared quoteline output,
+ * visibly populated in the action's Test tab, never appeared in a conversation;
+ * and the one price ever displayed did not reconcile with our own coupon table.
+ * An ACTION FLOW is different - steps are wired explicitly - which is why the
+ * quote now runs as a flow and not from a procedure.
  *
- * So we stop asking the procedure to read fields, test a boolean and pick a
- * branch. The decision does not disappear, it MOVES: the `if` lives here, in
- * code, where it cannot be misread. The API returns one ready-to-send sentence
- * and the procedure's only job is to relay it.
+ * quoteLine is one ready-to-send sentence. The `if` that decides whether to
+ * state a price lives here, in code, where it cannot be misread.
  *
- * The procedure may translate and politely wrap `quoteLine`, but must never
- * alter the figures or the link.
- *
- * ─── Body params ────────────────────────────────────────────────────────────
- *   resort        - resort / town name (required unless shopId given)
- *   shopId        - Odin legacy shop ID (optional - overrides resort lookup)
- *   startDate     - rental start date YYYY-MM-DD (required)
- *   endDate       - rental end date YYYY-MM-DD (required)
- *   lang          - language code (optional, defaults to 'en')
- *   promoCode     - promo code (optional)
- *
- *   Group composition - PREFERRED, scalar inputs. The API assembles the array
- *   itself, so a generative caller never has to emit a JSON structure:
- *   adults        - integer count of adults (age defaults to ADULT_DEFAULT_AGE)
- *   children_ages - comma separated ages, e.g. "6,8,12"
- *   skill         - beginner | intermediate | expert, applied to the whole group
- *   equipment     - ski | snowboard, applied to the whole group
- *   with_boots    - true/false (default true)
- *   with_helmets  - true/false (default false)
- *
- *   Legacy, still accepted:
- *   persons       - JSON array [{age, skill, equipment}]
- *   groupSize     - total people, if larger than persons.length sample
- *
- * PRECEDENCE: the scalar inputs WIN whenever adults or children_ages is
- * supplied. A generative caller reliably gets a head count right and reliably
- * gets a hand-written array wrong - observed: a "2 adults + 3 children" request
- * arrived as a two-element `persons` array while group_size said 5, which both
- * shrank the cart and inflated the price by the 5/2 scale ratio.
- *
- * PRICING
- *   cartInStorePrice / cartOnlinePrice  the EXACT price of the cart we built,
+ * ─── PRICING ────────────────────────────────────────────────────────────────
+ *   cartInStorePrice / cartOnlinePrice  EXACT price of the cart we built,
  *     computed the way the alpy.com cart page computes it: sum price[rentalDays]
  *     over every product and every addon, from
- *     core.alpy.com/core/cart/products-information.
+ *     core.alpy.com/core/cart/products-information. Verified: 373,00 EUR
+ *     computed vs 373,00 EUR displayed by the basket.
  *   cheapestTotalPrice  legacy generic estimate from Odin /offers. Never matches
- *     the cart. Kept for backward compatibility. Do not announce it.
+ *     the cart (103 vs 180 on one measured case). Do not announce it.
  *
  * Two traps in that grid, both handled below:
  *   - addon prices are per product. Boots for 6 days cost 5000 on an adult ski,
- *     4000 on a junior, 3000 on a child. They must be read from the person's
- *     own product node, never from a global lookup.
+ *     4000 on a junior, 3000 on a child. Read them from the person's own
+ *     product node, never from a global lookup.
  *   - definitionId is not unique across kinds. Id 2 is BOTH "adult beginner
  *     ski" (a product) and "helmet" (an addon). Products and addons therefore
  *     live in separate namespaces here.
  *
- * Returns: { quoteLine, quoteHasPrice, cartUrl, shopName, shopId, resort,
- *            cartInStorePrice, cartOnlinePrice, cartPriceComplete, personsCount,
- *            personsSource, groupSizeMismatch, cheapestTotalPrice, shopPrice,
- *            discountAmount, pricePerPerson, couponValue, couponMessage,
- *            summary, pricing? }
+ * PRECEDENCE on group composition: the scalar inputs WIN over `persons`. A
+ * generative caller reliably gets a head count right and reliably gets a
+ * hand-written array wrong - observed: a "2 adults + 3 children" request arrived
+ * as a two-element persons array while group_size said 5, which both shrank the
+ * cart and inflated the price by the 5/2 scale ratio.
  */
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
@@ -93,14 +78,10 @@ const PRODUCTS = {
       child:  { ski: { beginner: 80,  intermediate: 80, expert: 81 }, snowboard: { beginner: 38, intermediate: 38, expert: 43 } }
 };
 
-// Accessory definition ids, as returned by Odin on a booking item.
 const ADDON_BOOTS  = 1;
 const ADDON_HELMET = 2;
-
-// Age used for an adult when the customer only gives a head count.
 const ADULT_DEFAULT_AGE = 35;
 
-// Price grid used by the alpy.com cart page. No authentication required.
 const PRODUCTS_INFO_URL = 'https://core.alpy.com/core/cart/products-information';
 
 const CORS = {
@@ -134,10 +115,10 @@ function isFalsy(v) {
 }
 
 function hasValue(v) {
-      return v !== undefined && v !== null && String(v).trim() !== '';
+      return v !== undefined && v !== null && String(v).trim() !== '' && String(v).trim().toLowerCase() !== 'null';
 }
 
-/** "6,8,12" | "6; 8 / 12" -> [6, 8, 12] */
+/** "6,8,12" | "6; 8 / 12" | [6,8,12] -> [6, 8, 12] */
 function parseAgeList(raw) {
       if (raw === undefined || raw === null || raw === '') return [];
       if (Array.isArray(raw)) raw = raw.join(',');
@@ -147,10 +128,7 @@ function parseAgeList(raw) {
         .filter(n => Number.isFinite(n) && n >= 0 && n < 100);
 }
 
-/**
- * Build the persons array from scalar inputs.
- * A head count cannot lose an entry the way a hand-written JSON array can.
- */
+/** A head count cannot lose an entry the way a hand-written JSON array can. */
 function buildPersonsFromScalars({ adults, childrenAges, skill, equipment }) {
       const nAdults = Math.max(0, parseInt(adults, 10) || 0);
       const ages    = parseAgeList(childrenAges);
@@ -165,24 +143,17 @@ function buildPersonsFromScalars({ adults, childrenAges, skill, equipment }) {
       return out;
 }
 
-/**
- * Resolve which accessories go on every product.
- * When neither flag is supplied we keep the historical default (boots only),
- * so existing callers see no change.
- */
+/** Boots default to on. Both flags absent keeps the historical default [1]. */
 function buildAddons({ withBoots, withHelmets }) {
       if (withBoots === undefined && withHelmets === undefined) return [ADDON_BOOTS];
 
       const addons = [];
-      if (!isFalsy(withBoots)) addons.push(ADDON_BOOTS);   // boots default to on
+      if (!isFalsy(withBoots)) addons.push(ADDON_BOOTS);
       if (isTruthy(withHelmets)) addons.push(ADDON_HELMET);
       return addons.length ? addons : [ADDON_BOOTS];
 }
 
 // ── Exact cart price ─────────────────────────────────────────────────────────
-// The alpy.com cart page does not ask a server for its total: it downloads a
-// price grid once and adds it up in the browser. We do the same arithmetic here
-// so the quote can announce the figure the customer will actually see.
 
 async function fetchPriceGrid(shopId) {
       try {
@@ -198,7 +169,6 @@ async function fetchPriceGrid(shopId) {
       }
 }
 
-/** price is a table keyed by rental days, in minor units, plus a plusDay rate. */
 function priceForDays(table, days) {
       if (!table) return null;
       const d = Math.max(1, parseInt(days, 10) || 1);
@@ -213,7 +183,7 @@ function priceForDays(table, days) {
       return d > maxK ? base + (d - maxK) * plus : base;
 }
 
-/** Products only, from grid.products[].products[]. Addons are NOT indexed here. */
+/** Products only. Addons are NOT indexed here - definitionId collides. */
 function indexProducts(grid) {
       const map = new Map();
       for (const cat of (grid && grid.products) || []) {
@@ -224,12 +194,6 @@ function indexProducts(grid) {
       return map;
 }
 
-/**
- * Sum price[days] over every product and its selected addons, reading each
- * addon price from the person's own product node.
- * `complete` is false as soon as one lookup fails - we then announce nothing
- * rather than a wrong figure.
- */
 function computeCartPrice({ grid, persons, addons, days }) {
       const products = indexProducts(grid);
       if (!products.size) return null;
@@ -265,10 +229,8 @@ function computeCartPrice({ grid, persons, addons, days }) {
 
 // ── The ready-to-send sentence ───────────────────────────────────────────────
 
-const CURRENCY_SYMBOL = { EUR: 'EUR', CHF: 'CHF', GBP: 'GBP', USD: 'USD', CZK: 'CZK' };
-
 function formatMoney(amount, currency) {
-      return amount.toFixed(2).replace('.', ',') + ' ' + (CURRENCY_SYMBOL[currency] || currency || 'EUR');
+      return amount.toFixed(2).replace('.', ',') + ' ' + (currency || 'EUR');
 }
 
 function formatDate(iso) {
@@ -276,7 +238,6 @@ function formatDate(iso) {
       return m ? m[3] + '/' + m[2] + '/' + m[1] : String(iso || '');
 }
 
-/** "2 adults and 3 children (6, 8, 12 years old)" */
 function describeGroup(persons) {
       const adults = persons.filter(p => getCategory(parseInt(p.age) || 35) === 'adult').length;
       const kids   = persons.filter(p => getCategory(parseInt(p.age) || 35) !== 'adult')
@@ -298,11 +259,6 @@ function describeEquipment(addons, persons) {
       return bits.join(' + ');
 }
 
-/**
- * One sentence, ready to send. The price is included only when it was computed
- * exactly; otherwise the sentence points at the basket instead. This is the `if`
- * that used to live in the procedure, and that the model kept getting wrong.
- */
 function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price, currency, cartUrl, couponValue }) {
       const head = 'Selected partner shop: ' + shop.name + ', in ' + shop.town + '. ' +
                    'Group of ' + persons.length + ' (' + describeGroup(persons) + '), ' +
@@ -390,34 +346,42 @@ export default async function handler(req, res) {
 
   const params = req.method === 'POST' ? req.body : req.query;
 
-  let claudeParsed = null;
+  // ── claude_json: one blob from a Send prompt step ─────────────────────────
+      let claudeParsed = null;
       function tryParseClaudeJson(raw) {
               if (!raw) return null;
-              const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+              let cleaned = String(raw).trim()
+                .replace(/^```(?:json)?\s*/i, '')
+                .replace(/\s*```$/, '')
+                .trim();
+              // A model sometimes wraps the object in prose: take the outermost braces.
+              const first = cleaned.indexOf('{');
+              const last  = cleaned.lastIndexOf('}');
+              if (first > 0 || (last > -1 && last < cleaned.length - 1)) {
+                        if (first > -1 && last > first) cleaned = cleaned.slice(first, last + 1);
+              }
               try {
                         const parsed = JSON.parse(cleaned);
-                        if (typeof parsed === 'object' && parsed !== null && 'resort' in parsed) return parsed;
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
               } catch { /* ignore */ }
               return null;
       }
 
-  if (params.claude_json) {
-          claudeParsed = tryParseClaudeJson(params.claude_json);
-  }
-      if (!claudeParsed && params.resolved_resort_town_name) {
-              const v = params.resolved_resort_town_name.trim();
-              if (v.startsWith('{')) claudeParsed = tryParseClaudeJson(v);
+  if (params.claude_json) claudeParsed = tryParseClaudeJson(params.claude_json);
+      if (!claudeParsed && params.resolved_resort_town_name && String(params.resolved_resort_town_name).trim().startsWith('{')) {
+              claudeParsed = tryParseClaudeJson(params.resolved_resort_town_name);
       }
-      if (!claudeParsed && params.resort) {
-              const v = params.resort.trim();
-              if (v.startsWith('{')) claudeParsed = tryParseClaudeJson(v);
+      if (!claudeParsed && params.resort && String(params.resort).trim().startsWith('{')) {
+              claudeParsed = tryParseClaudeJson(params.resort);
       }
+
+  const cj = claudeParsed || {};
 
   const {
           resort: resortParam,
           resolved_resort_town_name: resortAlt,
           shopId: shopIdParam,
-          lang = 'en',
+          lang: langParam,
           startDate: startDateParam,
           start_date: startDateAlt,
           endDate: endDateParam,
@@ -433,27 +397,43 @@ export default async function handler(req, res) {
           with_helmets: withHelmetsParam,
   } = params;
 
-  const resort    = resortParam    || resortAlt    || (claudeParsed && claudeParsed.resort)     || null;
-      const startDate = startDateParam || startDateAlt || (claudeParsed && claudeParsed.start_date) || null;
-      const endDate   = endDateParam   || endDateAlt   || (claudeParsed && claudeParsed.end_date)   || null;
+  // Individual params win field by field; claude_json fills the gaps.
+      const pick  = (direct, fromCj) => hasValue(direct) ? direct : (hasValue(fromCj) ? fromCj : undefined);
+      const pickB = (direct, fromCj) => (direct !== undefined && direct !== null && String(direct).trim() !== '')
+                                          ? direct
+                                          : (fromCj !== undefined && fromCj !== null ? fromCj : undefined);
 
-  // ── Group composition ────────────────────────────────────────────────────
-      // Scalar inputs win. See the PRECEDENCE note at the top of this file.
+  const resortRaw = pick(resortParam, undefined) || pick(resortAlt, undefined) || pick(undefined, cj.resort) || null;
+      const resort  = (resortRaw && !String(resortRaw).trim().startsWith('{')) ? resortRaw : (hasValue(cj.resort) ? cj.resort : null);
+
+      const startDate = pick(startDateParam, undefined) || pick(startDateAlt, undefined) || pick(undefined, cj.start_date) || null;
+      const endDate   = pick(endDateParam,   undefined) || pick(endDateAlt,   undefined) || pick(undefined, cj.end_date)   || null;
+
+      const lang = pick(langParam, cj.language) || 'en';
+
+      const adultsEff       = pick(adultsParam,       cj.adults);
+      const childrenAgesEff = pick(childrenAgesParam, cj.children_ages);
+      const skillEff        = pick(skillParam,        cj.skill);
+      const equipmentEff    = pick(equipmentParam,    cj.equipment);
+      const withBootsEff    = pickB(withBootsParam,   cj.with_boots);
+      const withHelmetsEff  = pickB(withHelmetsParam, cj.with_helmets);
+
+  // ── Group composition: scalars win over any persons array ─────────────────
       let persons = null;
       let personsSource = 'none';
 
       const scalarPersons = buildPersonsFromScalars({
-              adults: adultsParam,
-              childrenAges: childrenAgesParam,
-              skill: skillParam,
-              equipment: equipmentParam,
+              adults: adultsEff,
+              childrenAges: childrenAgesEff,
+              skill: skillEff,
+              equipment: equipmentEff,
       });
 
-      if (scalarPersons.length && (hasValue(adultsParam) || hasValue(childrenAgesParam))) {
+      if (scalarPersons.length && (hasValue(adultsEff) || hasValue(childrenAgesEff))) {
               persons = scalarPersons;
               personsSource = 'scalars';
       } else {
-              let legacy = params.persons || (claudeParsed && claudeParsed.persons) || null;
+              let legacy = params.persons || cj.persons || null;
               if (typeof legacy === 'string') {
                         try { legacy = JSON.parse(legacy); } catch { legacy = null; }
               }
@@ -468,7 +448,7 @@ export default async function handler(req, res) {
   let shop = null;
       const shops = await getShops();
 
-  if (shopIdParam) {
+  if (hasValue(shopIdParam)) {
           const id = parseInt(shopIdParam);
           shop = shops.find(s => s.id === id) || {
                     id, slug: 'shop', country: 'france', region: 'region',
@@ -484,15 +464,10 @@ export default async function handler(req, res) {
           }
   } else {
           return res.status(400).json({
-                    error: 'Missing required param: resort (or shopId)',
+                    error: 'Missing required param: resort (or shopId, or resort inside claude_json)',
                     example: {
-                                resort: 'Chamonix',
-                                startDate: '2026-03-21',
-                                endDate: '2026-03-28',
-                                adults: 2,
-                                children_ages: '6,8,12',
-                                skill: 'intermediate',
-                                equipment: 'ski'
+                                resort: 'Chamonix', startDate: '2027-03-21', endDate: '2027-03-28',
+                                adults: 2, children_ages: '6,8,12', skill: 'intermediate', equipment: 'ski'
                     }
           });
   }
@@ -505,12 +480,13 @@ export default async function handler(req, res) {
   if (missing.length) {
           return res.status(400).json({
                     error: 'Missing required params: ' + missing.join(', '),
-                    example: { resort: 'Chamonix', startDate: '2026-03-21', endDate: '2026-03-28',
+                    receivedClaudeJson: !!claudeParsed,
+                    example: { resort: 'Chamonix', startDate: '2027-03-21', endDate: '2027-03-28',
                                                adults: 2, children_ages: '6,8,12', skill: 'intermediate', equipment: 'ski' }
           });
   }
 
-  const cartAddons = buildAddons({ withBoots: withBootsParam, withHelmets: withHelmetsParam });
+  const cartAddons = buildAddons({ withBoots: withBootsEff, withHelmets: withHelmetsEff });
 
   const cartPersons = persons.map(p => ({
           age: parseInt(p.age) || 35,
@@ -535,11 +511,9 @@ export default async function handler(req, res) {
           promoCode,
   });
 
-  // ── Exact cart price, from the same grid the cart page uses ───────────────
-      const grid = await fetchPriceGrid(shop.id);
+  const grid = await fetchPriceGrid(shop.id);
       const cartPrice = grid ? computeCartPrice({ grid, persons, addons: cartAddons, days }) : null;
 
-  // Online discount rate, derived from the live pricing block when present.
       let onlineDiscountRate = null;
       if (pricing && pricing.discountAmount != null && pricing.cheapestTotalPrice) {
               const gross = pricing.cheapestTotalPrice + pricing.discountAmount;
@@ -557,12 +531,11 @@ export default async function handler(req, res) {
               console.error('generate-quote: price grid lookups failed for shop ' + shop.id, cartPrice.missing);
       }
 
-  // Only the legacy array path may be a sample that needs scaling.
-      const declaredGroupSize = hasValue(groupSizeParam) ? parseInt(groupSizeParam, 10)
-                              : hasValue(groupSizeAlt)   ? parseInt(groupSizeAlt, 10)
-                              : null;
+  const declaredGroupSize = hasValue(groupSizeParam) ? parseInt(groupSizeParam, 10)
+                          : hasValue(groupSizeAlt)   ? parseInt(groupSizeAlt, 10)
+                          : null;
 
-      const groupSize = personsBuiltFromScalars ? persons.length : (declaredGroupSize || persons.length);
+      const groupSize  = personsBuiltFromScalars ? persons.length : (declaredGroupSize || persons.length);
       const scaleRatio = personsBuiltFromScalars ? 1 : (persons.length > 0 ? groupSize / persons.length : 1);
 
       const groupSizeMismatch = declaredGroupSize != null && declaredGroupSize !== persons.length;
@@ -587,34 +560,29 @@ export default async function handler(req, res) {
           }
   }
 
-  // Coupon tiers are keyed on the basket amount: use the exact cart price when
-      // we have it, and only fall back to the generic estimate otherwise.
-      const couponBasis = cartInStorePrice != null ? cartInStorePrice : estimatedTotal;
+  const couponBasis = cartInStorePrice != null ? cartInStorePrice : estimatedTotal;
       const couponValue = couponBasis != null ? calculateCoupon(couponBasis) : 0;
       const couponMessage = couponValue > 0
         ? 'For this basket amount, we can offer a coupon code worth ' + couponValue + ' EUR, to be entered just before payment.'
               : null;
 
-  // ── The sentence the procedure only has to relay ──────────────────────────
-      const quoteHasPrice = cartOnlinePrice != null;
+  const quoteHasPrice = cartOnlinePrice != null;
       const quoteLine = buildQuoteLine({
               shop, persons, addons: cartAddons, startDate, endDate, days,
               price: cartOnlinePrice, currency: cartPriceCurrency, cartUrl, couponValue,
       });
 
   const topLevelPricing = {
-          // Relay this verbatim. Translation and polite wrapping are fine;
-          // changing the figures or the link is not.
           quoteLine,
           quoteline: quoteLine,
           quoteHasPrice,
-          // Kept for reporting and for the internal note.
+          quotehasprice: quoteHasPrice,
+          detectedLanguage: lang,
           cartInStorePrice,
           cartOnlinePrice,
           cartPriceCurrency,
           cartPriceComplete,
           cartPriceMissingDefinitionIds: cartPrice ? cartPrice.missing : null,
-          // Legacy generic estimate - does not match the cart. Do not announce.
           cheapestTotalPrice: estimatedTotal,
           shopPrice,
           discountAmount,
