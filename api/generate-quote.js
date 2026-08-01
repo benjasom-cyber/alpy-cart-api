@@ -60,6 +60,21 @@
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
 
+// Localised "ski rental" URL segment, taken from the hreflang alternates that
+// alpy.com publishes on every shop page. Verified 2026-08-01.
+const RENTAL_SEGMENT = {
+      en: 'ski-rental',
+      fr: 'location-ski',
+      de: 'skiverleih',
+      it: 'noleggio-ski',
+      nl: 'skiverhuur',
+      es: 'alquiler-de-esquis',
+      da: 'skileje',
+      cs: 'pujcovna-lyzi',
+      pl: 'wypozyczalnia-nart',
+      sk: 'pozicovna-lyzi',
+};
+
 const SHOPS_URL = 'https://raw.githubusercontent.com/benjasom-cyber/alpy-cart-api/main/api/shops_data.json';
 let _shopsCache = null;
 
@@ -277,6 +292,14 @@ function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price
       return head + priceBit + couponBit + ' Book directly here: ' + cartUrl;
 }
 
+// Source of truth: "calculation-coupon-code-size-for-groups.xlsx".
+// That sheet is indexed on the NUMBER OF PEOPLE and starts at 8. The euro
+// column is only an indication (average basket of 70 EUR per person), to be
+// used when the exact basket is known and yields a HIGHER coupon. A group of
+// fewer than 8 gets nothing, whatever the amount.
+const COUPON_MIN_GROUP_SIZE = 8;
+const COUPON_AVG_BASKET_PER_PERSON = 70;
+
 const COUPON_TIERS = [
     { min: 4700, coupon: 160 },
     { min: 4270, coupon: 130 },
@@ -297,6 +320,7 @@ const COUPON_TIERS = [
     { min: 1260, coupon: 55 },
     { min: 1120, coupon: 50 },
     { min: 980, coupon: 45 },
+    { min: 910, coupon: 40 },
     { min: 840, coupon: 35 },
     { min: 770, coupon: 30 },
     { min: 700, coupon: 25 },
@@ -304,8 +328,15 @@ const COUPON_TIERS = [
     { min: 0, coupon: 0 },
     ];
 
-function calculateCoupon(estimatedTotal) {
-      const tier = COUPON_TIERS.find(t => estimatedTotal >= t.min);
+function calculateCoupon({ groupSize, basketAmount }) {
+      const n = parseInt(groupSize, 10) || 0;
+      if (n < COUPON_MIN_GROUP_SIZE) return 0;
+
+      // Headcount sets the baseline; a known basket can only raise it.
+      const byHeadcount = n * COUPON_AVG_BASKET_PER_PERSON;
+      const basis = Math.max(byHeadcount, Number(basketAmount) || 0);
+
+      const tier = COUPON_TIERS.find(t => basis >= t.min);
       return tier ? tier.coupon : 0;
 }
 
@@ -495,8 +526,15 @@ export default async function handler(req, res) {
   }));
 
   const cart = { promotionCode: promoCode || '', persons: cartPersons, insurances: [] };
-      const shopUrl = 'https://www.alpy.com/' + lang + '/ski-rental/' + shop.country + '/' + shop.region + '/' + shop.slug + '/' + shop.id;
-      const cartUrl = shopUrl + '/products?cart=' + encodeURIComponent(JSON.stringify(cart)) + '&startDate=' + startDate + '&endDate=' + endDate;
+      // The "ski-rental" path segment is localised, and the country/region/town
+      // segments are localised too (de: frankreich, es: francia/rodano-alpes).
+      // Rebuilding that path by hand produced 404s. The site exposes a short
+      // canonical form in its own JSON-LD - /{lang}/{segment}/products?shopId=N -
+      // which server-redirects to the correct localised path. Use that instead.
+      // Only emit a locale the site actually serves - anything else 404s.
+      const urlLang = RENTAL_SEGMENT[String(lang).slice(0, 2).toLowerCase()] ? String(lang).slice(0, 2).toLowerCase() : 'en';
+      const shopUrl = 'https://www.alpy.com/' + urlLang + '/' + RENTAL_SEGMENT[urlLang] + '/products?shopId=' + shop.id;
+      const cartUrl = shopUrl + '&cart=' + encodeURIComponent(JSON.stringify(cart)) + '&startDate=' + startDate + '&endDate=' + endDate;
 
   const personsDesc = persons.map(p =>
           p.age + 'yr ' + (p.skill || 'intermediate') + ' ' + (p.equipment || 'ski')
@@ -560,8 +598,12 @@ export default async function handler(req, res) {
           }
   }
 
-  const couponBasis = cartInStorePrice != null ? cartInStorePrice : estimatedTotal;
-      const couponValue = couponBasis != null ? calculateCoupon(couponBasis) : 0;
+  // The coupon is entered at payment, so it must be sized on what the customer
+  // actually pays online - not on the in-store rate, which is materially higher
+  // and was pushing small baskets over the tier thresholds.
+  const couponBasis = cartOnlinePrice != null ? cartOnlinePrice
+                    : (cartInStorePrice != null ? cartInStorePrice : estimatedTotal);
+      const couponValue = calculateCoupon({ groupSize: persons.length, basketAmount: couponBasis });
       const couponMessage = couponValue > 0
         ? 'For this basket amount, we can offer a coupon code worth ' + couponValue + ' EUR, to be entered just before payment.'
               : null;
