@@ -75,6 +75,16 @@ const RENTAL_SEGMENT = {
       sk: 'pozicovna-lyzi',
 };
 
+// alpy.com applies the running campaign to the basket by itself, even when the
+// cart URL carries an empty promotionCode. Quoting without it understated the
+// discount and the announced price came out ~3% above the basket (941,50 vs
+// 913,27 on Val d'Isere, 21-27/02/2027). Send the campaign explicitly so the
+// figure we announce is the figure the customer sees.
+// When marketing changes the campaign, set ALPY_PROMO_CODE in Vercel. If the
+// code is stale the offer endpoint simply falls back to the base rate, so we
+// quote slightly high - never lower than the basket.
+const ACTIVE_PROMO_CODE = process.env.ALPY_PROMO_CODE || 'SKI26';
+
 const SHOPS_URL = 'https://raw.githubusercontent.com/benjasom-cyber/alpy-cart-api/main/api/shops_data.json';
 let _shopsCache = null;
 
@@ -525,7 +535,9 @@ export default async function handler(req, res) {
           products: [{ definitionId: getDefinitionId(p.age, p.skill, p.equipment), addons: cartAddons }]
   }));
 
-  const cart = { promotionCode: promoCode || '', persons: cartPersons, insurances: [] };
+  const effectivePromoCode = promoCode || ACTIVE_PROMO_CODE;
+
+  const cart = { promotionCode: effectivePromoCode, persons: cartPersons, insurances: [] };
       // The "ski-rental" path segment is localised, and the country/region/town
       // segments are localised too (de: frankreich, es: francia/rodano-alpes).
       // Rebuilding that path by hand produced 404s. The site exposes a short
@@ -546,7 +558,7 @@ export default async function handler(req, res) {
           shop, startDate, endDate, persons, getDefinitionId,
           currency: params.currency || 'EUR',
           countryCode: countryToCode(shop.country),
-          promoCode,
+          promoCode: effectivePromoCode,
   });
 
   const grid = await fetchPriceGrid(shop.id);
