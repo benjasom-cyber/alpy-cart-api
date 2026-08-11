@@ -552,7 +552,13 @@ export default async function handler(req, res) {
           p.age + 'yr ' + (p.skill || 'intermediate') + ' ' + (p.equipment || 'ski')
                                     ).join(', ');
 
-  const days = Math.ceil((new Date(endDate) - new Date(startDate)) / 86400000);
+  // alpy.com counts the end date as a rented day: 24/01 to 31/01 is 8
+  // days, not 7. Odin agrees - B16YRC runs 07/03 to 13/03 with
+  // durationInDays 7. Measured on shop 461, 24-31/01/2027: basket
+  // 236,00 EUR in store for 8 days, 213,00 EUR for 7. The old count
+  // understated every quote by a full rental day, always in the
+  // direction the customer discovers at payment.
+  const days = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
 
   const pricing = await fetchLivePricing({
           shop, startDate, endDate, persons, getDefinitionId,
