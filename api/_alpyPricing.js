@@ -60,7 +60,10 @@ export async function fetchLivePricing({
               const totalCents = data && data.total && data.total.amount;
               if (typeof totalCents !== 'number') return null;
 
-        const rentalDays = Math.ceil((new Date(endDate) - new Date(startDate)) / 86400000);
+        // Same convention as the basket: the end date counts as a rented day.
+        // 24/01 to 31/01 is 8 days, not 7. Odin agrees (B16YRC: 07/03 to
+        // 13/03 is durationInDays 7).
+        const rentalDays = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
               const totalEur = totalCents / 100;
 
         const discountCents = data && data.discountAbsolute && data.discountAbsolute.amount;
