@@ -322,6 +322,15 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ...quote,
+      // Flat copies: a Zendesk custom action maps top-level fields in one click,
+      // whereas a nested path has to be declared by hand and is easy to mistype.
+      internalNote,
+      approximations,
+      quotedStartDate: startDate,
+      quotedEndDate: endDate,
+      quotedDays: days,
+      sourceBookingReference: booking.bookingReference || ref,
+      sourceBalanceDue: money(booking.total && booking.total.amount),
       requote: {
         sourceBooking: {
           bookingReference: booking.bookingReference || ref,
