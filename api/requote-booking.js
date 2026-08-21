@@ -151,6 +151,13 @@ function buildInternalNote(o) {
   if (o.cartOnlinePrice != null) {
     lines.push('Simulated online price: ' + o.cartOnlinePrice.toFixed(2) + ' ' + o.currency);
     lines.push('Simulated in-store price: ' + o.cartInStorePrice.toFixed(2) + ' ' + o.currency);
+  } else if (o.cartInStorePrice != null) {
+    // The in-store figure comes from the shop price grid, the online figure needs
+    // the discount rate from Odin /offers. That second call fails occasionally
+    // (measured once in a run of twelve). Saying "no price" when we do hold the
+    // in-store price would send an agent hunting for nothing.
+    lines.push('Simulated in-store price: ' + o.cartInStorePrice.toFixed(2) + ' ' + o.currency);
+    lines.push('The ONLINE price could not be computed on this run. Open the cart link below to read it.');
   } else {
     lines.push('Price could NOT be simulated for this basket. Open the cart link and read the basket.');
   }
@@ -260,24 +267,34 @@ export default async function handler(req, res) {
     // ── 3. Price it with the one and only pricing implementation we trust. ───
     const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
     const host = req.headers['x-forwarded-host'] || req.headers.host;
-    const quoteRes = await fetch(proto + '://' + host + '/api/generate-quote', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        shopId,
-        startDate,
-        endDate,
-        lang,
-        // persons ONLY: adults / children_ages would take precedence over it and
-        // flatten a mixed ski + snowboard group into one single equipment type.
-        persons: persons.map(p => ({ age: p.age, skill: p.skill, equipment: p.equipment })),
-        with_boots: anyBoots,
-        with_helmets: anyHelmet,
-      }),
+    const quoteBody = JSON.stringify({
+      shopId,
+      startDate,
+      endDate,
+      lang,
+      // persons ONLY: adults / children_ages would take precedence over it and
+      // flatten a mixed ski + snowboard group into one single equipment type.
+      persons: persons.map(p => ({ age: p.age, skill: p.skill, equipment: p.equipment })),
+      with_boots: anyBoots,
+      with_helmets: anyHelmet,
     });
-    const quote = await quoteRes.json().catch(() => null);
-    if (!quoteRes.ok || !quote) {
-      return res.status(502).json({ error: 'generate-quote failed (' + quoteRes.status + ')', details: quote });
+
+    // Pricing is a pure read, so retrying once is safe. Worth it: a cold start on
+    // the pricing chain produced one empty response in a run of twelve.
+    let quoteRes = null;
+    let quote = null;
+    for (let attempt = 0; attempt < 2 && !quote; attempt++) {
+      quoteRes = await fetch(proto + '://' + host + '/api/generate-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: quoteBody,
+      });
+      const parsed = await quoteRes.json().catch(() => null);
+      if (quoteRes.ok && parsed && parsed.cartUrl) quote = parsed;
+      else if (attempt === 0) console.warn('[requote-booking] generate-quote attempt 1 unusable, retrying', quoteRes.status);
+    }
+    if (!quote) {
+      return res.status(502).json({ error: 'generate-quote failed (' + (quoteRes && quoteRes.status) + ') after 2 attempts' });
     }
 
     const days = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
