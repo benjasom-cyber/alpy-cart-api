@@ -324,13 +324,26 @@ export default async function handler(req, res) {
       ...quote,
       // Flat copies: a Zendesk custom action maps top-level fields in one click,
       // whereas a nested path has to be declared by hand and is easy to mistype.
+      //
+      // Both spellings on purpose. A Zendesk custom action forces output names to
+      // lowercase, and JSON keys are case-sensitive, so a camelCase-only response
+      // hands the flow an empty string. generate-quote.js already carries the same
+      // pairs (quoteline, cartinstoreprice, ...) for exactly this reason.
       internalNote,
+      internalnote: internalNote,
       approximations,
       quotedStartDate: startDate,
+      quotedstartdate: startDate,
       quotedEndDate: endDate,
+      quotedenddate: endDate,
       quotedDays: days,
+      quoteddays: days,
       sourceBookingReference: booking.bookingReference || ref,
+      sourcebookingreference: booking.bookingReference || ref,
       sourceBalanceDue: money(booking.total && booking.total.amount),
+      sourcebalancedue: money(booking.total && booking.total.amount),
+      carturl: quote.cartUrl,
+      shopname: quote.shopName,
       requote: {
         sourceBooking: {
           bookingReference: booking.bookingReference || ref,
