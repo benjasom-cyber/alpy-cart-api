@@ -181,7 +181,15 @@ export default async function handler(req, res) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const params = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+  // Vercel only parses req.body into an object when the caller sends
+  // Content-Type: application/json. A Zendesk custom action cannot declare that
+  // header by hand — the Name field rejects hyphens — so accept a raw string too
+  // rather than depend on a header we do not control.
+  let params = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+  if (typeof params === 'string') {
+    try { params = JSON.parse(params); } catch { params = {}; }
+  }
+  if (!params || typeof params !== 'object' || Array.isArray(params)) params = {};
   const ref = String(params.bookingReference || '').trim().toUpperCase();
   const lang = String(params.lang || 'en').slice(0, 2).toLowerCase();
 
