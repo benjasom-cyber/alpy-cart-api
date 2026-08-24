@@ -125,6 +125,42 @@ function detectFromKeywords(message) {
       return null;
 }
 
+/**
+ * Slots the message states outright.
+ *
+ * Caught on the first live call: "I want to cancel my booking B1AF9J" came back
+ * as ASK / missing booking_ref, because slot values only ever came from the
+ * caller's model. The flow would have asked the customer for the reference they
+ * had just written. That is the same insult as asking someone to resend their
+ * own message, and it is worse than not asking at all.
+ *
+ * Deliberately narrow: only patterns that cannot be mistaken for prose. A
+ * booking reference is 6 alphanumerics with at least one digit, which excludes
+ * ordinary words; dates are ISO only. Anything looser belongs to the model, and
+ * the model's values still go through looksValid.
+ */
+function extractFromMessage(message) {
+      const m = String(message || '');
+      const found = {};
+
+      // Odin references are 6 chars, upper case, and always carry a digit.
+      // Requiring the digit keeps "PLEASE" and "CANCEL" out.
+      const refs = (m.toUpperCase().match(/\b[A-Z0-9]{6}\b/g) || [])
+        .filter(t => /[0-9]/.test(t) && /[A-Z]/.test(t));
+      if (refs.length === 1) found.booking_ref = refs[0];
+
+      // Two ISO dates in order are a period. One alone is ambiguous - it could be
+      // a start or an end - so we take nothing.
+      const dates = m.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
+      if (dates.length >= 2) {
+              const sorted = dates.slice(0, 2).sort();
+              found.start_date = sorted[0];
+              found.end_date = sorted[1];
+      }
+
+      return found;
+}
+
 function normaliseTopic(t) {
       const up = String(t || '').trim().toUpperCase();
       return TOPICS.includes(up) ? up : null;
@@ -160,7 +196,13 @@ export default async function handler(req, res) {
       const message = params.message ?? params.comment ?? '';
       const tags = params.tags ?? [];
       const llmTopic = normaliseTopic(params.llm_topic ?? params.llmtopic ?? params.topic);
-      const slots = cleanSlots(params.llm_slots ?? params.llmslots ?? params.slots ?? params);
+      // What the message says outright wins over what the model reported: the
+      // customer's own words are the better source, and a model that paraphrases
+      // a reference gets it wrong.
+      const slots = Object.assign(
+              cleanSlots(params.llm_slots ?? params.llmslots ?? params.slots ?? params),
+              cleanSlots(extractFromMessage(message))
+      );
 
       // Layer 0 - internal or partner sender. Layer 1 - native tags.
       // Either one stops the whole thing, before any topic is considered.
