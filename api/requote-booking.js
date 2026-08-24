@@ -54,30 +54,61 @@ const CORS = {
 };
 
 /**
- * definitionId -> { equipment, skill }, i.e. the PRODUCTS table of
- * generate-quote.js read backwards. Age still decides the category, so only
- * equipment and skill are needed here.
- * Ids that mean the same product at two skill levels (15, 42, 80, 38) resolve to
- * "intermediate": that is the level generate-quote would map them from anyway.
+ * definitionId -> { equipment, skill }.
+ *
+ * Rebuilt 2026-08-21 from the live catalogue
+ * (core.alpy.com/core/cart/products-information, read across 116 shops) rather
+ * than from the PRODUCTS table of generate-quote.js, which had two ids wrong.
+ * The mapping is mechanical: productCategoryId 1 = ski, 3 = snowboard, and the
+ * star rating gives the level - 3 stars = beginner, 4 = intermediate, 5 and
+ * above = expert. Age still decides the category, so only equipment and skill
+ * matter here.
+ *
+ * Where an age band has no 3* tier (junior, child), the 4* entry is the entry
+ * level and maps to "intermediate" - that is the level generate-quote maps it
+ * back from anyway, so the round trip is stable.
  */
 const DEF_TO_SPEC = {
-  2:   { equipment: 'ski',       skill: 'beginner'     },
-  3:   { equipment: 'ski',       skill: 'intermediate' },
-  4:   { equipment: 'ski',       skill: 'expert'       },
-  28:  { equipment: 'snowboard', skill: 'beginner'     },
-  30:  { equipment: 'snowboard', skill: 'intermediate' },
-  31:  { equipment: 'snowboard', skill: 'expert'       },
-  129: { equipment: 'ski',       skill: 'beginner'     },
-  96:  { equipment: 'ski',       skill: 'intermediate' },
-  92:  { equipment: 'ski',       skill: 'expert'       },
-  97:  { equipment: 'snowboard', skill: 'intermediate' },
-  15:  { equipment: 'ski',       skill: 'intermediate' },
-  16:  { equipment: 'ski',       skill: 'expert'       },
-  42:  { equipment: 'snowboard', skill: 'intermediate' },
-  43:  { equipment: 'snowboard', skill: 'expert'       },
-  80:  { equipment: 'ski',       skill: 'intermediate' },
-  81:  { equipment: 'ski',       skill: 'expert'       },
-  38:  { equipment: 'snowboard', skill: 'intermediate' },
+  // ── adult ski (ageCategoryId 1, productCategoryId 1)
+  1:   { equipment: 'ski',       skill: 'beginner'     }, // 2* Economy
+  2:   { equipment: 'ski',       skill: 'beginner'     }, // 3*
+  131: { equipment: 'ski',       skill: 'beginner'     }, // 3* Initiation Woman
+  3:   { equipment: 'ski',       skill: 'intermediate' }, // 4*
+  56:  { equipment: 'ski',       skill: 'intermediate' }, // 4* Mini
+  86:  { equipment: 'ski',       skill: 'intermediate' }, // 4* Lady
+  4:   { equipment: 'ski',       skill: 'expert'       }, // 5*
+  90:  { equipment: 'ski',       skill: 'expert'       }, // 5* Lady
+  5:   { equipment: 'ski',       skill: 'expert'       }, // 6* Diamond
+  95:  { equipment: 'ski',       skill: 'expert'       }, // 6* Diamond Lady
+  110: { equipment: 'ski',       skill: 'expert'       }, // 7* Diamond
+  111: { equipment: 'ski',       skill: 'expert'       }, // 7* Diamond Lady
+  // ── teen ski (4)
+  129: { equipment: 'ski',       skill: 'beginner'     }, // 3* Novice
+  96:  { equipment: 'ski',       skill: 'intermediate' }, // 4*
+  92:  { equipment: 'ski',       skill: 'expert'       }, // 5*
+  130: { equipment: 'ski',       skill: 'expert'       }, // 6*
+  // ── junior ski (2)
+  15:  { equipment: 'ski',       skill: 'intermediate' }, // 4* Rookie
+  16:  { equipment: 'ski',       skill: 'expert'       }, // 5*
+  132: { equipment: 'ski',       skill: 'expert'       }, // 6* Performance
+  // ── child ski (3)
+  80:  { equipment: 'ski',       skill: 'intermediate' }, // 4* Rookie
+  81:  { equipment: 'ski',       skill: 'expert'       }, // 5* Champion
+  // ── adult snowboard (productCategoryId 3)
+  28:  { equipment: 'snowboard', skill: 'beginner'     }, // 2* Economy
+  29:  { equipment: 'snowboard', skill: 'beginner'     }, // 3*
+  30:  { equipment: 'snowboard', skill: 'intermediate' }, // 4*
+  31:  { equipment: 'snowboard', skill: 'expert'       }, // 5*
+  32:  { equipment: 'snowboard', skill: 'expert'       }, // 6* Platinum
+  // ── teen snowboard
+  98:  { equipment: 'snowboard', skill: 'intermediate' }, // 4*
+  97:  { equipment: 'snowboard', skill: 'expert'       }, // 5*  (was "intermediate" here - wrong)
+  // ── junior snowboard
+  42:  { equipment: 'snowboard', skill: 'intermediate' }, // 4* Rookie
+  43:  { equipment: 'snowboard', skill: 'expert'       }, // 5* Champion
+  // ── child snowboard
+  38:  { equipment: 'snowboard', skill: 'intermediate' }, // 4* Rookie
+  39:  { equipment: 'snowboard', skill: 'expert'       }, // 5* Champion
 };
 
 const ADULT_DEFAULT_AGE = 35;
@@ -103,10 +134,18 @@ function money(minorAmount) {
 }
 
 /** Fallback when a definitionId is not in the table: read the product name. */
+/**
+ * Last resort for a definitionId absent from DEF_TO_SPEC. Odin's product names
+ * carry the star rating - "Red/Silver (4*) Ski", "Champion (5*) Snowboard" - so
+ * read the level from there rather than defaulting everyone to intermediate.
+ */
 function specFromName(name) {
+  const s = String(name || '');
+  const m = /\((\d)\s*\*\)/.exec(s) || /(\d)\s*\*/.exec(s);
+  const stars = m ? parseInt(m[1], 10) : 0;
   return {
-    equipment: /snowboard|board/i.test(String(name || '')) ? 'snowboard' : 'ski',
-    skill: 'intermediate',
+    equipment: /snowboard|board/i.test(s) ? 'snowboard' : 'ski',
+    skill: stars >= 5 ? 'expert' : stars === 3 || stars === 2 ? 'beginner' : 'intermediate',
   };
 }
 
@@ -229,6 +268,24 @@ export default async function handler(req, res) {
     }
     if (new Date(startDate) > new Date(endDate)) {
       return res.status(400).json({ error: 'startDate must not be after endDate.' });
+    }
+
+    // A finished stay must not produce a quote. The price grid is not
+    // date-indexed, so a past period still returns an in-store figure and a
+    // perfectly formatted cart link carrying dates nobody can book — which is
+    // worse than no answer: it puts a dead link in front of an agent. Refuse,
+    // and let the caller pass explicit future dates when a re-quote is wanted.
+    const todayUTC = new Date().toISOString().slice(0, 10);
+    if (endDate < todayUTC) {
+      return res.status(422).json({
+        found: true,
+        error: 'Quoted period has already ended; no quote produced.',
+        bookingReference: booking.bookingReference || ref,
+        quotedStartDate: startDate,
+        quotedEndDate: endDate,
+        today: todayUTC,
+        hint: 'Pass startDate and endDate in the future to re-quote this basket for a new period.',
+      });
     }
 
     // ── 2. Rebuild the group from what was actually sold. ────────────────────
