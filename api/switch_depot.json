@@ -1,0 +1,4227 @@
+{
+"_source": "switch et depot all shops.txt — extract 30-06-2026, matched to Odin shopId 2026-08-24",
+"_precedence": "The per-shop entry below is authoritative. chainSwitchRules is context for a human only: never answer a customer from a chain rule when the shop entry is absent or TO CHECK — hand over instead.",
+"_statuses": {
+"switch": "YES = the shop allows swapping ski/snowboard during the stay. NO = it does not. TO CHECK = unknown, hand over to a human who contacts the shop.",
+"depot": "YES = the shop offers overnight storage. NO = it does not. TO CHECK = unknown, hand over to a human who contacts the shop.",
+"depotBookableOnline": "true = the overnight-storage option can be booked directly on alpy.com. Rare. Unrelated to the modelchange option."
+},
+"_coverage": {
+"shopsWithData": 840,
+"liveShopsWithData": 821,
+"liveShopsWithoutData": 110,
+"sourceRowsUnmatched": 42,
+"note": "A shopId absent from shops{} means no data: hand over, never guess."
+},
+"chainSwitchRules": {
+"Sport 2000 France": "NO",
+"Intersport": "YES with the modelchange option",
+"Ski Republic": "YES with the modelchange option",
+"Precision Ski": "YES with the modelchange option",
+"Hervis": "YES with the modelchange option",
+"Rent and Go": "YES with the modelchange option",
+"Pic Negre": "YES with the modelchange option"
+},
+"shops": {
+"13": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"28": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"32": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"43": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"53": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"58": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"60": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"63": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"64": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"68": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"77": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"78": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"87": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"88": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"91": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"94": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"97": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"101": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"107": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"114": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"120": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"121": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"122": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"123": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"129": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"130": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"136": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"137": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"138": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"139": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"140": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"143": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"144": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"152": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"168": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"171": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"179": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"182": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"186": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"187": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"191": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"197": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"198": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"199": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"201": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"202": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"211": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"217": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"219": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"220": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"222": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"223": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"225": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"226": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"228": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"229": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"232": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"234": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"237": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"240": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"243": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"245": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"249": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"250": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"251": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"253": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"255": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"257": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"258": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"260": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"261": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"262": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"263": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"264": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"265": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"266": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"267": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"272": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"276": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"281": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"284": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"285": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"287": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"288": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"290": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"292": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"293": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"295": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"296": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"300": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"301": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"306": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"307": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"309": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"311": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"314": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"315": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"316": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"317": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"320": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"322": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"323": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"326": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"328": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"331": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"332": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"333": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"336": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"337": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"338": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"339": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"345": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"347": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"348": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"355": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"358": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"359": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"360": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"365": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"368": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"369": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"372": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"373": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"374": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"375": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"378": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"379": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"384": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"385": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"388": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"389": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"390": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"392": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"394": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"397": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"399": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"400": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"401": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"405": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"406": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"407": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"410": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"412": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"413": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"415": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"416": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"418": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"419": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"420": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"421": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"422": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"423": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"424": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"425": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"428": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"429": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"431": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"432": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"434": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"436": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"439": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"440": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"441": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"442": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"443": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"447": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"453": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"456": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"459": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"461": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"462": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"463": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"464": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"465": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"467": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"468": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"470": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"471": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"478": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"484": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"489": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"507": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"514": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"518": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"519": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"520": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"526": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"529": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"545": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"546": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"547": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"548": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"549": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"551": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"552": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"554": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"555": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"557": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"558": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"631": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"661": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"663": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"664": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"723": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"739": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"740": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"741": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"748": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"760": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"825": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"830": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1029": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1056": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"1152": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1166": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1169": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1208": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1221": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1222": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1223": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1226": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1227": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1228": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1229": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1232": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1233": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1234": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1239": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1245": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"1246": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1252": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1253": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1256": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1257": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1274": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1415": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1459": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1472": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1479": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1482": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1483": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1484": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1526": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1544": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1548": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1550": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1551": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1602": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1645": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1654": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"1655": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1656": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1666": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"1690": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1692": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1694": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1695": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1699": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1715": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1719": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1722": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1723": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1727": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1728": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1729": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1733": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1734": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1754": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1778": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1780": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1783": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1810": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1819": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"1822": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1823": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1827": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1842": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1846": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1853": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1858": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1865": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1866": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1867": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1869": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"1870": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1872": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1873": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1875": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1880": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1882": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1884": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1890": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1893": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1897": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1900": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1901": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1902": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1911": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1912": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1916": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1917": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1927": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"1931": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1932": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1933": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1934": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1935": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1941": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1945": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1953": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1958": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1966": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1973": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1976": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1977": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1980": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1981": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1985": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1986": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"1991": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"1994": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1995": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1996": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"1999": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2000": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2002": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2005": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2017": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2026": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2028": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2030": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2033": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2036": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2037": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2038": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2039": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2046": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2048": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2060": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2082": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2087": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2088": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2091": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2094": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2095": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2098": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2103": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2106": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2109": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2113": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2118": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2125": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"2126": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"2128": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2130": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2133": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2141": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2142": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2143": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2144": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2145": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2147": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2148": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2150": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2151": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2152": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2154": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2155": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2156": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2157": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2158": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2160": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2164": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2165": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2167": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2169": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2170": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2171": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2172": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2173": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2175": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2176": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2177": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2178": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2179": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2180": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2181": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2182": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2183": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2187": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2189": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2190": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2193": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2200": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2201": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2204": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2209": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2215": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2217": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2231": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2233": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2245": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2247": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2248": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2249": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2251": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2257": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2260": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2270": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2275": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2292": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2294": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2296": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2297": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2300": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2305": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2306": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2307": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2308": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2310": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2314": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2319": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2320": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2322": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2323": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2324": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2327": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2330": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2333": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2335": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2336": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2337": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2338": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2339": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2340": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2341": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2342": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2343": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2344": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2345": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2346": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2348": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2349": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2352": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2353": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2358": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2361": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2363": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2367": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2375": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2377": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2383": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2388": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2390": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2397": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2398": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2401": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2402": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2403": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2404": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2406": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2409": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2415": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2421": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2424": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2426": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2429": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2432": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2464": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2467": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2474": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2480": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2482": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2488": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2490": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2494": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2496": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2498": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2500": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2502": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2504": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2506": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2517": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2519": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2521": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2530": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2532": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2535": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2537": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"2541": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2556": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2568": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2570": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2572": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2575": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"2586": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2601": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2603": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"2624": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2631": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2685": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2716": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"2718": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2722": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2747": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2753": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2755": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2760": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2812": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"2817": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"2997": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3008": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"3016": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3061": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"3080": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3086": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3096": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3114": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3117": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3129": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3137": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3142": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3146": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3152": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3158": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3169": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"3181": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3212": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3220": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3260": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3268": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3276": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3308": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3312": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3340": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3348": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"3354": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3386": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3388": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3414": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3418": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3420": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3430": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3436": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3442": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3493": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3498": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3505": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3537": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3543": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3547": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3550": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3553": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3556": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3571": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3574": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3577": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3583": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3589": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3591": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3636": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3658": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3669": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3706": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3726": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3730": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3733": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3780": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"3790": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3792": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3801": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3814": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3824": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3825": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3826": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3829": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3832": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3833": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3840": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3843": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3844": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3852": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3855": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3857": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"3868": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3964": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3965": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3967": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"3970": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3988": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"3993": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4007": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4008": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4011": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4012": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4021": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4022": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4023": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4025": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4033": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4034": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4035": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4036": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4037": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4042": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4044": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4045": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4046": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4047": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4048": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4049": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4050": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4051": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4057": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4058": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4059": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4060": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4061": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4064": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4066": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4069": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4073": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4074": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4076": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4104": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4105": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4106": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4107": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4115": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4138": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4140": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4146": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4149": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4150": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4151": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4155": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4156": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4157": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4162": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4164": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4186": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4189": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4190": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4194": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4204": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4205": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4206": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4207": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4208": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4209": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4217": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4218": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4234": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4235": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4236": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4237": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4238": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4239": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4240": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4241": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4255": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4257": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4258": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4259": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4261": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4262": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4268": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4269": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4281": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4283": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4284": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4285": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4286": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4291": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4292": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4300": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4301": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4306": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4307": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4308": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4309": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4310": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4311": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4312": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4313": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4314": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4315": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4316": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4317": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4318": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4319": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4320": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4321": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4322": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4323": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4324": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4325": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4326": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4327": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4328": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4329": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4330": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4331": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4332": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4333": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4334": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4335": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4336": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4337": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4338": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4340": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4343": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4344": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4348": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4350": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4351": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4352": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4353": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4354": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4355": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4357": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4362": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4363": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4376": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4377": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4378": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4381": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4383": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4385": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4386": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4389": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4391": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4392": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4394": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4395": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4396": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4397": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4399": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4400": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4401": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4403": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4500": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4501": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4502": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4503": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4504": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4630": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4632": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4633": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4659": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4660": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4661": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4663": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4664": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4666": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4668": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4669": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4670": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4671": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4672": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4673": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4674": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4676": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4677": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4678": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4679": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4680": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4681": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4683": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4684": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4685": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4686": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4687": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4688": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4689": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4690": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4691": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4692": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4694": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4695": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4696": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4697": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4698": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4699": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4700": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4701": {
+"switch": "YES",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4746": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4747": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4751": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4752": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4754": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4756": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4762": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4763": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4764": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4765": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4766": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4767": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4768": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4769": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": true
+},
+"4770": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4772": {
+"switch": "NO",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4775": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4778": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4779": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4780": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4782": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4783": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4784": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4785": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4791": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4792": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4793": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4795": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4799": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4800": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"4801": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4802": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4803": {
+"switch": "NO",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"4804": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4805": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4806": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4807": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4809": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4810": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4811": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4872": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4873": {
+"switch": "TO CHECK",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4876": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4877": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"4937": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"5024": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"5025": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"5026": {
+"switch": "YES",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"5027": {
+"switch": "YES",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"5028": {
+"switch": "TO CHECK",
+"depot": "YES",
+"depotBookableOnline": false
+},
+"5029": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"5030": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+},
+"5031": {
+"switch": "NO",
+"depot": "TO CHECK",
+"depotBookableOnline": false
+},
+"5032": {
+"switch": "TO CHECK",
+"depot": "NO",
+"depotBookableOnline": false
+}
+}
+}
