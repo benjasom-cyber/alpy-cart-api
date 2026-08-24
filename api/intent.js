@@ -196,6 +196,28 @@ export default async function handler(req, res) {
       const message = params.message ?? params.comment ?? '';
       const tags = params.tags ?? [];
       const llmTopic = normaliseTopic(params.llm_topic ?? params.llmtopic ?? params.topic);
+
+      // The topic this ticket was already waiting on, carried by the flow as an
+      // awaiting__<topic> tag.
+      //
+      // Without it the second turn of every conversation collapses: we ask "what
+      // is your booking reference", the customer replies "B1AF9J", and a message
+      // of six characters matches no keyword and carries no topic - so the flow
+      // that just asked the question forgets it ever did. The customer answered
+      // exactly what was asked and lands on a human anyway.
+      //
+      // It ranks below the tag and keyword layers (a customer who was asked about
+      // a cancellation may well change the subject) but above the model, because a
+      // question we asked one message ago is better evidence than a guess.
+      const pendingTopic = normaliseTopic(
+              params.pending_topic ?? params.pendingtopic ??
+              (function () {
+                        const list = Array.isArray(tags) ? tags : String(tags || '').split(/[,\s]+/);
+                        const hit = list.map(t => String(t || '').trim())
+                          .find(t => /^awaiting__/.test(t));
+                        return hit ? hit.replace(/^awaiting__/, '') : null;
+              })()
+      );
       // What the message says outright wins over what the model reported: the
       // customer's own words are the better source, and a model that paraphrases
       // a reference gets it wrong.
@@ -231,6 +253,7 @@ export default async function handler(req, res) {
 
       // Layer 2 - Alpy vocabulary. Layer 3 - whatever the caller's model said.
       const decision = fromTags || detectFromKeywords(message) ||
+                       (pendingTopic ? { topic: pendingTopic, source: 'pending_topic', blocked: false } : null) ||
                        (llmTopic ? { topic: llmTopic, source: 'llm', blocked: false } : null) ||
                        { topic: 'OTHER', source: 'none', blocked: false };
 
@@ -257,6 +280,10 @@ export default async function handler(req, res) {
               missing: check.missing,
               missingLabels,
               next_question: check.nextQuestion,
+              // Several holes -> one message asking for all of them. See the
+              // comment in _slots.js: a flow has no memory between comments, so
+              // one question per turn can never collect six things.
+              next_question_all: check.nextQuestionAll,
               action,
               agentNote: action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
@@ -272,6 +299,7 @@ export default async function handler(req, res) {
       // Zendesk forces custom-action output names to lowercase and JSON keys are
       // case-sensitive, so every camelCase key is aliased.
       body.nextquestion = body.next_question;
+      body.nextquestionall = body.next_question_all;
       body.missinglabels = missingLabels;
       body.agentnote = body.agentNote;
 

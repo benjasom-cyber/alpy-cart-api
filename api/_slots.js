@@ -146,17 +146,44 @@ export function checkSlots(topic, slots) {
       }
 
       let nextQuestion = null;
+      let nextQuestionAll = null;
       if (missing.length) {
               // For an either/or requirement, ask for the first alternative - it is
               // the one the capability prefers.
               const first = missing[0].split('|')[0];
               nextQuestion = SLOTS[first] ? SLOTS[first].ask : null;
+
+              // With several holes, ask for all of them in ONE message.
+              //
+              // This is not a style choice. A flow has no memory between comments:
+              // if we ask one question per turn, the answer to turn 1 is gone by
+              // turn 3. A quote needs six things; asked one at a time they would
+              // never all be present at once and the flow could never run.
+              // Asked together, the customer's single reply carries them all and
+              // the accumulation problem disappears instead of being solved.
+              if (missing.length === 1) {
+                        nextQuestionAll = nextQuestion;
+              } else {
+                        const labels = missing.map(req => {
+                                  const alternatives = req.split('|');
+                                  return alternatives.map(n => SLOTS[n] ? SLOTS[n].label : n).join(' or ');
+                        });
+                        const last = labels.pop();
+                        nextQuestionAll = 'To prepare this we need ' + labels.join(', ') + ' and ' + last + '.';
+                        // The ages carry their own warning wherever they appear: a
+                        // quote priced without them is wrong and the customer finds
+                        // out at the till.
+                        if (missing.includes('children_ages')) {
+                                  nextQuestionAll += ' We need the age of every child skiing with you — a child is priced on their age, so a quote without them would be wrong. If there are no children, just say so.';
+                        }
+              }
       }
 
       return {
               missing,
               satisfied,
               nextQuestion,
+              nextQuestionAll,
               ready: missing.length === 0 && topic !== 'OTHER',
       };
 }
