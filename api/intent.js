@@ -172,9 +172,37 @@ function normaliseTopic(t) {
  * giving us a date, and letting it through is how a flow ends up writing a
  * booking to Odin for the wrong period.
  */
+/**
+ * Slots arrive in three shapes, and all three have to work.
+ *
+ * A Zendesk custom action builds its body with
+ * evaluate_handlebar_expression_for_json_body, so a value that is itself JSON
+ * either gets escaped or breaks the body outright - and which one it does is not
+ * something to find out in production. So the flow sends the slots as plain
+ * "key=value;key=value", which carries no quotes and no braces and therefore
+ * cannot break anything. A JSON string and a real object are accepted too, for
+ * callers that are not a Zendesk flow.
+ */
+function parseSlotBag(raw) {
+      if (!raw) return {};
+      if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+      const s = String(raw).trim();
+      if (!s) return {};
+      if (s.startsWith('{')) {
+              try { const o = JSON.parse(s); return (o && typeof o === 'object') ? o : {}; } catch { /* fall through */ }
+      }
+      const out = {};
+      for (const pair of s.split(';')) {
+              const i = pair.indexOf('=');
+              if (i <= 0) continue;
+              out[pair.slice(0, i).trim()] = pair.slice(i + 1).trim();
+      }
+      return out;
+}
+
 function cleanSlots(raw) {
       const out = {};
-      const src = (raw && typeof raw === 'object') ? raw : {};
+      const src = parseSlotBag(raw);
       for (const name of Object.keys(SLOTS)) {
               const v = src[name];
               if (v === undefined || v === null) continue;
