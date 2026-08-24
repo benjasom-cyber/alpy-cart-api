@@ -96,12 +96,28 @@ async function getShops() {
       return _shopsCache;
 }
 
+// FALLBACK ONLY. Re-verified 2026-08-21 against
+// core.alpy.com/core/cart/products-information across 116 shops; the count in
+// each comment is how many of those shops actually stock the id. Two entries
+// were wrong before: adult beginner snowboard was 28 (2* Economy, stocked by
+// ONE shop out of 116) instead of 29 (3*, 14 shops), and every teen snowboard
+// level pointed at 97 (5*) instead of 98 for the lower levels. Child expert
+// snowboard pointed at 43, which is the JUNIOR id.
+// This table is only used when the live catalogue cannot be read - see
+// buildDefinitionResolver, which is what runs normally.
 const PRODUCTS = {
-      adult:  { ski: { beginner: 2,   intermediate: 3,  expert: 4  }, snowboard: { beginner: 28, intermediate: 30, expert: 31 } },
-      teen:   { ski: { beginner: 129, intermediate: 96, expert: 92 }, snowboard: { beginner: 97, intermediate: 97, expert: 97 } },
+      adult:  { ski: { beginner: 2,   intermediate: 3,  expert: 4  }, snowboard: { beginner: 29, intermediate: 30, expert: 31 } },
+      //             3*(86)        4*(113)       5*(112)                        3*(14)        4*(106)       5*(81)
+      teen:   { ski: { beginner: 129, intermediate: 96, expert: 92 }, snowboard: { beginner: 98, intermediate: 98, expert: 97 } },
+      //             3*(15)        4*(32)        5*(36)                         4*(42)        4*(42)        5*(25)
       junior: { ski: { beginner: 15,  intermediate: 15, expert: 16 }, snowboard: { beginner: 42, intermediate: 42, expert: 43 } },
-      child:  { ski: { beginner: 80,  intermediate: 80, expert: 81 }, snowboard: { beginner: 38, intermediate: 38, expert: 43 } }
+      //             4*(94)        4*(94)        5*(72)                         4*(72)        4*(72)        5*(26)
+      child:  { ski: { beginner: 80,  intermediate: 80, expert: 80 }, snowboard: { beginner: 38, intermediate: 38, expert: 38 } }
+      //             4*(105) - 81 (5*) exists in 10 shops only                 4*(33) - 39 (5*) in 2 shops only
 };
+
+const CAT_SKI = 1, CAT_SNOWBOARD = 3;   // productCategoryId in the live grid
+const SHOP_INFO_URL = 'https://core.alpy.com/en/service/ski-rental/shops/';
 
 const ADDON_BOOTS  = 1;
 const ADDON_HELMET = 2;
@@ -194,6 +210,106 @@ async function fetchPriceGrid(shopId) {
       }
 }
 
+// A definitionId is not a global constant: every shop imports its own slice of
+// the catalogue, and the age bands are per shop too. Flaine (1867) runs adult
+// 13-99 with no teen tier at all; shop 2145 runs child 0-8 / junior 9-15 /
+// adult 16+. Asking for a tier the shop does not stock produced a cart with no
+// price - measured on 116 shops, the static table missed on roughly half the
+// (age, discipline, level) combinations. So resolve against the shop's own
+// catalogue and keep PRODUCTS only for when these two reads fail.
+async function fetchAgeIntervals(shopId) {
+      try {
+              const r = await fetch(SHOP_INFO_URL + shopId + '?currencyCode=EUR', { headers: { Accept: 'application/json' } });
+              if (!r.ok) return null;
+              const j = await r.json();
+              return Array.isArray(j.ageIntervals) ? j.ageIntervals : null;
+      } catch (e) {
+              console.error('generate-quote: age intervals fetch failed for shop ' + shopId, e);
+              return null;
+      }
+}
+
+function flattenGrid(grid) {
+      const out = [];
+      for (const g of (grid && grid.products) || []) {
+              for (const p of (g && g.products) || []) {
+                        if (!p || p.definitionId == null) continue;
+                        out.push({
+                                  def: p.definitionId,
+                                  cat: p.productCategoryId,
+                                  age: p.ageCategoryId,
+                                  stars: parseInt(String(p.qualityCategoryAbbreviation || '').replace('*', ''), 10) || 0,
+                                  name: (p.nameWithMerchantForAcceptedLanguages && p.nameWithMerchantForAcceptedLanguages.en) || '',
+                                  addons: ((p.addons) || []).filter(a => a && a.classname !== 'insurance').map(a => a.definitionId),
+                        });
+              }
+      }
+      return out;
+}
+
+function ageCategoryIdFor(age, intervals) {
+      let dflt = null;
+      for (const iv of intervals) {
+              if (iv.is_default) dflt = iv.age_category_id;
+              if (age >= iv.start && age <= iv.end) return iv.age_category_id;
+      }
+      return dflt;
+}
+
+const SKILL_STARS = { beginner: 3, intermediate: 4, expert: 5 };
+
+/**
+ * Returns { resolve, misses } where resolve(age, skill, equipment) has exactly
+ * the signature of getDefinitionId, so it drops into fetchLivePricing and
+ * computeCartPrice unchanged. Ties in star distance resolve downwards: we never
+ * silently quote a tier above what was asked for. "Lady"/"Woman"/"Mini"
+ * variants are skipped because we do not collect gender and the unisex line is
+ * stocked just as widely.
+ */
+function buildDefinitionResolver(grid, intervals) {
+      const products = (grid && intervals) ? flattenGrid(grid) : [];
+      const misses = [];
+      if (!products.length || !intervals || !intervals.length) {
+              return { resolve: getDefinitionId, addonsFor: () => null, misses, live: false };
+      }
+      const cache = new Map();
+      function pick(age, skill, equipment) {
+              const sk    = SKILL_STARS[skill] ? skill : 'intermediate';
+              const equip = equipment === 'snowboard' ? 'snowboard' : 'ski';
+              const a     = parseInt(age, 10) || ADULT_DEFAULT_AGE;
+              const key   = a + '|' + sk + '|' + equip;
+              if (cache.has(key)) return cache.get(key);
+
+              const ageId   = ageCategoryIdFor(a, intervals);
+              const wantCat = equip === 'snowboard' ? CAT_SNOWBOARD : CAT_SKI;
+              const want    = SKILL_STARS[sk];
+              let pool = products.filter(p => p.cat === wantCat && p.age === ageId && p.stars > 0 &&
+                                              !/lady|woman|mini/i.test(p.name));
+              let hit = null;
+              if (pool.length) {
+                        pool = pool.slice().sort((x, y) =>
+                                  Math.abs(x.stars - want) - Math.abs(y.stars - want) || x.stars - y.stars);
+                        hit = pool[0];
+              } else {
+                        misses.push(a + 'yr ' + sk + ' ' + equip);
+              }
+              cache.set(key, hit);
+              return hit;
+      }
+      return {
+              live: true,
+              misses,
+              resolve: (age, skill, equipment) => {
+                        const hit = pick(age, skill, equipment);
+                        return hit ? hit.def : getDefinitionId(age, skill, equipment);
+              },
+              addonsFor: (age, skill, equipment) => {
+                        const hit = pick(age, skill, equipment);
+                        return hit && hit.addons.length ? hit.addons : null;
+              },
+      };
+}
+
 function priceForDays(table, days) {
       if (!table) return null;
       const d = Math.max(1, parseInt(days, 10) || 1);
@@ -219,16 +335,17 @@ function indexProducts(grid) {
       return map;
 }
 
-function computeCartPrice({ grid, persons, addons, days }) {
+function computeCartPrice({ grid, persons, addons, days, resolveDefId }) {
       const products = indexProducts(grid);
       if (!products.size) return null;
+      const defIdOf = resolveDefId || getDefinitionId;
 
       let minor = 0;
       let currency = 'EUR';
       const missing = [];
 
       for (const person of persons) {
-              const defId = getDefinitionId(person.age, person.skill, person.equipment);
+              const defId = defIdOf(person.age, person.skill, person.equipment);
               const node  = products.get(defId);
               if (!node) { missing.push('product:' + defId); continue; }
 
@@ -529,10 +646,32 @@ export default async function handler(req, res) {
 
   const cartAddons = buildAddons({ withBoots: withBootsEff, withHelmets: withHelmetsEff });
 
+      // Read the shop's real catalogue and age bands BEFORE building the cart:
+      // the definitionIds we put in the URL have to be ids this shop stocks, or
+      // the basket opens with no price at all.
+      const [grid, ageIntervals] = await Promise.all([
+              fetchPriceGrid(shop.id),
+              fetchAgeIntervals(shop.id),
+      ]);
+      const defs = buildDefinitionResolver(grid, ageIntervals);
+      if (!defs.live) {
+              console.error('generate-quote: live catalogue unavailable for shop ' + shop.id + ' - using static PRODUCTS table');
+      }
+
   const cartPersons = persons.map(p => ({
           age: parseInt(p.age) || 35,
           skill: p.skill === 'intermediate' ? 'advanced' : (p.skill || 'advanced'),
-          products: [{ definitionId: getDefinitionId(p.age, p.skill, p.equipment), addons: cartAddons }]
+          products: [{
+                    definitionId: defs.resolve(p.age, p.skill, p.equipment),
+                    // Keep the agent's boots/helmet choice, but only ask for
+                    // addons this particular product actually offers.
+                    addons: (function () {
+                              const avail = defs.addonsFor(p.age, p.skill, p.equipment);
+                              if (!avail) return cartAddons;
+                              const kept = cartAddons.filter(a => avail.includes(a));
+                              return kept.length ? kept : cartAddons;
+                    })(),
+          }]
   }));
 
   const effectivePromoCode = promoCode || ACTIVE_PROMO_CODE;
@@ -561,14 +700,18 @@ export default async function handler(req, res) {
   const days = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
 
   const pricing = await fetchLivePricing({
-          shop, startDate, endDate, persons, getDefinitionId,
+          shop, startDate, endDate, persons, getDefinitionId: defs.resolve,
           currency: params.currency || 'EUR',
           countryCode: countryToCode(shop.country),
           promoCode: effectivePromoCode,
   });
 
-  const grid = await fetchPriceGrid(shop.id);
-      const cartPrice = grid ? computeCartPrice({ grid, persons, addons: cartAddons, days }) : null;
+      const cartPrice = grid
+        ? computeCartPrice({ grid, persons, addons: cartAddons, days, resolveDefId: defs.resolve })
+        : null;
+      if (defs.misses.length) {
+              console.error('generate-quote: shop ' + shop.id + ' stocks nothing for ' + defs.misses.join(', '));
+      }
 
       let onlineDiscountRate = null;
       if (pricing && pricing.discountAmount != null && pricing.cheapestTotalPrice) {
@@ -638,7 +781,7 @@ export default async function handler(req, res) {
           quoteHasPrice,
           quotehasprice: quoteHasPrice,
           detectedLanguage: lang,          
-        cartInStorePrice,
+          cartInStorePrice,
           cartinstoreprice: cartInStorePrice,
           cartOnlinePrice,
           cartonlineprice: cartOnlinePrice,
@@ -646,6 +789,15 @@ export default async function handler(req, res) {
           cartPriceComplete,
           cartpricecomplete: cartPriceComplete,
           cartPriceMissingDefinitionIds: cartPrice ? cartPrice.missing : null,
+          // definitionIds came from the shop's live catalogue (normal case) or
+          // from the static fallback table.
+          definitionIdsFromLiveCatalogue: defs.live,
+          definitionidsfromlivecatalogue: defs.live,
+          // Group members this shop stocks nothing for, e.g. a 4-year-old
+          // snowboarder in a shop with no child snowboards. Their line will
+          // carry no price - say so instead of sending a silent gap.
+          unavailableForGroup: defs.misses.length ? defs.misses : null,
+          unavailableforgroup: defs.misses.length ? defs.misses : null,
           cheapestTotalPrice: estimatedTotal,
           shopPrice,
           discountAmount,
