@@ -200,13 +200,56 @@ function parseSlotBag(raw) {
       return out;
 }
 
+/**
+ * Each capability flow names the same thing differently.
+ *
+ * Quote Generator's classifier emits preferred_resort_town, rental_start_date,
+ * rental_end_date; the gatekeeper emits resort_name, start_date, end_date. Both
+ * describe a resort and two dates. Rather than force every flow to be rewritten
+ * to speak _slots.js, or worse, to add a translating custom-code step in front
+ * of every call, the translation lives here - once.
+ *
+ * This is what lets a flow hand over its detector's raw JSON blob untouched:
+ * Quote Generator already passes {{content}} straight to generate-quote, and it
+ * can now pass the same blob to /api/intent.
+ *
+ * Aliases never win over the canonical name. A payload carrying both keeps the
+ * canonical one, so adding a dialect can not change the meaning of a request
+ * that was already correct.
+ */
+const SLOT_ALIASES = {
+      resort_name:     ['preferred_resort_town', 'resort', 'resort_town', 'town'],
+      shop_name:       ['shop', 'preferred_shop'],
+      // new_start / new_end are Date Change's own names: its detector reports
+      // the dates the customer wants to move TO, which is exactly what the
+      // capability needs before it may run.
+      start_date:      ['rental_start_date', 'startDate', 'start', 'new_start'],
+      end_date:        ['rental_end_date', 'endDate', 'end', 'new_end'],
+      booking_ref:     ['booking_reference', 'bookingReference', 'reference'],
+      adults:          ['adult_count', 'nb_adults'],
+      children_ages:   ['children', 'child_ages', 'kids_ages'],
+      equipment_level: ['equipment', 'level', 'skill'],
+      boots:           ['with_boots'],
+      helmets:         ['helmet', 'with_helmets'],
+      insurance:       ['protection', 'with_insurance', 'guaranty'],
+};
+
+function readSlot(src, name) {
+      const candidates = [name].concat(SLOT_ALIASES[name] || []);
+      for (const key of candidates) {
+              const v = src[key];
+              if (v === undefined || v === null) continue;
+              const s = String(v).trim();
+              if (s) return s;
+      }
+      return '';
+}
+
 function cleanSlots(raw) {
       const out = {};
       const src = parseSlotBag(raw);
       for (const name of Object.keys(SLOTS)) {
-              const v = src[name];
-              if (v === undefined || v === null) continue;
-              const s = String(v).trim();
+              const s = readSlot(src, name);
               if (!s) continue;
               out[name] = (name === 'booking_ref') ? s.toUpperCase() : s;
       }
