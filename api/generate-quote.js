@@ -961,6 +961,21 @@ export default async function handler(req, res) {
           if (pricing.discountAmount != null) {
                     discountAmount = Math.round(pricing.discountAmount * scaleRatio * 100) / 100;
                     shopPrice = Math.round((estimatedTotal + discountAmount) * 100) / 100;
+                    // NEVER SHOW shopPrice TO A CUSTOMER.
+                    //
+                    // It comes from the cheapest-shop search, not from this cart,
+                    // and on the measured La Tania basket it read 438 while the
+                    // cart cost 624,67 online and 1039,60 at the counter. A shop
+                    // price BELOW our own price is not a shop price - whatever it
+                    // is (our net cost to the shop is the likely answer), it is an
+                    // internal figure and quoting it would advertise a discount
+                    // that does not exist, or worse, our margin.
+                    //
+                    // The customer-facing comparison is cartInStorePrice against
+                    // cartOnlinePrice, and only those two. So when this number
+                    // breaks the invariant "the counter is never cheaper than us",
+                    // drop it rather than pass a trap downstream.
+                    if (cartOnlinePrice != null && shopPrice < cartOnlinePrice) shopPrice = null;
           }
   }
 
