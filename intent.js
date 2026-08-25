@@ -457,6 +457,19 @@ export default async function handler(req, res) {
               // one question per turn can never collect six things.
               next_question_all: check.nextQuestionAll,
               action,
+              // The whole gate in one value.
+              //
+              // A flow's entry condition can test exactly one thing, but the
+              // question it must answer is two: "is this my subject" AND "is
+              // there enough to act on". Returning the topic ONLY when the
+              // answer is RUN collapses both into a single comparison, so
+              // Quote Generator asks `run_topic Is QUOTE` and gets a no both
+              // when the customer wanted a cancellation and when they wanted a
+              // quote but gave no dates.
+              //
+              // Empty string, never null: a Zendesk Branch on a Text variable
+              // compares strings, and null renders as the word "null".
+              run_topic: action === 'RUN' ? topic : '',
               bookingRefs: multipleRefs.length > 1 ? multipleRefs : null,
               agentNote: escalation ? escalation : (action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
@@ -471,6 +484,7 @@ export default async function handler(req, res) {
 
       // Zendesk forces custom-action output names to lowercase and JSON keys are
       // case-sensitive, so every camelCase key is aliased.
+      body.runtopic = body.run_topic;
       body.bookingrefs = body.bookingRefs;
       body.nextquestion = body.next_question;
       body.nextquestionall = body.next_question_all;
