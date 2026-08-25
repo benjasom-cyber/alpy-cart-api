@@ -246,8 +246,22 @@ function parseSlotBag(raw) {
       if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
       const s = String(raw).trim();
       if (!s) return {};
-      if (s.startsWith('{')) {
-              try { const o = JSON.parse(s); return (o && typeof o === 'object') ? o : {}; } catch { /* fall through */ }
+      // The JSON does not have to be the whole string.
+      //
+      // This used to require s to START with "{", and a detector that answered
+      // ```json\n{...}\n``` - or prefixed one polite sentence - fell through to
+      // the key=value parser, matched nothing, and returned {}. Every slot then
+      // read as missing, the flow's gate closed, and the ticket went silent with
+      // no error anywhere: the model had extracted everything correctly and we
+      // threw it away over a code fence.
+      //
+      // So take the first balanced object found anywhere in the string. A prompt
+      // saying "no code fences" is a request, not a guarantee.
+      const first = s.indexOf('{');
+      const last = s.lastIndexOf('}');
+      if (first !== -1 && last > first) {
+              const slice = s.slice(first, last + 1);
+              try { const o = JSON.parse(slice); if (o && typeof o === 'object' && !Array.isArray(o)) return o; } catch { /* fall through */ }
       }
       const out = {};
       for (const pair of s.split(';')) {
