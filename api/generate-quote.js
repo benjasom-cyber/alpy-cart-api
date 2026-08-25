@@ -511,7 +511,18 @@ function describeGroup(persons) {
 }
 
 function describeEquipment(addons, persons) {
-      const eq = (persons[0] && persons[0].equipment === 'snowboard') ? 'snowboard' : 'skis';
+      // The first person is not the group.
+      //
+      // This read persons[0].equipment and called it the answer, which was
+      // harmless while every quote carried one discipline for everybody. Now that
+      // the classifier reports each skier, a family of two snowboarders and three
+      // children on skis was being described as "snowboard" - the price was right
+      // and the sentence was wrong, which is the worse of the two failures because
+      // it is the part the customer reads.
+      const boards = persons.filter(p => String(p && p.equipment).toLowerCase() === 'snowboard').length;
+      const eq = boards === 0 ? 'skis'
+               : boards === persons.length ? 'snowboards'
+               : boards + ' snowboards and ' + (persons.length - boards) + ' pairs of skis';
       const bits = [eq];
       // Count who actually has each accessory instead of reading the group
       // flag. "boots and helmets" on a quote where only the children took a
