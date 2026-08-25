@@ -314,6 +314,142 @@ function cleanSlots(raw) {
       return out;
 }
 
+/**
+ * The ticket is the memory.
+ *
+ * A flow sees one comment. That is why ticket 581704 asked Alice's colleague for
+ * dates he had already narrowed down, and why on 581695 five booking references
+ * were requested three times: each run started from nothing.
+ *
+ * Two ways to fix it were on the table. Writing what we learn into ticket fields
+ * or an internal note gives a store that can silently disagree with what the
+ * customer actually wrote - an agent clears a field, and the quote is built on a
+ * memory of a conversation rather than the conversation. Reading the thread has
+ * no such gap: the customer's own words are the store, and they cannot drift.
+ *
+ * Needs ZENDESK_SUBDOMAIN, ZENDESK_EMAIL and ZENDESK_API_TOKEN. With any of them
+ * missing this returns null and everything behaves exactly as before - one
+ * message, no history. Degrading to the old behaviour is the right failure: a
+ * flow that stops working because a token expired would be worse than a flow
+ * that briefly forgets.
+ */
+const ZD_SUB   = process.env.ZENDESK_SUBDOMAIN || '';
+const ZD_EMAIL = process.env.ZENDESK_EMAIL || '';
+const ZD_TOKEN = process.env.ZENDESK_API_TOKEN || '';
+
+function zdAuth() {
+      if (!ZD_SUB || !ZD_EMAIL || !ZD_TOKEN) return null;
+      return 'Basic ' + Buffer.from(ZD_EMAIL + '/token:' + ZD_TOKEN).toString('base64');
+}
+
+/**
+ * Everything the customer has written on this ticket, oldest first.
+ *
+ * Our own replies are dropped on purpose. They quote the customer, they carry
+ * our footer, and they contain the very questions we are trying to decide
+ * whether to repeat - feeding them back in is how a bot ends up reading its own
+ * words as evidence.
+ */
+async function fetchCustomerThread(ticketId) {
+      const auth = zdAuth();
+      if (!auth || !ticketId) return null;
+
+      try {
+              const base = 'https://' + ZD_SUB + '.zendesk.com/api/v2/tickets/' + encodeURIComponent(ticketId);
+              const headers = { Authorization: auth, Accept: 'application/json' };
+              const [tRes, cRes] = await Promise.all([
+                        fetch(base + '.json', { headers }),
+                        fetch(base + '/comments.json?sort_order=asc', { headers }),
+              ]);
+              if (!tRes.ok || !cRes.ok) return null;
+
+              const ticket = (await tRes.json()).ticket || {};
+              const comments = (await cRes.json()).comments || [];
+              const requester = ticket.requester_id;
+
+              const mine = comments
+                .filter(c => c && c.author_id === requester)
+                .map(c => stripQuotedAndSignature(String(c.plain_body || c.body || '')))
+                .filter(Boolean);
+
+              return { turns: mine, text: mine.join('\n\n'), count: mine.length };
+      } catch {
+              return null;
+      }
+}
+
+/**
+ * Keep what the customer typed; drop the mail furniture underneath it.
+ *
+ * Their reply carries our whole previous message quoted below theirs, plus their
+ * own signature. Left in, our footer's "bd@alpy.com" once made a customer look
+ * like a colleague, and our own question about children's ages could be mistaken
+ * for their answer.
+ */
+function stripQuotedAndSignature(body) {
+      let t = body.replace(/\r/g, '');
+      const cuts = [
+              /^\s*-{2,}\s*$/m,                       // -- signature delimiter
+              /^\s*_{5,}\s*$/m,
+              /^\s*>/m,                               // quoted block
+              /^\s*(On|Le|Am|El)\b.{0,80}\b(wrote|a [eé]crit|schrieb|escribi[oó])\s*:/mi,
+              /^\s*(De|From|Von|Da)\s*:/mi,
+              /The information transmitted in this e-?mail/i,
+              /Powered\s*by\s*2beGROUP/i,
+              /Head of Support/i,
+      ];
+      for (const re of cuts) {
+              const m = t.match(re);
+              if (m && m.index > 0) t = t.slice(0, m.index);
+      }
+      return t.trim();
+}
+
+/**
+ * What we can answer without a human, and without inventing anything.
+ *
+ * Every line here is checked against the live catalogue or the shop data - the
+ * 15% is the insurance addon's priceRelative on core.alpy.com, measured, not
+ * remembered. When a customer asks something outside this list we say nothing
+ * rather than improvise: a wrong answer about cover is worse than a slow one.
+ */
+const PRODUCT_ANSWERS = [
+      {
+              key: 'insurance',
+              re: /\b(alpin\s*guaranty|alpinguaranty|guaranty|assurance|insurance|protection|casse\s*(et|&)?\s*vol|damage\s*(and|&)?\s*theft|versicherung|seguro|assicurazione)\b/i,
+              fact: 'Damage & theft protection (sold as AlpinGuaranty) costs 15% of the rental price and covers breakage and theft of the equipment we rent out. It is optional, it is added per person, and it is never included unless the customer asks for it.',
+      },
+      {
+              key: 'boots',
+              re: /\b(boots?|chaussures?|schuhe|scarponi|botas)\b/i,
+              fact: 'Boots are an optional extra, priced per person and per day. Anyone bringing their own does not pay for them.',
+      },
+      {
+              key: 'helmets',
+              re: /\b(helmets?|casques?|helm|casco|kask)\b/i,
+              fact: 'Helmets are an optional extra, priced per person and per day. Nobody is obliged to take one.',
+      },
+      {
+              key: 'children',
+              re: /\b(child|children|kid|kids|enfant|enfants|kinder|ni[nñ]os|bambini)\b.{0,40}\b(price|pricing|cost|tarif|prix|preis|precio)\b|\b(price|pricing|tarif|prix)\b.{0,40}\b(child|children|enfant|kinder)\b/i,
+              fact: 'Children are priced on their exact age, and the age bands differ from shop to shop. That is why a quote cannot be produced without every child\'s age.',
+      },
+];
+
+/**
+ * A question, not an answer.
+ *
+ * On 581704 the customer replied to our list of questions with "que couvre la
+ * protection alpinguaranty ?" - and got silence, because the reply did not
+ * contain the slots we wanted. A question deserves its answer even when it
+ * arrives instead of the information we asked for.
+ */
+function detectProductQuestion(message) {
+      const m = String(message || '');
+      if (!/\?|\bque\s+couvre\b|\bwhat\s+(is|does|are)\b|\bqu(\'|e\s)est[- ]ce\b|\bwas\s+ist\b/i.test(m)) return [];
+      return PRODUCT_ANSWERS.filter(a => a.re.test(m)).map(a => ({ topic: a.key, fact: a.fact }));
+}
+
 export default async function handler(req, res) {
       Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
       if (req.method === 'OPTIONS') return res.status(200).end();
@@ -356,15 +492,35 @@ export default async function handler(req, res) {
       // What the message says outright wins over what the model reported: the
       // customer's own words are the better source, and a model that paraphrases
       // a reference gets it wrong.
+      const ticketId = params.ticket_id ?? params.ticketid ?? params.ticket ?? '';
+
+      // The whole conversation, when we are allowed to read it.
+      const thread = await fetchCustomerThread(ticketId);
+
       const fromMessage = extractFromMessage(message);
+
+      // Oldest turn first, so a later correction wins over an earlier value:
+      // "the 28th" then "actually the 29th" must end up as the 29th. cleanSlots
+      // drops empty values, so a turn that says nothing about dates cannot erase
+      // the dates an earlier turn gave.
+      const fromThread = {};
+      if (thread && thread.turns.length) {
+              for (const turn of thread.turns) Object.assign(fromThread, cleanSlots(extractFromMessage(turn)));
+      }
+
       const slots = Object.assign(
+              fromThread,
               cleanSlots(params.llm_slots ?? params.llmslots ?? params.slots ?? params),
               cleanSlots(fromMessage)
       );
 
       // Every reference the customer named, when they named more than one.
-      const multipleRefs = String(fromMessage._booking_refs || '')
-        .split(',').map(x => x.trim()).filter(Boolean);
+      const refsSeen = new Set();
+      for (const src of [fromMessage].concat(thread ? thread.turns.map(extractFromMessage) : [])) {
+              String(src._booking_refs || '').split(',').map(x => x.trim()).filter(Boolean).forEach(r => refsSeen.add(r));
+              if (src.booking_ref) refsSeen.add(src.booking_ref);
+      }
+      const multipleRefs = refsSeen.size > 1 ? [...refsSeen] : [];
 
       // Layer 0 - internal or partner sender. Layer 1 - native tags.
       // Either one stops the whole thing, before any topic is considered.
@@ -400,6 +556,7 @@ export default async function handler(req, res) {
                        { topic: 'OTHER', source: 'none', blocked: false };
 
       const topic = decision.topic;
+      const productQuestions = detectProductQuestion(message);
       const check = checkSlots(topic, slots);
       const missingLabelsOf = c => c.missing.map(req => {
               const first = req.split('|')[0];
@@ -430,7 +587,9 @@ export default async function handler(req, res) {
       // The awaiting__<topic> tag means a question went out on this ticket. If
       // the reply still leaves the same hole, repeating the question is how
       // 581695 reached seventeen messages. A human reads it instead.
-      if (action === 'ASK' && pendingTopic === topic) {
+      // A customer who asked a question instead of answering ours has not gone
+      // quiet - they are waiting on us. Answer, ask again, and do not escalate.
+      if (action === 'ASK' && pendingTopic === topic && !productQuestions.length) {
               action = 'HANDOVER';
               escalation = 'We already asked this customer for ' + missingLabelsOf(check) +
                            ' and their reply still does not contain it. Asking a second time ' +
@@ -470,6 +629,11 @@ export default async function handler(req, res) {
               // Empty string, never null: a Zendesk Branch on a Text variable
               // compares strings, and null renders as the word "null".
               run_topic: action === 'RUN' ? topic : '',
+              // Facts the reply must state before asking for anything else.
+              answers: productQuestions.length ? productQuestions.map(a => a.fact).join(' ') : '',
+              // How much of the conversation we could read. 0 means we are back
+              // to one message at a time - say so rather than pretend.
+              turns_read: thread ? thread.count : 0,
               bookingRefs: multipleRefs.length > 1 ? multipleRefs : null,
               agentNote: escalation ? escalation : (action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
@@ -485,6 +649,7 @@ export default async function handler(req, res) {
       // Zendesk forces custom-action output names to lowercase and JSON keys are
       // case-sensitive, so every camelCase key is aliased.
       body.runtopic = body.run_topic;
+      body.turnsread = body.turns_read;
       body.bookingrefs = body.bookingRefs;
       body.nextquestion = body.next_question;
       body.nextquestionall = body.next_question_all;
