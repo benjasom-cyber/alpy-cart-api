@@ -682,7 +682,18 @@ export default async function handler(req, res) {
               // Capped at 8000 characters from the END: a long thread's useful
               // information is in its recent turns, and an unbounded transcript
               // would eventually cost more than the answer is worth.
-              transcript: buildTranscript(thread.turns),
+              //
+              // FAIL-SOFT. When the thread cannot be read - no credentials, an
+              // expired token, a ticket id the flow did not pass - this falls
+              // back to the message we were given. A flow whose detector reads
+              // `transcript` must never receive an empty string, because an
+              // empty detector input classifies as OTHER and closes the gate on
+              // every ticket at once. Degraded memory is a bad day; a silent
+              // outage across all capabilities is a bad week.
+              transcript: buildTranscript(thread.turns) ||
+                (String(message || '').trim()
+                  ? 'Customer, message 1 of 1:\n' + String(message).trim()
+                  : ''),
               bookingRefs: multipleRefs.length > 1 ? multipleRefs : null,
               agentNote: escalation ? escalation : (action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
