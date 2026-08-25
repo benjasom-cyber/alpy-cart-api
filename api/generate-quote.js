@@ -51,11 +51,23 @@
  *     ski" (a product) and "helmet" (an addon). Products and addons therefore
  *     live in separate namespaces here.
  *
- * PRECEDENCE on group composition: the scalar inputs WIN over `persons`. A
- * generative caller reliably gets a head count right and reliably gets a
- * hand-written array wrong - observed: a "2 adults + 3 children" request arrived
- * as a two-element persons array while group_size said 5, which both shrank the
- * cart and inflated the price by the 5/2 scale ratio.
+ * PRECEDENCE on group composition: the scalar inputs WIN over `persons` WHEN THE
+ * TWO DISAGREE ON HEADCOUNT. A generative caller reliably gets a head count
+ * right and reliably gets a hand-written array wrong - observed: a "2 adults + 3
+ * children" request arrived as a two-element persons array while group_size said
+ * 5, which both shrank the cart and inflated the price by the 5/2 scale ratio.
+ *
+ * But when the array agrees on how many people there are, it is the BETTER
+ * source, because it is the only one that can say who rides what. The scalars
+ * carry ONE discipline and ONE level for the whole party, and a family of two
+ * snowboarding adults and three beginner children on skis cannot be described
+ * that way at all - one of the two groups gets the other's equipment, and the
+ * price is wrong for everybody. The ZAF app has always asked per skier; the
+ * email path could not, which is the gap this closes.
+ *
+ * So: same headcount -> merge, taking ages from the scalars (children_ages is
+ * authoritative) and discipline, level and accessories from the array.
+ * Different headcount -> scalars, exactly as before.
  */
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
@@ -191,6 +203,46 @@ function buildPersonsFromScalars({ adults, childrenAges, skill, equipment }) {
       for (let i = 0; i < nAdults; i++) out.push({ age: ADULT_DEFAULT_AGE, skill: sk, equipment: eq });
       for (const a of ages) out.push({ age: a, skill: sk, equipment: eq });
       return out;
+}
+
+/**
+ * Two descriptions of the same party, combined into the better one.
+ *
+ * `base` comes from the scalars: the right number of people with the right ages,
+ * but one discipline and one level copied across all of them. `detail` comes from
+ * the classifier reading the email: it knows the two adults are on snowboards and
+ * the three children are beginners on skis, and it may or may not have got the
+ * ages right.
+ *
+ * Ages come from base, always - children_ages is what the customer typed, and a
+ * child priced on a guessed age is the whole reason _slots.js exists. Everything
+ * else comes from detail when detail says anything at all.
+ *
+ * Pairing is by age first, positional only as a fallback. A classifier is free to
+ * list the family in whatever order it likes, and pairing a 3-year-old with an
+ * adult's snowboard because it happened to be written first is exactly the kind
+ * of silent wrongness that surfaces at the till.
+ */
+function mergePersons(base, detail) {
+      const pool = detail.slice();
+      const take = (age) => {
+              let i = pool.findIndex(p => p && hasValue(p.age) && (parseInt(p.age, 10) === age));
+              if (i === -1) i = pool.findIndex(p => p && !hasValue(p.age));
+              if (i === -1) return null;
+              return pool.splice(i, 1)[0];
+      };
+
+      return base.map(b => {
+              const d = take(parseInt(b.age, 10)) || {};
+              const out = Object.assign({}, d, b);   // b wins on age
+              const level = d.skill ?? d.level;
+              if (hasValue(level)) out.skill = String(level).trim().toLowerCase();
+              if (hasValue(d.equipment)) {
+                        out.equipment = String(d.equipment).toLowerCase().includes('snowboard')
+                          ? 'snowboard' : 'ski';
+              }
+              return out;
+      });
 }
 
 /**
@@ -671,18 +723,23 @@ export default async function handler(req, res) {
               equipment: equipmentEff,
       });
 
+      let detailed = params.persons || cj.persons || null;
+      if (typeof detailed === 'string') {
+              try { detailed = JSON.parse(detailed); } catch { detailed = null; }
+      }
+      if (!Array.isArray(detailed) || !detailed.length) detailed = null;
+
       if (scalarPersons.length && (hasValue(adultsEff) || hasValue(childrenAgesEff))) {
-              persons = scalarPersons;
-              personsSource = 'scalars';
-      } else {
-              let legacy = params.persons || cj.persons || null;
-              if (typeof legacy === 'string') {
-                        try { legacy = JSON.parse(legacy); } catch { legacy = null; }
+              if (detailed && detailed.length === scalarPersons.length) {
+                        persons = mergePersons(scalarPersons, detailed);
+                        personsSource = 'scalars+array';
+              } else {
+                        persons = scalarPersons;
+                        personsSource = 'scalars';
               }
-              if (Array.isArray(legacy) && legacy.length) {
-                        persons = legacy;
-                        personsSource = 'array';
-              }
+      } else if (detailed) {
+              persons = detailed;
+              personsSource = 'array';
       }
 
       const personsBuiltFromScalars = personsSource === 'scalars';
