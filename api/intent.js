@@ -333,9 +333,18 @@ function cleanSlots(raw) {
  * flow that stops working because a token expired would be worse than a flow
  * that briefly forgets.
  */
-const ZD_SUB   = process.env.ZENDESK_SUBDOMAIN || '';
-const ZD_EMAIL = process.env.ZENDESK_EMAIL || '';
-const ZD_TOKEN = process.env.ZENDESK_API_TOKEN || '';
+// Accept every shape of the same answer: "skisupport", "skisupport.zendesk.com",
+// or the full "https://skisupport.zendesk.com/". Asking a human to remember which
+// third of a URL a field wants is a trap, and it cost us one deploy: the value
+// with the domain attached built skisupport.zendesk.com.zendesk.com, which does
+// not resolve, and the failure surfaced only as "fetch failed".
+const ZD_SUB = String(process.env.ZENDESK_SUBDOMAIN || '')
+  .trim()
+  .replace(/^https?:\/\//i, '')
+  .replace(/\/.*$/, '')
+  .replace(/\.zendesk\.com$/i, '');
+const ZD_EMAIL = String(process.env.ZENDESK_EMAIL || '').trim();
+const ZD_TOKEN = String(process.env.ZENDESK_API_TOKEN || '').trim();
 
 function zdAuth() {
       if (!ZD_SUB || !ZD_EMAIL || !ZD_TOKEN) return null;
@@ -389,7 +398,11 @@ async function fetchCustomerThread(ticketId) {
               return { turns: mine, text: mine.join('\n\n'), count: mine.length,
                        status: 'ok:' + comments.length + '_comments' };
       } catch (e) {
-              return { turns: [], count: 0, status: 'error:' + String((e && e.message) || e).slice(0, 60) };
+              // Name the host we tried. It is not a secret, and it is the
+              // difference between "the token is wrong" and "the URL is wrong".
+              return { turns: [], count: 0,
+                       status: 'error:' + String((e && e.message) || e).slice(0, 40) +
+                               ' host=' + ZD_SUB + '.zendesk.com' };
       }
 }
 
