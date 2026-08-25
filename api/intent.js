@@ -246,8 +246,22 @@ function parseSlotBag(raw) {
       if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
       const s = String(raw).trim();
       if (!s) return {};
-      if (s.startsWith('{')) {
-              try { const o = JSON.parse(s); return (o && typeof o === 'object') ? o : {}; } catch { /* fall through */ }
+      // The JSON does not have to be the whole string.
+      //
+      // This used to require s to START with "{", and a detector that answered
+      // ```json\n{...}\n``` - or prefixed one polite sentence - fell through to
+      // the key=value parser, matched nothing, and returned {}. Every slot then
+      // read as missing, the flow's gate closed, and the ticket went silent with
+      // no error anywhere: the model had extracted everything correctly and we
+      // threw it away over a code fence.
+      //
+      // So take the first balanced object found anywhere in the string. A prompt
+      // saying "no code fences" is a request, not a guarantee.
+      const first = s.indexOf('{');
+      const last = s.lastIndexOf('}');
+      if (first !== -1 && last > first) {
+              const slice = s.slice(first, last + 1);
+              try { const o = JSON.parse(slice); if (o && typeof o === 'object' && !Array.isArray(o)) return o; } catch { /* fall through */ }
       }
       const out = {};
       for (const pair of s.split(';')) {
@@ -444,7 +458,7 @@ function stripQuotedAndSignature(body) {
 const PRODUCT_ANSWERS = [
       {
               key: 'insurance',
-              re: /\b(alpin\s*guaranty|alpinguaranty|guaranty|assurance|insurance|protection|casse\s*(et|&)?\s*vol|damage\s*(and|&)?\s*theft|versicherung|seguro|assicurazione)\b/i,
+              re: /\b(alpin\s*guaranty|alpinguaranty|guaranty|assurance|insurance|protection|casse\s*(et|&)?\s*vol|dommages?\s*(et|&)?\s*(le\s*)?vol|damage\s*(and|&)?\s*theft|versicherung|seguro|assicurazione)\b/i,
               fact: 'Damage & theft protection (sold as AlpinGuaranty) costs 15% of the rental price and covers breakage and theft of the equipment we rent out. It is optional, it is added per person, and it is never included unless the customer asks for it.',
       },
       {
@@ -484,6 +498,57 @@ function detectProductQuestion(message) {
       const m = String(message || '');
       if (!/\?|\bque\s+couvre\b|\bwhat\s+(is|does|are)\b|\bqu(\'|e\s)est[- ]ce\b|\bwas\s+ist\b/i.test(m)) return [];
       return PRODUCT_ANSWERS.filter(a => a.re.test(m)).map(a => ({ topic: a.key, fact: a.fact }));
+}
+
+/**
+ * You may not ask someone to buy something you have not described.
+ *
+ * The slot named "damage & theft protection" reached the composing prompt as
+ * that label and nothing else, so the message that came out asked the customer
+ * whether they wanted an option it had never explained - and, having no facts to
+ * work with, the model filled the hole by promising that "another team" would
+ * answer about it, then asked anyway. Deflection and interrogation in the same
+ * paragraph.
+ *
+ * The label alone was never enough. Whenever we ask for one of these, the fact
+ * that describes it travels with the question: what it is, what it costs, that
+ * it is optional. The customer can then actually answer.
+ *
+ * children_ages carries its own reason for the same reason - "how old is each
+ * child" with no explanation reads as bureaucracy rather than pricing.
+ */
+const SLOT_FACTS = {
+      insurance:     'insurance',
+      boots:         'boots',
+      helmets:       'helmets',
+      children_ages: 'children',
+};
+
+function factsForMissing(missing) {
+      const out = [];
+      for (const requirement of (missing || [])) {
+              for (const name of String(requirement).split('|')) {
+                        const key = SLOT_FACTS[name];
+                        if (!key) continue;
+                        const entry = PRODUCT_ANSWERS.find(a => a.key === key);
+                        if (entry) out.push({ topic: entry.key, fact: entry.fact });
+              }
+      }
+      return out;
+}
+
+// A fact the customer asked for and a fact we owe them because we are about to
+// ask for the slot are the same sentence; saying it twice is worse than saying
+// it once.
+function mergeFacts(asked, owed) {
+      const seen = new Set();
+      const out = [];
+      for (const f of asked.concat(owed)) {
+              if (seen.has(f.topic)) continue;
+              seen.add(f.topic);
+              out.push(f);
+      }
+      return out;
 }
 
 export default async function handler(req, res) {
@@ -592,8 +657,18 @@ export default async function handler(req, res) {
                        { topic: 'OTHER', source: 'none', blocked: false };
 
       const topic = decision.topic;
-      const productQuestions = detectProductQuestion(message);
       const check = checkSlots(topic, slots);
+      // Two different things, deliberately kept apart.
+      //
+      // askedQuestions is what the customer actually wanted to know. It is the
+      // only one that may suppress the repeat-ask escalation: a customer who
+      // asked us something instead of answering has not gone quiet, so we answer
+      // and ask again rather than hand over. Facts we owe them because we are
+      // about to ask for a paid option say nothing about whether they replied,
+      // and letting those suppress the escalation would disable the loop guard
+      // on every quote - which is the bug that made 581695 seventeen messages.
+      const askedQuestions = detectProductQuestion(message);
+      const productQuestions = mergeFacts(askedQuestions, factsForMissing(check.missing));
       const missingLabelsOf = c => c.missing.map(req => {
               const first = req.split('|')[0];
               return SLOTS[first] ? SLOTS[first].label : first;
@@ -625,7 +700,7 @@ export default async function handler(req, res) {
       // 581695 reached seventeen messages. A human reads it instead.
       // A customer who asked a question instead of answering ours has not gone
       // quiet - they are waiting on us. Answer, ask again, and do not escalate.
-      if (action === 'ASK' && pendingTopic === topic && !productQuestions.length) {
+      if (action === 'ASK' && pendingTopic === topic && !askedQuestions.length) {
               action = 'HANDOVER';
               escalation = 'We already asked this customer for ' + missingLabelsOf(check) +
                            ' and their reply still does not contain it. Asking a second time ' +
