@@ -472,6 +472,14 @@ const PRODUCT_ANSWERS = [
  * contain the slots we wanted. A question deserves its answer even when it
  * arrives instead of the information we asked for.
  */
+function buildTranscript(turns) {
+      if (!turns || !turns.length) return '';
+      const numbered = turns.map((t, i) => 'Customer, message ' + (i + 1) + ' of ' + turns.length + ':\n' + t);
+      let out = numbered.join('\n\n');
+      if (out.length > 8000) out = '[…earlier messages omitted…]\n\n' + out.slice(out.length - 8000);
+      return out;
+}
+
 function detectProductQuestion(message) {
       const m = String(message || '');
       if (!/\?|\bque\s+couvre\b|\bwhat\s+(is|does|are)\b|\bqu(\'|e\s)est[- ]ce\b|\bwas\s+ist\b/i.test(m)) return [];
@@ -663,6 +671,18 @@ export default async function handler(req, res) {
               // to one message at a time - say so rather than pretend.
               turns_read: thread.count,
               thread_status: thread.status,
+              // The conversation, for a flow's own detector to read instead of
+              // the last comment alone.
+              //
+              // Turns are numbered and ordered oldest first so a prompt can be
+              // told plainly that the last one wins. Without the numbering a
+              // model reading five paragraphs has no way to know which "the
+              // 28th" superseded which.
+              //
+              // Capped at 8000 characters from the END: a long thread's useful
+              // information is in its recent turns, and an unbounded transcript
+              // would eventually cost more than the answer is worth.
+              transcript: buildTranscript(thread.turns),
               bookingRefs: multipleRefs.length > 1 ? multipleRefs : null,
               agentNote: escalation ? escalation : (action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
@@ -680,6 +700,7 @@ export default async function handler(req, res) {
       body.runtopic = body.run_topic;
       body.turnsread = body.turns_read;
       body.threadstatus = body.thread_status;
+      body.transcript = body.transcript;
       body.bookingrefs = body.bookingRefs;
       body.nextquestion = body.next_question;
       body.nextquestionall = body.next_question_all;
