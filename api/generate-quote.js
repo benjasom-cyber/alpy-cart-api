@@ -533,7 +533,29 @@ function describeEquipment(addons, persons) {
       return bits.join(' + ');
 }
 
-function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price, currency, cartUrl, couponValue }) {
+/**
+ * The saving is the argument, and it was missing from the sentence.
+ *
+ * The quote line carried the online price alone, so the reply could say what the
+ * rental costs but not why booking it here is worth anything. The counter price
+ * at the shop is the comparison the whole offer rests on - 844,10 against 624,67
+ * on the measured La Tania basket - and the composing prompt is forbidden to
+ * invent a figure that is not in this line. So the figure has to be in this line.
+ *
+ * Only stated when the in-store price is genuinely higher: a "saving" of zero, or
+ * a negative one, is worse than silence.
+ */
+function buildSavingBit(online, inStore, currency) {
+      if (online == null || inStore == null) return '';
+      const saving = Math.round((inStore - online) * 100) / 100;
+      if (!(saving > 0)) return '';
+      const pct = Math.round((saving / inStore) * 100);
+      return ' Same equipment at the shop counter: ' + formatMoney(inStore, currency) +
+             ', so booking online with us saves ' + formatMoney(saving, currency) +
+             (pct > 0 ? ' (' + pct + '%)' : '') + '.';
+}
+
+function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price, inStorePrice, currency, cartUrl, couponValue }) {
       const head = 'Selected partner shop: ' + shop.name + ', in ' + shop.town + '. ' +
                    'Group of ' + persons.length + ' (' + describeGroup(persons) + '), ' +
                    'from ' + formatDate(startDate) + ' to ' + formatDate(endDate) +
@@ -548,7 +570,9 @@ function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price
         ? ' A coupon worth ' + couponValue + ' EUR can be applied just before payment.'
               : '';
 
-      return head + priceBit + couponBit + ' Book directly here: ' + cartUrl;
+      const savingBit = price != null ? buildSavingBit(price, inStorePrice, currency) : '';
+
+      return head + priceBit + savingBit + couponBit + ' Book directly here: ' + cartUrl;
 }
 
 // Source of truth: "calculation-coupon-code-size-for-groups.xlsx".
@@ -776,6 +800,30 @@ export default async function handler(req, res) {
       if (!endDate)   missing.push('endDate');
       if (!persons || !Array.isArray(persons) || persons.length === 0) missing.push('adults / children_ages (or persons)');
 
+      // A period that has already happened is not a quote, it is a broken link.
+      //
+      // Observed on 581710: the classifier resolved "fin décembre" to 2024 - it is
+      // never told what today is - and everything downstream degraded quietly.
+      // The live pricing had nothing to return for a past season, so the quote went
+      // out with no price at all and a cart URL alpy.com had to rewrite to the next
+      // bookable week. The customer received a plausible letter about the wrong
+      // dates for an unknown amount.
+      //
+      // Failing here is the honest outcome: the flow's error branch puts it in
+      // front of a human, who can see in one look that the year is wrong.
+      if (startDate && !missing.length) {
+              const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+              if (new Date(startDate) < today) {
+                        return res.status(400).json({
+                                  error: 'Start date is in the past: ' + startDate +
+                                         '. A past period cannot be priced or booked - the year is ' +
+                                         'almost certainly wrong. Today is ' +
+                                         today.toISOString().slice(0, 10) + '.',
+                                  startDate, endDate,
+                        });
+              }
+      }
+
   if (missing.length) {
           return res.status(400).json({
                     error: 'Missing required params: ' + missing.join(', '),
@@ -918,7 +966,8 @@ export default async function handler(req, res) {
   const quoteHasPrice = cartOnlinePrice != null;
       const quoteLine = buildQuoteLine({
               shop, persons, addons: cartAddons, startDate, endDate, days,
-              price: cartOnlinePrice, currency: cartPriceCurrency, cartUrl, couponValue,
+              price: cartOnlinePrice, inStorePrice: cartInStorePrice,
+              currency: cartPriceCurrency, cartUrl, couponValue,
       });
 
   const topLevelPricing = {

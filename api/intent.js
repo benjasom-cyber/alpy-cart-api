@@ -746,6 +746,16 @@ export default async function handler(req, res) {
               // to one message at a time - say so rather than pretend.
               turns_read: thread.count,
               thread_status: thread.status,
+              // What today is.
+              //
+              // A detector prompt told "if the date has already passed this year,
+              // use next year" has no idea what this year is, and on 581710 it
+              // decided December meant 2024. Everything after that was wasted: no
+              // live price exists for a past season, so the quote went out with no
+              // figure and a link alpy.com silently rewrote to another week.
+              //
+              // A model cannot know the date. It can be told.
+              today: new Date().toISOString().slice(0, 10),
               // The conversation, for a flow's own detector to read instead of
               // the last comment alone.
               //
