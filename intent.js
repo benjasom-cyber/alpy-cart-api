@@ -88,20 +88,50 @@ const KEYWORDS = [
  * confident, survives this check - a colleague sending a price list is not a
  * customer request, whatever it looks like.
  */
-const INTERNAL_MARKERS = [
-      /@alpy\.com/i,
+/**
+ * Our own domains. Matched against WHO SENT the message, never against what the
+ * message contains.
+ *
+ * This distinction cost us ticket 581697. The markers below used to be tested
+ * against the body, and the body of every reply to one of our emails quotes our
+ * own footer - "bd@alpy.com", "Powered by 2beGROUP". So a customer answering
+ * "please cancel my booking" was read as internal mail, the endpoint returned
+ * STOP, and the gatekeeper stayed silent instead of asking for the booking
+ * reference. The customer got nothing.
+ *
+ * The rule that survives: a sender is internal because of their address, not
+ * because our address appears somewhere in their email.
+ */
+const INTERNAL_DOMAINS = [
+      /@alpy\.com\s*$/i,
       /@2begroup/i,
       /@alpinresorts/i,
       /@skirent-booking/i,
-      /powered\s+by\s+2begroup/i,
-      /\bsales\s+representative\b/i,
-      /\b(WG|TR)\s*:/,
 ];
 
-function detectInternalSender(message) {
-      const m = String(message || '');
-      const hit = INTERNAL_MARKERS.find(re => re.test(m));
-      return hit ? { topic: 'OTHER', source: 'internal_sender', blocked: true } : null;
+/**
+ * Body markers that a quoted signature can NOT produce.
+ *
+ * "WG:" and "TR:" are forward prefixes: they belong to the very start of a
+ * subject line, so they are anchored. Anything found deeper in the text is a
+ * quotation of an older message and proves nothing about this sender.
+ */
+const FORWARD_PREFIX = /^\s*(WG|TR|FW|FWD)\s*:/i;
+
+function detectInternalSender(message, senderEmail) {
+      const from = String(senderEmail || '').trim();
+      if (from && INTERNAL_DOMAINS.some(re => re.test(from))) {
+              return { topic: 'OTHER', source: 'internal_sender', blocked: true };
+      }
+
+      // Only the first line is eligible - a forward prefix lives there or
+      // nowhere. Scanning the whole body would match every quoted thread.
+      const firstLine = String(message || '').split(/\r?\n/).find(l => l.trim() !== '') || '';
+      if (FORWARD_PREFIX.test(firstLine)) {
+              return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
+      }
+
+      return null;
 }
 
 function detectFromTags(tags) {
@@ -145,9 +175,37 @@ function extractFromMessage(message) {
 
       // Odin references are 6 chars, upper case, and always carry a digit.
       // Requiring the digit keeps "PLEASE" and "CANCEL" out.
-      const refs = (m.toUpperCase().match(/\b[A-Z0-9]{6}\b/g) || [])
-        .filter(t => /[0-9]/.test(t) && /[A-Z]/.test(t));
+      // The real format, measured on 100 live Odin bookings (24/08/2026):
+      // every one is exactly six characters, every one starts with B, and the
+      // alphabet is 123456789ABCDEFGHJKLMNPQRSTUVWXYZ - no zero, no I, no O.
+      // Someone chose an alphabet without look-alike characters.
+      //
+      // 26 of those 100 contain no digit at all. The old rule required one, so
+      // it was blind to a quarter of all bookings - including BTRNLK, which is
+      // why Alice's list of five looked like four on ticket 581695.
+      //
+      // Matching is case-SENSITIVE on purpose. Customers copy the reference out
+      // of their confirmation email, so it arrives upper case; folding the whole
+      // message to upper case first is what would turn the word "basket" into a
+      // booking.
+      const REF = /\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/g;
+      // Six-letter upper-case words that happen to fit the alphabet. Rare in a
+      // real message, free to exclude.
+      const NOT_A_REF = ['BASKET','BUDGET','BEAUTY','BRANCH','BREATH','BREADS','BEHALF',
+                         'BUCKET','BUNDLE','BRAKES','BLANKS','BEARER','BLAZER','BADGES'];
+      const refs = [...new Set(m.match(REF) || [])].filter(t => !NOT_A_REF.includes(t));
       if (refs.length === 1) found.booking_ref = refs[0];
+      // Several references is not "no reference".
+      //
+      // The old rule kept nothing unless exactly one matched, and on ticket
+      // 581695 that turned a clear customer into a loop: Alice sent five
+      // references and was asked for "your booking reference" three times, each
+      // time answering with the same five. Silence read as absence, and the flow
+      // asked again.
+      //
+      // Five bookings is not something a one-booking flow can do. Carrying the
+      // list lets the handler say so and hand over, which is the honest answer.
+      if (refs.length > 1) found._booking_refs = refs.join(', ');
 
       // Two ISO dates in order are a period. One alone is ambiguous - it could be
       // a start or an end - so we take nothing.
@@ -268,6 +326,12 @@ export default async function handler(req, res) {
       const tags = params.tags ?? [];
       const llmTopic = normaliseTopic(params.llm_topic ?? params.llmtopic ?? params.topic);
 
+      // Who wrote this. The flow passes the requester's email; when it is absent
+      // we simply do not apply the internal-sender rule, rather than falling
+      // back to scanning the body - that fallback is what silenced 581697.
+      const senderEmail = params.sender_email ?? params.senderemail
+                        ?? params.requester_email ?? params.requesteremail ?? '';
+
       // The topic this ticket was already waiting on, carried by the flow as an
       // awaiting__<topic> tag.
       //
@@ -292,18 +356,25 @@ export default async function handler(req, res) {
       // What the message says outright wins over what the model reported: the
       // customer's own words are the better source, and a model that paraphrases
       // a reference gets it wrong.
+      const fromMessage = extractFromMessage(message);
       const slots = Object.assign(
               cleanSlots(params.llm_slots ?? params.llmslots ?? params.slots ?? params),
-              cleanSlots(extractFromMessage(message))
+              cleanSlots(fromMessage)
       );
+
+      // Every reference the customer named, when they named more than one.
+      const multipleRefs = String(fromMessage._booking_refs || '')
+        .split(',').map(x => x.trim()).filter(Boolean);
 
       // Layer 0 - internal or partner sender. Layer 1 - native tags.
       // Either one stops the whole thing, before any topic is considered.
       const fromTags = detectFromTags(tags);
-      const blocked = detectInternalSender(message) || (fromTags && fromTags.blocked ? fromTags : null);
+      const blocked = detectInternalSender(message, senderEmail) || (fromTags && fromTags.blocked ? fromTags : null);
       if (blocked) {
               const note = blocked.source === 'internal_sender'
                 ? 'This is internal or partner mail, not a customer request. Route it to the right team - no flow should answer it.'
+                : blocked.source === 'forwarded_mail'
+                ? 'This is a forwarded message, not a request written by the customer. A human should read it before any flow acts.'
                 : 'Zendesk classified this as unsolicited mail or a job application. No flow should answer it.';
               return res.status(200).json({
                         topic: 'OTHER',
@@ -330,6 +401,10 @@ export default async function handler(req, res) {
 
       const topic = decision.topic;
       const check = checkSlots(topic, slots);
+      const missingLabelsOf = c => c.missing.map(req => {
+              const first = req.split('|')[0];
+              return SLOTS[first] ? SLOTS[first].label : first;
+      }).join(', ');
 
       // ANSWER means the owning flow may run. ASK means we know what the customer
       // wants but not enough to act - the flow asks one question. HANDOVER means
@@ -337,10 +412,36 @@ export default async function handler(req, res) {
       let action = 'HANDOVER';
       if (topic !== 'OTHER') action = check.ready ? 'RUN' : 'ASK';
 
+      // Two ways a correct-looking ASK is the wrong answer.
+      let escalation = null;
+
+      // One: the request spans several bookings. No capability we have edits
+      // five bookings at once, so asking for "the" reference can only loop.
+      if (multipleRefs.length > 1 && topic !== 'OTHER') {
+              action = 'HANDOVER';
+              escalation = 'The customer named ' + multipleRefs.length + ' bookings (' +
+                           multipleRefs.join(', ') + '). Our flows act on one booking at a ' +
+                           'time, so none of them can carry this out. Handle it manually - and ' +
+                           'do not ask for "the" booking reference, it has already been given.';
+      }
+
+      // Two: we already asked, they answered, and we are about to ask again.
+      //
+      // The awaiting__<topic> tag means a question went out on this ticket. If
+      // the reply still leaves the same hole, repeating the question is how
+      // 581695 reached seventeen messages. A human reads it instead.
+      if (action === 'ASK' && pendingTopic === topic) {
+              action = 'HANDOVER';
+              escalation = 'We already asked this customer for ' + missingLabelsOf(check) +
+                           ' and their reply still does not contain it. Asking a second time ' +
+                           'is how a ticket turns into a loop - read the thread and answer.';
+      }
+
       const missingLabels = check.missing.map(req => {
               const first = req.split('|')[0];
               return SLOTS[first] ? SLOTS[first].label : first;
       });
+
 
       const body = {
               topic,
@@ -356,11 +457,12 @@ export default async function handler(req, res) {
               // one question per turn can never collect six things.
               next_question_all: check.nextQuestionAll,
               action,
-              agentNote: action === 'HANDOVER'
+              bookingRefs: multipleRefs.length > 1 ? multipleRefs : null,
+              agentNote: escalation ? escalation : (action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
                 : (action === 'ASK'
                     ? 'We know what the customer wants but not enough to act. Missing: ' + missingLabels.join(', ') + '.'
-                    : null),
+                    : null)),
               // next_question is a suggestion, never an instruction to send.
               // The flow must still pass its own gate before asking a customer
               // anything in public.
@@ -369,6 +471,7 @@ export default async function handler(req, res) {
 
       // Zendesk forces custom-action output names to lowercase and JSON keys are
       // case-sensitive, so every camelCase key is aliased.
+      body.bookingrefs = body.bookingRefs;
       body.nextquestion = body.next_question;
       body.nextquestionall = body.next_question_all;
       body.missinglabels = missingLabels;
