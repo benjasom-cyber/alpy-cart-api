@@ -678,7 +678,9 @@ export default async function handler(req, res) {
                        { topic: 'OTHER', source: 'none', blocked: false };
 
       const topic = decision.topic;
-      const check = checkSlots(topic, slots);
+      // Not const: a second pass over an unanswered paid option rewrites this.
+      // See the declineUnstatedExtras block below.
+      let check = checkSlots(topic, slots);
       // Two different things, deliberately kept apart.
       //
       // askedQuestions is what the customer actually wanted to know. It is the
@@ -724,6 +726,36 @@ export default async function handler(req, res) {
                            multipleRefs.join(', ') + '). Our flows act on one booking at a ' +
                            'time, so none of them can carry this out. Handle it manually - and ' +
                            'do not ask for "the" booking reference, it has already been given.';
+      }
+
+      // Asked once. The second time, silence on a paid option means no.
+      //
+      // This is what makes it safe to gate on boots, helmets and damage & theft
+      // protection at all. They are real money - AlpinGuaranty is 15% of the
+      // rental, which on a group of fifteen is not a detail to discover in the
+      // basket - so the customer is asked before the price is built. But a
+      // customer who replies about dates and levels and says nothing about
+      // helmets has not gone quiet: they have shown what they care about. Asking
+      // again would be pedantry, and escalating to a human over an unmentioned
+      // helmet is how 581739 ended with a note about a sentence the customer had
+      // already written.
+      //
+      // So on the second pass, if the only holes left are optional extras, they
+      // are recorded as declined and the quote goes out. The reply still names
+      // them - unstatedExtras above was computed before this ran, on purpose -
+      // so the customer sees what was left out and at what price, and can ask
+      // for it in one line.
+      //
+      // Anything that is not an optional extra - a resort, a date, the ages of
+      // the children - is never filled in on the customer's behalf. A guessed
+      // age is a wrong price discovered at the till.
+      const OPTIONAL_EXTRAS = ['boots', 'helmets', 'insurance'];
+      const alreadyAsked = pendingTopic === topic;
+      if (action === 'ASK' && alreadyAsked &&
+              check.missing.length && check.missing.every(req => OPTIONAL_EXTRAS.includes(req))) {
+              check.missing.forEach(req => { slots[req] = 'no'; });
+              check = checkSlots(topic, slots);
+              action = check.ready ? 'RUN' : action;
       }
 
       // Two: we already asked, they answered, and we are about to ask again.

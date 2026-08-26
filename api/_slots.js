@@ -136,28 +136,30 @@ export const ROUTES = {
               flow: 'Date Change',
               needs: ['booking_ref', 'start_date', 'end_date'],
       },
-      // Optional paid extras are NOT requirements.
+      // The paid extras are gates again - asked once, and only once.
       //
-      // boots, helmets and damage & theft protection used to sit in this list,
-      // and it was the wrong way round. A customer who says nothing about
-      // insurance has not left a hole in their request - they have declined it.
-      // Silence on a paid option means "no", so the right answer is to price the
-      // quote without it and say plainly that it is available, not to stop and
-      // interrogate them.
+      // They were removed from this list after 581739, and the reasoning was
+      // sound but the diagnosis was not. What actually broke 581739 was never
+      // that insurance was required: the customer wrote "No one needs insurance
+      // as we have our own insurance also", the extractor failed to record that
+      // negation, insurance read as missing, and the repeat-ask guard escalated
+      // over a sentence that answered the question outright. The gate was
+      // blamed for an extraction bug.
       //
-      // On 581739 that inversion cost us the whole conversation. The customer
-      // wrote "No one needs insurance as we have our own insurance also", the
-      // detector did not record the negation, insurance read as missing, the
-      // repeat-ask guard fired because we had already asked once, and the ticket
-      // went to a human with the note "their reply still does not contain it" -
-      // about a sentence that answered the question outright.
+      // Both halves of that are now fixed. The gatekeeper's extractor names all
+      // three extras, hasSlot() in intent.js counts an explicit refusal as an
+      // answer, and - the part that makes gating safe - a second pass with the
+      // extras still unstated declines them and quotes anyway rather than
+      // escalating (see declineUnstatedExtras in intent.js).
       //
-      // They stay declared as slots, so a stated value is still read and still
-      // priced. They are simply not gates. The reply is what tells the customer
-      // these options exist; see PRODUCT_ANSWERS in intent.js.
+      // So the customer is asked before the price is built, which is what they
+      // are owed: AlpinGuaranty is 15% of the rental, and on a group of fifteen
+      // that is not a detail to discover in the basket. Asked once. Silence the
+      // second time means no, and the quote goes out.
       QUOTE: {
               flow: 'Quote Generator',
-              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'children_ages', 'equipment_level'],
+              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'children_ages', 'equipment_level',
+                              'boots', 'helmets', 'insurance'],
       },
       REQUOTE: {
               flow: 'Requote from booking',
