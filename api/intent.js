@@ -491,7 +491,21 @@ function buildTranscript(turns) {
       const numbered = turns.map((t, i) => 'Customer, message ' + (i + 1) + ' of ' + turns.length + ':\n' + t);
       let out = numbered.join('\n\n');
       if (out.length > 8000) out = '[…earlier messages omitted…]\n\n' + out.slice(out.length - 8000);
-      return out;
+      // The date travels INSIDE the transcript, not beside it.
+      //
+      // `today` is returned as its own field too, but a detector prompt can only
+      // reference a field the Zendesk custom action declares in its response
+      // schema - and that schema was captured before `today` existed. Every
+      // prompt pointing at it showed "Variable is no longer available", which
+      // made the step invalid, which made the whole flow refuse to save. The
+      // schema still lists only action, agentnote, answers, missinglabels,
+      // next_question, run_topic, topic and transcript.
+      //
+      // So the date rides on `transcript`, a leaf that has always been declared.
+      // Every detector gets it with no schema surgery and no per-flow wiring.
+      return 'Today is ' + new Date().toISOString().slice(0, 10) +
+             '. Resolve every relative or year-less date against it, and never ' +
+             'output a date in the past.\n\n' + out;
 }
 
 function detectProductQuestion(message) {
