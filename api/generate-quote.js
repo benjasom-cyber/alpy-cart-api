@@ -298,7 +298,57 @@ function addonsForPerson(person, groupAddons) {
 
 // ── Exact cart price ─────────────────────────────────────────────────────────
 
+/**
+ * Per-shop catalogue cache, and why it exists.
+ *
+ * A quote is three network round trips deep and they cannot be collapsed: the
+ * shops file resolves the resort to a shopId, the shopId is what the catalogue
+ * and age bands are read with, and the definitionIds those two produce are what
+ * the pricing call is sent. Measured end to end on 581742 the endpoint answered
+ * 200 in 7511 ms - correct, and too late. Zendesk gives an HTTP action about ten
+ * seconds, so "correct in 7.5s" is a coin toss dressed up as a working feature,
+ * and the second call in a row failed outright.
+ *
+ * Of those three hops, two are the same bytes every time. The catalogue for a
+ * shop is 364 kB and changes when the shop's stock changes - not between two
+ * quotes for the same resort ten seconds apart, which is exactly the case when
+ * a customer replies and the flow runs again. Holding them for an hour turns
+ * the retry, and every subsequent quote for that resort on a warm function,
+ * into one round trip instead of three.
+ *
+ * An hour is chosen to be shorter than a working day: a stock change is picked
+ * up the same morning without anyone deploying. On a miss or an expiry the
+ * behaviour is exactly what it was before - a live read, and the static
+ * PRODUCTS table if that read fails.
+ */
+const CATALOGUE_TTL_MS = 60 * 60 * 1000;
+const _gridCache = new Map();       // shopId -> { at, value }
+const _intervalsCache = new Map();  // shopId -> { at, value }
+
+function cacheRead(store, shopId) {
+      const hit = store.get(shopId);
+      if (!hit) return undefined;
+      if (Date.now() - hit.at > CATALOGUE_TTL_MS) {
+              store.delete(shopId);
+              return undefined;
+      }
+      return hit.value;
+}
+
+// Only a successful read is cached. Caching a null would pin a shop to the
+// static table for an hour because core.alpy.com blinked once.
+function cacheWrite(store, shopId, value) {
+      if (value != null) store.set(shopId, { at: Date.now(), value });
+      return value;
+}
+
 async function fetchPriceGrid(shopId) {
+      const cached = cacheRead(_gridCache, shopId);
+      if (cached !== undefined) return cached;
+      return cacheWrite(_gridCache, shopId, await fetchPriceGridLive(shopId));
+}
+
+async function fetchPriceGridLive(shopId) {
       try {
               const r = await fetch(PRODUCTS_INFO_URL + '?shopId=' + shopId, { headers: { Accept: 'application/json' } });
               if (!r.ok) {
@@ -320,6 +370,12 @@ async function fetchPriceGrid(shopId) {
 // (age, discipline, level) combinations. So resolve against the shop's own
 // catalogue and keep PRODUCTS only for when these two reads fail.
 async function fetchAgeIntervals(shopId) {
+      const cached = cacheRead(_intervalsCache, shopId);
+      if (cached !== undefined) return cached;
+      return cacheWrite(_intervalsCache, shopId, await fetchAgeIntervalsLive(shopId));
+}
+
+async function fetchAgeIntervalsLive(shopId) {
       try {
               const r = await fetch(SHOP_INFO_URL + shopId + '?currencyCode=EUR', { headers: { Accept: 'application/json' } });
               if (!r.ok) return null;
