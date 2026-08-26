@@ -538,6 +538,13 @@ const SLOT_FACTS = {
       children_ages: 'children',
 };
 
+// A slot counts as stated when it carries any non-empty value, including an
+// explicit refusal. "No one needs insurance" is an answer, not a gap.
+function hasSlot(slots, name) {
+      const v = slots && slots[name];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+}
+
 function factsForMissing(missing) {
       const out = [];
       for (const requirement of (missing || [])) {
@@ -682,7 +689,19 @@ export default async function handler(req, res) {
       // and letting those suppress the escalation would disable the loop guard
       // on every quote - which is the bug that made 581695 seventeen messages.
       const askedQuestions = detectProductQuestion(message);
-      const productQuestions = mergeFacts(askedQuestions, factsForMissing(check.missing));
+      // Optional extras are priced out, not asked about - but they are still
+      // named.
+      //
+      // boots, helmets and damage & theft protection are no longer gates (see
+      // ROUTES.QUOTE in _slots.js): silence on a paid option means the customer
+      // does not want it, so the quote is built without it and goes out at once.
+      // The one thing we owe them is knowing the option exists, at the price it
+      // costs, so the figure they receive is not quietly missing something they
+      // would have taken. That belongs in the reply, not in a question.
+      const unstatedExtras = topic === 'QUOTE'
+        ? factsForMissing(['boots', 'helmets', 'insurance'].filter(n => !hasSlot(slots, n)))
+        : [];
+      const productQuestions = mergeFacts(askedQuestions, mergeFacts(factsForMissing(check.missing), unstatedExtras));
       const missingLabelsOf = c => c.missing.map(req => {
               const first = req.split('|')[0];
               return SLOTS[first] ? SLOTS[first].label : first;

@@ -136,9 +136,28 @@ export const ROUTES = {
               flow: 'Date Change',
               needs: ['booking_ref', 'start_date', 'end_date'],
       },
+      // Optional paid extras are NOT requirements.
+      //
+      // boots, helmets and damage & theft protection used to sit in this list,
+      // and it was the wrong way round. A customer who says nothing about
+      // insurance has not left a hole in their request - they have declined it.
+      // Silence on a paid option means "no", so the right answer is to price the
+      // quote without it and say plainly that it is available, not to stop and
+      // interrogate them.
+      //
+      // On 581739 that inversion cost us the whole conversation. The customer
+      // wrote "No one needs insurance as we have our own insurance also", the
+      // detector did not record the negation, insurance read as missing, the
+      // repeat-ask guard fired because we had already asked once, and the ticket
+      // went to a human with the note "their reply still does not contain it" -
+      // about a sentence that answered the question outright.
+      //
+      // They stay declared as slots, so a stated value is still read and still
+      // priced. They are simply not gates. The reply is what tells the customer
+      // these options exist; see PRODUCT_ANSWERS in intent.js.
       QUOTE: {
               flow: 'Quote Generator',
-              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'children_ages', 'equipment_level', 'boots', 'helmets', 'insurance'],
+              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'children_ages', 'equipment_level'],
       },
       REQUOTE: {
               flow: 'Requote from booking',
