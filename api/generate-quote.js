@@ -788,8 +788,20 @@ export default async function handler(req, res) {
   const resortRaw = pick(resortParam, undefined) || pick(resortAlt, undefined) || pick(undefined, cj.resort) || null;
       const resort  = (resortRaw && !String(resortRaw).trim().startsWith('{')) ? resortRaw : (hasValue(cj.resort) ? cj.resort : null);
 
-      const startDate = pick(startDateParam, undefined) || pick(startDateAlt, undefined) || pick(undefined, cj.start_date) || null;
-      const endDate   = pick(endDateParam,   undefined) || pick(endDateAlt,   undefined) || pick(undefined, cj.end_date)   || null;
+      // Both spellings, inside claude_json as well as outside it.
+      //
+      // Every other field here accepts either case - cj.resort, cj.language -
+      // but the dates only ever read cj.start_date. A claude_json carrying
+      // startDate/endDate therefore lost them silently and the endpoint answered
+      // "Missing required params: startDate, endDate" while holding a blob that
+      // contained both. Found while adding an output to the Zendesk custom
+      // action, whose test call sends exactly that shape; a detector prompt
+      // reworded to camelCase would have broken every quote the same way, with
+      // an error message pointing at the caller instead of at us.
+      const startDate = pick(startDateParam, undefined) || pick(startDateAlt, undefined)
+                              || pick(undefined, cj.start_date) || pick(undefined, cj.startDate) || null;
+      const endDate   = pick(endDateParam,   undefined) || pick(endDateAlt,   undefined)
+                              || pick(undefined, cj.end_date)   || pick(undefined, cj.endDate)   || null;
 
       const lang = pick(langParam, cj.language) || 'en';
 
