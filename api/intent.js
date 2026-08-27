@@ -69,8 +69,21 @@ const KEYWORDS = [
       { topic: 'DEPOT_SWITCH', re: /\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
       { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|changement\s+d.?[eé]quipement|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard))\b/i },
       { topic: 'VOUCHER_RESEND', re: /\b(voucher|bon\s+de\s+r[eé]servation|renvoyer\s+le\s+voucher|resend\s+(the\s+)?voucher|confirmation\s+email\s+again)\b/i },
-      { topic: 'CANCELLATION',  re: /\b(cancel\s+(my|the)\s+(booking|reservation|order)|annuler\s+(ma|la)\s+r[eé]servation|storno)\b/i },
+      // The article is optional on purpose. "Cancel booking BT4WSA" is the way
+      // customers actually write it, and requiring "my" or "the" meant the
+      // keyword layer missed it and the whole decision fell to the model.
+      { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|this)?\s*(booking|reservation|order|rental)|annul(?:er|ation)\s+(?:de\s+)?(?:ma|la|notre|cette)?\s*r[eé]servation|storno)\b/i },
       { topic: 'DATE_CHANGE',   re: /\b(change\s+(my|the)\s+dates?|move\s+(my|the)\s+booking|postpone|d[eé]caler|changer\s+(mes|les)\s+dates?|different\s+dates?)\b/i },
+      // REQUOTE is re-pricing a booking that already exists, so it sits AFTER
+      // DATE_CHANGE: a customer moving their dates wants the date-change flow,
+      // not a new price. What lands here is adding days, adding people or
+      // adding equipment - the cases where the basket changes and the total has
+      // to be recalculated.
+      //
+      // No reference is required to match. ROUTES.REQUOTE demands booking_ref
+      // before the flow may run, so a customer who asks without one is asked
+      // for it instead of being handed over - which is the behaviour we want.
+      { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|add\s+(?:a\s+|an\s+|the\s+|another\s+|\d+\s+)?(?:helmets?|boots?|skis?|snowboards?|person|people|adults?|child(?:ren)?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
       { topic: 'QUOTE',         re: /\b(quote|devis|how\s+much\s+would|combien\s+co[uû]te|price\s+for\s+\d|offre\s+de\s+prix)\b/i },
 ];
 
