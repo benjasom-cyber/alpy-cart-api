@@ -409,8 +409,39 @@ async function fetchCustomerThread(ticketId) {
                 .map(c => stripQuotedAndSignature(String(c.plain_body || c.body || '')))
                 .filter(Boolean);
 
+              // Has a human colleague already answered this customer in public?
+              //
+              // On 581718 an agent had done the whole job, the customer wrote
+              // "Thanks a lot", and the automation answered that thank-you by
+              // asking for a booking reference that had been on the ticket from
+              // the first message. The customer had to be apologised to.
+              //
+              // So: once a person has replied in public, the automation is out.
+              // Not "more careful" - out. A colleague who takes a ticket owns the
+              // conversation, and a machine that talks over them costs more
+              // credibility than it can ever earn back by being occasionally
+              // right.
+              //
+              // Everyone who is not the requester and not us counts as that
+              // person, minus the people Zendesk lets watch a ticket without
+              // owning it - CCs, followers, collaborators - who would otherwise
+              // read as agents. Our own comments are authored by Zendesk's
+              // system user, whose id is negative.
+              const watching = new Set([]
+                        .concat(ticket.collaborator_ids || [])
+                        .concat(ticket.follower_ids || [])
+                        .concat(ticket.email_cc_ids || [])
+                        .map(Number));
+              const humanReply = comments.find(c => c && c.public &&
+                        Number(c.author_id) > 0 &&
+                        Number(c.author_id) !== Number(requester) &&
+                        !watching.has(Number(c.author_id)));
+
               return { turns: mine, text: mine.join('\n\n'), count: mine.length,
-                       status: 'ok:' + comments.length + '_comments' };
+                       agentReplied: !!humanReply,
+                       agentRepliedAt: humanReply ? humanReply.created_at : null,
+                       status: 'ok:' + comments.length + '_comments' +
+                               (humanReply ? '_agent_answered' : '') };
       } catch (e) {
               // Name the host we tried. It is not a secret, and it is the
               // difference between "the token is wrong" and "the URL is wrong".
@@ -506,6 +537,62 @@ function buildTranscript(turns) {
       return 'Today is ' + new Date().toISOString().slice(0, 10) +
              '. Resolve every relative or year-less date against it, and never ' +
              'output a date in the past.\n\n' + out;
+}
+
+/**
+ * Is this message nothing but a thank-you or a goodbye?
+ *
+ * A closing courtesy is not a request. It carries no topic, no slot and no
+ * question - answering it can only produce noise, and on 581718 it produced an
+ * apology.
+ *
+ * Deliberately strict: the message must be SHORT and contain nothing but
+ * pleasantries. "Thanks, and could you also move the dates?" is a request and
+ * must fall through to the normal path. When in doubt this returns false, which
+ * costs a handover at worst - the safe direction.
+ */
+const GRATITUDE_ONLY = new RegExp(
+      '^(?:' +
+      'thanks?(?:\\s+(?:a\\s+lot|very\\s+much|so\\s+much|again))?|thank\\s+you(?:\\s+very\\s+much)?|' +
+      'many\\s+thanks|much\\s+appreciated|appreciate\\s+it|' +
+      'perfect|great|super|excellent|brilliant|lovely|noted|understood|ok(?:ay)?|received|' +
+      'merci(?:\\s+(?:beaucoup|bien|d\\W?avance))?|je\\s+vous\\s+remercie|parfait|tr[eè]s\\s+bien|' +
+      'danke(?:\\s+(?:sch[oö]n|dir|ihnen|vielmals))?|vielen\\s+dank|besten\\s+dank|alles\\s+klar|' +
+      'grazie|gracias|bedankt|tack|' +
+      'best\\s+regards|kind\\s+regards|regards|cheers|bye|goodbye|have\\s+a\\s+nice\\s+day|' +
+      'cordialement|bien\\s+[aà]\\s+vous|salutations|bonne\\s+journ[eé]e|' +
+      'mit\\s+freundlichen\\s+gr[uü]ssen|freundliche\\s+gr[uü]sse|sch[oö]nen\\s+tag|' +
+      'hi|hello|hey|dear\\s+\\w+|bonjour|hallo|guten\\s+tag' +
+      ')$', 'i');
+
+function isCourtesyOnly(message) {
+      const body = stripQuotedAndSignature(String(message || ''));
+      // A thank-you is short. Anything long enough to hide a request is treated
+      // as one.
+      if (!body || body.length > 240) return false;
+      if (/\?/.test(body)) return false;
+
+      // Split on anything that separates a courtesy from the next one, then
+      // require every remaining fragment to be a courtesy.
+      const parts = body
+        .split(/[\n\r,;.!]+/)
+        .map(p => p.replace(/^[\s"\u2018\u2019\u201c\u201d]+|[\s"\u2018\u2019\u201c\u201d]+$/g, ''))
+        .filter(p => p.length > 0);
+      if (!parts.length) return false;
+      if (parts.every(p => GRATITUDE_ONLY.test(p))) return true;
+
+      // A signature that survived the stripper is not a request. "Thanks a lot.
+      // Regards, Yuriy Mykhaylyshchuk" is a thank-you, and it is the exact shape
+      // 581718 arrived in.
+      //
+      // Only the LAST fragment may be a bare name, and only when everything
+      // before it was courtesy - so "Please cancel Booking" cannot slip through
+      // on capitalisation alone.
+      const last = parts[parts.length - 1];
+      const head = parts.slice(0, -1);
+      const looksLikeAName = /^(?:[A-Z\u00C0-\u00DE][A-Za-z\u00C0-\u024F'\u2019-]*)(?:\s+[A-Z\u00C0-\u00DE][A-Za-z\u00C0-\u024F'\u2019-]*){0,3}$/.test(last);
+      return head.length > 0 && looksLikeAName &&
+             head.every(p => GRATITUDE_ONLY.test(p));
 }
 
 function detectProductQuestion(message) {
@@ -668,6 +755,38 @@ export default async function handler(req, res) {
                         action: 'STOP',
                         agentNote: note,
                         agentnote: note,
+              });
+      }
+
+      // Layer 1b - two reasons to say nothing at all.
+      //
+      // NOOP is not HANDOVER. HANDOVER means "a human must read this" and is
+      // worth a note and a tag. NOOP means "there is nothing here to do, by
+      // anyone" - and the right amount of output for that is none. A tag on
+      // every thank-you would bury the tags that matter.
+      const noop = thread.agentReplied
+        ? { source: 'agent_answered',
+            note: 'A colleague has already answered this ticket in public. The ' +
+                  'automation stays out of it - the conversation is theirs.' }
+        : isCourtesyOnly(message)
+        ? { source: 'courtesy_only',
+            note: 'The customer only thanked us or said goodbye. Nothing to do.' }
+        : null;
+      if (noop) {
+              return res.status(200).json({
+                        topic: 'OTHER',
+                        route: null,
+                        source: noop.source,
+                        slots: {},
+                        ready: false,
+                        missing: [],
+                        missingLabels: [],
+                        missinglabels: [],
+                        next_question: null,
+                        nextquestion: null,
+                        action: 'NOOP',
+                        agentNote: noop.note,
+                        agentnote: noop.note,
               });
       }
 
