@@ -785,23 +785,16 @@ export default async function handler(req, res) {
         ? { source: 'courtesy_only',
             note: 'The customer only thanked us or said goodbye. Nothing to do.' }
         : null;
-      if (noop) {
-              return res.status(200).json({
-                        topic: 'OTHER',
-                        route: null,
-                        source: noop.source,
-                        slots: {},
-                        ready: false,
-                        missing: [],
-                        missingLabels: [],
-                        missinglabels: [],
-                        next_question: null,
-                        nextquestion: null,
-                        action: 'NOOP',
-                        agentNote: noop.note,
-                        agentnote: noop.note,
-              });
-      }
+      //
+      // The verdict is decided here but NOT returned here. An early return that
+      // strips the payload starves every caller that does not read `action` -
+      // and the topic flows do not: they read `transcript` and
+      // `booking_reference` and carry on. On ticket 581767 that produced an
+      // empty intent, an empty reference, and an Odin call with nothing in it.
+      //
+      // So NOOP now rides along with the full answer, applied at the end. The
+      // gatekeeper's branch on `action` still stops the run silently; a flow
+      // that ignores `action` still gets everything it had before.
 
       // Layer 2 - Alpy vocabulary. Layer 3 - whatever the caller's model said.
       const decision = fromTags || detectFromKeywords(message) ||
@@ -987,6 +980,15 @@ export default async function handler(req, res) {
               // anything in public.
               _contract: 'The caller decides whether to send next_question. This endpoint never authorises a public reply.',
       };
+
+      // A NOOP verdict overrides the action and says why, and changes nothing
+      // else: the transcript, the slots and the booking reference stay exactly
+      // as computed, because a caller may need them even when nobody should act.
+      if (noop) {
+              body.action = 'NOOP';
+              body.source = noop.source;
+              body.agentNote = noop.note;
+      }
 
       // Zendesk forces custom-action output names to lowercase and JSON keys are
       // case-sensitive, so every camelCase key is aliased.
