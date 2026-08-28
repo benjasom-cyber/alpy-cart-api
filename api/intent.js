@@ -1045,7 +1045,29 @@ export default async function handler(req, res) {
       body.bookingrefs = body.bookingRefs;
       body.nextquestion = body.next_question;
       body.nextquestionall = body.next_question_all;
-      body.missinglabels = missingLabels;
+      // missinglabels carries the WRITTEN QUESTION, not a list of nouns.
+      //
+      // This is a repurposing, and it is deliberate. The Zendesk custom action's
+      // response schema was captured before next_question_all existed, so the
+      // flow's prompt can only reference the leaves that schema declares -
+      // action, agentnote, answers, missinglabels, next_question, run_topic,
+      // topic, transcript. Adding one mints a new operationId and every step
+      // bound to the old one goes blind, which means deleting and re-adding ten
+      // steps across five flows. Not worth it.
+      //
+      // So the composed question rides on `missinglabels`, exactly as `today`
+      // rides on `transcript`. The field's MEANING is unchanged - it is still
+      // "what we still need" - only its form improves, from
+      //   "first day of the rental, last day of the rental, number of adults"
+      // to the sentence _slots.js actually wrote, warnings and all. That is the
+      // point: the careful wording about children's ages, or about a paid
+      // option and its price, was being thrown away and re-derived by a model
+      // from three bare nouns. Now the model receives the finished sentence and
+      // its job is to carry it across, not to invent it.
+      //
+      // `missingLabels` (camelCase, the array) is untouched for any caller that
+      // wants the raw list.
+      body.missinglabels = check.nextQuestionAll || missingLabels.join(', ');
       body.agentnote = body.agentNote;
 
       return res.status(200).json(body);
