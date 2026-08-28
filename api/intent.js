@@ -469,8 +469,28 @@ async function fetchCustomerThread(ticketId) {
                 .replace(/^\s*(re|fw|fwd|tr|aw|wg)\s*:\s*/gi, '')
                 .trim();
 
+              // The booking reference the "Last booking by email" flow found for us.
+              //
+              // That flow runs on ticket creation, searches Odin on the
+              // requester's email and posts ONE internal note naming their most
+              // recent booking. The note is authored by our system user, so the
+              // requester-only filter above skips it - and the whole point of
+              // finding the reference is lost the moment a customer writes "I
+              // lost my voucher" without quoting a code.
+              //
+              // We read it back here, and it is a FALLBACK only: see
+              // REF_FROM_HISTORY_IS_SAFE_FOR below for the topics allowed to act
+              // on a reference the customer never typed.
+              let knownRef = '';
+              for (const c of comments) {
+                        const body = String((c && (c.plain_body || c.body)) || '');
+                        if (body.indexOf('SKIBOT - this customer has booked with us before') === -1) continue;
+                        const m = body.match(/Most recent booking reference:\s*([A-Z0-9]{4,12})/);
+                        if (m) knownRef = m[1];
+              }
+
               return { turns: mine, text: mine.join('\n\n'), count: mine.length,
-                       subject,
+                       subject, knownRef,
                        agentReplied: !!humanReply,
                        agentRepliedAt: humanReply ? humanReply.created_at : null,
                        status: 'ok:' + comments.length + '_comments' +
@@ -550,7 +570,7 @@ const PRODUCT_ANSWERS = [
  * contain the slots we wanted. A question deserves its answer even when it
  * arrives instead of the information we asked for.
  */
-function buildTranscript(turns, subject) {
+function buildTranscript(turns, subject, knownRef) {
       if (!turns || !turns.length) return '';
       const numbered = turns.map((t, i) => 'Customer, message ' + (i + 1) + ' of ' + turns.length + ':\n' + t);
       let out = numbered.join('\n\n');
@@ -565,6 +585,19 @@ function buildTranscript(turns, subject) {
       // a turn, and a detector must not count it as something the customer said
       // twice.
       if (subject) out = 'Email subject: ' + subject + '\n\n' + out;
+
+      // The reference we found on their email, labelled for exactly what it is.
+      //
+      // A detector reading this transcript must be able to use the code AND to
+      // know the customer never typed it - those are different facts and a bare
+      // reference in the text would collapse them into one. Hence the wording:
+      // it says where the code came from, in the same breath as the code.
+      if (knownRef) {
+              out = 'Known from our records (NOT stated by the customer): this ' +
+                    'customer\'s most recent booking with us is ' + knownRef +
+                    '. Use it only where acting on the wrong booking would be ' +
+                    'harmless.\n\n' + out;
+      }
       if (out.length > 8000) out = '[…earlier messages omitted…]\n\n' + out.slice(out.length - 8000);
       // The date travels INSIDE the transcript, not beside it.
       //
@@ -779,6 +812,32 @@ export default async function handler(req, res) {
       }
       const multipleRefs = refsSeen.size > 1 ? [...refsSeen] : [];
 
+      /**
+       * A reference WE found is not a reference the customer GAVE.
+       *
+       * The email lookup is genuinely useful: a customer who writes "I've lost my
+       * voucher" and nothing else can be served instead of being asked for a code
+       * they do not have. But acting on a booking the customer never named is
+       * only acceptable where being wrong is cheap and reversible.
+       *
+       *   VOUCHER_RESEND  - re-sends the confirmation to the address that owns
+       *                     the booking. If we picked the wrong booking, the
+       *                     customer receives their own other voucher. Harmless.
+       *   REQUOTE         - produces an internal note for an agent. Nobody is
+       *                     charged, nothing is written to Odin. Harmless.
+       *
+       * Everything else is deliberately excluded. CANCELLATION,
+       * PARTIAL_CANCELLATION and DATE_CHANGE move money or destroy a booking, and
+       * "we guessed which one you meant" is not a defence. Those still require
+       * the customer to name the reference themselves - which is the rule
+       * Benjamin set the first day: never cancel a booking on an assumption.
+       */
+      const REF_FROM_HISTORY_IS_SAFE_FOR = ['VOUCHER_RESEND', 'REQUOTE'];
+      let refFromHistory = '';
+      if (thread.knownRef && !slots.booking_ref) {
+              refFromHistory = thread.knownRef;
+      }
+
       // Layer 0 - internal or partner sender. Layer 1 - native tags.
       // Either one stops the whole thing, before any topic is considered.
       const fromTags = detectFromTags(tags);
@@ -838,6 +897,16 @@ export default async function handler(req, res) {
                        { topic: 'OTHER', source: 'none', blocked: false };
 
       const topic = decision.topic;
+
+      // Apply the history reference, but only where it is safe (see above).
+      // Done here rather than earlier because the rule depends on the topic, and
+      // the topic is only decided on the line above.
+      let usedRefFromHistory = false;
+      if (refFromHistory && REF_FROM_HISTORY_IS_SAFE_FOR.includes(topic)) {
+              slots.booking_ref = refFromHistory;
+              usedRefFromHistory = true;
+      }
+
       // Not const: a second pass over an unanswered paid option rewrites this.
       // See the declineUnstatedExtras block below.
       let check = checkSlots(topic, slots);
@@ -961,6 +1030,12 @@ export default async function handler(req, res) {
               // hidden is a surprise at the till, which is what we were trying
               // to avoid when we made them gates in the first place.
               assumptions: check.assumedSentence || '',
+              // The booking we found on the customer's email, and whether this
+              // topic was allowed to use it. Both travel so a flow - or a human
+              // reading the run - can see that the reference was inferred, not
+              // quoted.
+              ref_from_history: refFromHistory,
+              used_ref_from_history: usedRefFromHistory,
               assumed_slots: (check.assumed || []).map(a => a.slot).join(','),
               action,
               // The whole gate in one value.
@@ -1011,7 +1086,7 @@ export default async function handler(req, res) {
               // empty detector input classifies as OTHER and closes the gate on
               // every ticket at once. Degraded memory is a bad day; a silent
               // outage across all capabilities is a bad week.
-              transcript: buildTranscript(thread.turns, thread.subject) ||
+              transcript: buildTranscript(thread.turns, thread.subject, thread.knownRef) ||
                 (String(message || '').trim()
                   ? 'Customer, message 1 of 1:\n' + String(message).trim()
                   : ''),
@@ -1068,6 +1143,8 @@ export default async function handler(req, res) {
       // `missingLabels` (camelCase, the array) is untouched for any caller that
       // wants the raw list.
       body.missinglabels = check.nextQuestionAll || missingLabels.join(', ');
+      body.reffromhistory = body.ref_from_history;
+      body.usedreffromhistory = body.used_ref_from_history;
       body.agentnote = body.agentNote;
 
       return res.status(200).json(body);
