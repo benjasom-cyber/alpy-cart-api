@@ -69,6 +69,19 @@ const KEYWORDS = [
       { topic: 'DEPOT_SWITCH', re: /\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
       { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|changement\s+d.?[eé]quipement|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard))\b/i },
       { topic: 'VOUCHER_RESEND', re: /\b(voucher|bon\s+de\s+r[eé]servation|renvoyer\s+le\s+voucher|resend\s+(the\s+)?voucher|confirmation\s+email\s+again)\b/i },
+      // The rental has started and something went wrong with the person, not
+      // with the booking. This sits ABOVE CANCELLATION on purpose: "I want to
+      // cancel, I broke my leg" is not a cancellation we can process, it is a
+      // 100% case that needs two documents and a human decision, and routing it
+      // to the cancellation handler would offer the customer a fee table that
+      // does not apply to them.
+      //
+      // Both halves are required. An injury word alone matches "what does
+      // Alpinsafety cover in case of an accident?", which is a pre-booking
+      // question and must not land here; a cancel or refund word alone is an
+      // ordinary cancellation. Only the two together mean what this route means.
+      { topic: 'CANCELLATION_AFTER',
+        re: /(?=[\s\S]*\b(injur\w*|blessur\w*|bless[ée]\w*|accident\w*|malad\w*|sick|illness|ill\b|krank\w*|verletz\w*|unfall\w*|broke\s+(?:my|his|her)\s+\w+|cass[ée]\s+(?:ma|mon|sa)\s+\w+|medical\s+certificate|certificat\s+m[eé]dical|arztlich\w*))(?=[\s\S]*\b(cancel\w*|annul\w*|refund\w*|rembours\w*|storno\w*|stornier\w*|r[uü]ckerstattung\w*|remaining\s+days?|jours?\s+restants?|returned?\s+(?:it\s+|them\s+|the\s+equipment\s+)?early|rendu\s+(?:le\s+)?mat[eé]riel|rentr[ée]s?\s+plus\s+t[oô]t|unused\s+days?|jours?\s+(?:non\s+)?utilis[eé]s?))/i },
       // The article is optional on purpose. "Cancel booking BT4WSA" is the way
       // customers actually write it, and requiring "my" or "the" meant the
       // keyword layer missed it and the whole decision fell to the model.
@@ -84,7 +97,31 @@ const KEYWORDS = [
       // before the flow may run, so a customer who asks without one is asked
       // for it instead of being handed over - which is the behaviour we want.
       { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|add\s+(?:a\s+|an\s+|the\s+|another\s+|\d+\s+)?(?:helmets?|boots?|skis?|snowboards?|person|people|adults?|child(?:ren)?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
+      // ABOVE 'QUOTE' deliberately: "combien coute Alpinguaranty ?" contains
+      // the quote trigger word, but naming a protection makes it a question
+      // about a product, not a request for a price on a rental.
+      // Two shapes a single word list cannot catch: a question about what a
+      // protection covers, and the day-before pick-up, where the words are
+      // always separated by whatever the customer is collecting.
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(alpinflexi|snowflexi|alpinguaranty|alpinsafety(\s+plus)?)\b[\s\S]{0,60}\b(cover\w*|include\w*|couvre|comprend|inclut|what\s+is|c.est\s+quoi|price|prix|co[uû]te|cost)\b|\b(cover\w*|couvre|price|prix|co[uû]te|cost|what\s+is)\b[\s\S]{0,60}\b(alpinflexi|snowflexi|alpinguaranty|alpinsafety(\s+plus)?)\b/i },
       { topic: 'QUOTE',         re: /\b(quote|devis|how\s+much\s+would|combien\s+co[uû]te|price\s+for\s+\d|offre\s+de\s+prix)\b/i },
+      // LAST, always. Everything above is a request that changes something; what
+      // is left is a question, and a question has an answer written down.
+      //
+      // These patterns are the ones the training set shows over and over. They
+      // are deliberately narrow - a wrong match here sends a real request to a
+      // flow that only knows how to talk, which is the one failure mode that
+      // matters. When none of them matches, the topic stays OTHER and a human
+      // gets the ticket, exactly as today.
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(invoice|facture|rechnung|receipt\s+for\s+(?:my|the)\s+(?:booking|rental)|ski\s+poles?|b[aâ]tons?\s+de\s+ski|poles?\s+(?:are\s+)?included|american\s+express|amex|payment\s+methods?|moyens?\s+de\s+paiement|zahlungsarten|child(?:ren)?\s+for\s+free|enfant\s+gratuit|kind\s+gratis|opening\s+hours|horaires?\s+d.ouverture|[oö]ffnungszeiten|what\s+is\s+included|qu.est[- ]ce\s+qui\s+est\s+inclus|own\s+(?:ski\s+)?boots|mes\s+propres\s+chaussures|specific\s+model|mod[eè]le\s+(?:pr[eé]cis|particulier)|add\s+(?:the\s+)?(?:insurance|protection|alpinflexi|snowflexi|alpinguaranty|alpinsafety)|ajouter\s+(?:l.)?(?:assurance|protection)|ski\s+(?:lessons?|school)|cours\s+de\s+ski|skikurs|rent\s+(?:ski\s+)?clothing|location\s+de\s+v[eê]tements|lift\s+pass|forfait\s+de\s+ski|skipass|priority\s+check.?in|modelchange\s+option)\b/i },
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(pick\s*.?up|collect|r[eé]cup[eé]rer|abhol\w*)\b[\s\S]{0,40}\b(day\s+before|evening\s+before|la\s+veille|vortag|tag\s+davor)\b/i },
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(helmets?|casques?|helm\w*)\b[\s\S]{0,40}\b(compulsory|mandatory|obligatoire|obligatorisch|pflicht|required\s+by\s+law)\b|\bhelmpflicht\b/i },
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(promo(?:tion)?\s+code|code\s+promo|gutschein\s?code|discount\s+code)\b[\s\S]{0,40}\b(does\s+not|doesn.t|not\s+work\w*|invalid|refus\w*|ne\s+(?:fonctionne|marche)\s+pas|funktioniert\s+nicht)\b/i },
 ];
 
 /**

@@ -200,6 +200,39 @@ export const ROUTES = {
               flow: 'Partial cancellation',
               needs: ['booking_ref'],
       },
+      // The rental has already started: injury, illness, an early return.
+      //
+      // There is no automatic outcome here and there must not be one. The fee is
+      // 100%, a goodwill gesture is discretionary, and it depends on two
+      // documents a customer almost never sends unprompted - a medical
+      // certificate dated inside the rental period, and the shop's written
+      // confirmation of the early return. So the flow's whole job is to ask for
+      // those two documents, say what happens next, and put the booking facts in
+      // front of an agent. It never touches the booking and never creates a
+      // coupon.
+      //
+      // booking_ref is required because everything the agent needs to decide -
+      // the dates, whether Alpinsafety or Alpinsafety Plus is on the booking,
+      // what the unused days are worth - is only knowable from the booking.
+      CANCELLATION_AFTER: {
+              flow: 'Cancellation after start',
+              needs: ['booking_ref'],
+      },
+      // Questions that need knowledge and no action at all.
+      //
+      // "Can I have an invoice?" "Are poles included?" "Do you take AMEX?" "Is a
+      // helmet compulsory in Italy?" - none of these touch a booking, and every
+      // one of them has a settled answer written down. They are a large part of
+      // the 21% of tickets that carry no topic tag, and today every one of them
+      // costs an agent a full reply.
+      //
+      // needs is deliberately empty. There is nothing to collect: the question
+      // is the whole request, so this route is ready on the first comment and
+      // never asks the customer anything.
+      GENERAL_QUESTION: {
+              flow: 'General questions',
+              needs: [],
+      },
       OTHER: {
               flow: null,
               needs: [],
