@@ -311,6 +311,8 @@ only occasionally available and not normally bookable online.
 SKI LESSONS
 We do not sell them. Point the customer to ski-pro.com — the flow must ask an
 agent for the correct referral link rather than inventing one.
+The link looks like this: https://ski-pro.com/en/ski-lessons/france/savoie/la-plagne?referrer=alpinres
+
 
 CHILD FOR FREE
 A shop-specific offer, mostly in Austria and never in France, with conditions set
