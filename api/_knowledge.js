@@ -241,26 +241,26 @@ starts. It appears on the voucher as an additional product.
 === THE PROTECTIONS ===
 Use the brand-correct names given at the top of this document.
 
-DAMAGE AND THEFT (Alpinguaranty on alpy.com)
+DAMAGE AND THEFT — use the name given at the top of this document
 15% of the online value of the booked equipment. Covers theft and damage or
 breakage, up to €450 per adult or teenager item and €250 per child item. It does
 NOT cover loss — equipment left behind or simply not returned is not a claim.
 Can be taken for one person only.
 
-CANCELLATION (Alpinflexi on alpy.com, Snowflexi on snowbrainer.com)
+CANCELLATION — use the name given at the top of this document
 5% of the online value, and frequently promoted free of charge. Cancel for any
 reason, with no fee, up to 08:00 on the day before the first rental day. No
 justification and no medical certificate needed. Must be taken for everyone on
 the booking.
 
-ACCIDENT (Alpinsafety — same name on every brand)
+ACCIDENT — Alpinsafety, the one name that is the same on every brand
 €1.35 per person per day. Covers search and rescue up to CHF 5,000 per event,
 emergency transport to hospital and medically supervised transfer, with a total
 ERV benefit of CHF 10,000 per event. It does not cover doctors' fees or pharmacy
 bills. Must be taken for everyone on the booking. The insured person is whoever
 uses the equipment, not whoever paid.
 
-ACCIDENT PLUS (Alpinsafety Plus)
+ACCIDENT PLUS — Alpinsafety Plus, also the same on every brand
 €2 per person per day. Everything Alpinsafety covers, plus a pro-rata refund of
 unused rental days, unused ski school days and lift pass costs in case of
 illness, accident, insufficient snow or lift closure. Claims need a medical
