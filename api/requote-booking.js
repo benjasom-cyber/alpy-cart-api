@@ -149,13 +149,29 @@ function specFromName(name) {
   };
 }
 
-function buildPersons(equipment) {
+/**
+ * The group, rebuilt from what the booking holds.
+ *
+ * `includeCancelled` is the whole point of the second pass. By default we
+ * rebuild only what is still live, because that is what "re-quote this booking"
+ * means on a booking that still exists. But a cancelled booking has no live
+ * item at all, and refusing there was wrong: re-quoting a cancelled booking is
+ * one of the most useful things an agent can do - the customer cancelled, then
+ * came back, and the whole basket they had chosen is sitting right there.
+ * Making the agent retype four skiers, four levels and four ages, when Odin
+ * still holds every one of them, is work we invented for ourselves.
+ *
+ * So when nothing is active we run again over everything, cancelled included,
+ * and say so loudly in the note. The two passes are the same code precisely so
+ * a rebuilt-from-cancelled quote cannot drift from a normal one.
+ */
+function buildPersons(equipment, includeCancelled) {
   const persons = [];
   const wantBoots = [];
   const wantHelmet = [];
 
   for (const item of equipment || []) {
-    if (isCancelled(item && item.status)) continue;
+    if (!includeCancelled && isCancelled(item && item.status)) continue;
 
     const known = DEF_TO_SPEC[item.definitionId];
     const spec = known || specFromName(item.name);
@@ -170,7 +186,8 @@ function buildPersons(equipment) {
       skillResolvedFrom: known ? 'definitionId' : 'product name (definitionId unknown)',
     });
 
-    const accessories = (item.accessories || []).filter(a => !isCancelled(a && a.status));
+    const accessories = (item.accessories || [])
+      .filter(a => includeCancelled || !isCancelled(a && a.status));
     wantBoots.push(accessories.some(a => a.definitionId === 1 || /boot/i.test(String(a.name || ''))));
     wantHelmet.push(accessories.some(a => a.definitionId === 2 || /helmet|casque/i.test(String(a.name || ''))));
   }
@@ -180,7 +197,15 @@ function buildPersons(equipment) {
 
 function buildInternalNote(o) {
   const lines = [];
-  lines.push('QUOTE REBUILT FROM BOOKING ' + o.reference + '.');
+  // The heading is the one thing an agent reads for certain, so the distinction
+  // that matters most lives there: is this a price for a booking that exists, or
+  // a fresh basket copied from one that no longer does.
+  lines.push(o.rebuiltFromCancelled
+    ? 'NEW BOOKING REBUILT FROM CANCELLED BOOKING ' + o.reference + '.'
+    : 'QUOTE REBUILT FROM BOOKING ' + o.reference + '.');
+  if (o.rebuiltFromCancelled) {
+    lines.push('The original booking is cancelled and STAYS cancelled. This is a re-book, not a re-price.');
+  }
   lines.push('');
   lines.push('Shop: ' + o.shopName + ' (' + o.resort + ')');
   lines.push('Original period: ' + o.originalFrom + ' to ' + o.originalTo);
@@ -289,11 +314,22 @@ export default async function handler(req, res) {
     }
 
     // ── 2. Rebuild the group from what was actually sold. ────────────────────
-    const { persons, wantBoots, wantHelmet } = buildPersons(booking.equipment);
+    let { persons, wantBoots, wantHelmet } = buildPersons(booking.equipment, false);
+
+    // Nothing live left - so rebuild from everything, cancelled included.
+    // See buildPersons: this is the case an agent hits most often, not an edge.
+    let rebuiltFromCancelled = false;
+    if (!persons.length) {
+      ({ persons, wantBoots, wantHelmet } = buildPersons(booking.equipment, true));
+      rebuiltFromCancelled = persons.length > 0;
+    }
+
     if (!persons.length) {
       return res.status(422).json({
-        error: 'Booking ' + ref + ' has no active equipment to rebuild.',
-        hint: 'Every item is cancelled, or the booking holds services only.',
+        error: 'Booking ' + ref + ' holds no equipment at all - not even cancelled.',
+        hint: 'This booking is services or insurance only, so there is no basket to rebuild.',
+        bookingReference: booking.bookingReference || ref,
+        bookingStatus: booking.bookingStatus || null,
       });
     }
 
@@ -303,6 +339,14 @@ export default async function handler(req, res) {
     const helmetUniform = wantHelmet.every(v => v === anyHelmet);
 
     const approximations = [];
+    if (rebuiltFromCancelled) {
+      approximations.push(
+        'EVERY item on this booking is cancelled. The basket below was rebuilt from the ' +
+        'CANCELLED items, so it is a NEW booking to be made, not a re-pricing of a live one. ' +
+        'Nothing has been reinstated in Odin - sending this link books afresh, at today\'s rates, ' +
+        'and the original booking stays cancelled.'
+      );
+    }
     if (!bootsUniform) {
       approximations.push(
         'The booking has boots on ' + wantBoots.filter(Boolean).length + ' of ' + persons.length +
@@ -377,6 +421,7 @@ export default async function handler(req, res) {
       days,
       personsCount: persons.length,
       equipmentSummary,
+      rebuiltFromCancelled,
       cartOnlinePrice: quote.cartOnlinePrice,
       cartInStorePrice: quote.cartInStorePrice,
       currency: quote.cartPriceCurrency || 'EUR',
@@ -403,6 +448,10 @@ export default async function handler(req, res) {
       quotedenddate: endDate,
       quotedDays: days,
       quoteddays: days,
+      // Flat, both spellings: the ZAF and any Zendesk action can branch on it
+      // without declaring a nested path.
+      rebuiltFromCancelled,
+      rebuiltfromcancelled: rebuiltFromCancelled,
       sourceBookingReference: booking.bookingReference || ref,
       sourcebookingreference: booking.bookingReference || ref,
       sourceBalanceDue: money(booking.total && booking.total.amount),
@@ -429,6 +478,7 @@ export default async function handler(req, res) {
         datesSource: (isDay(params.startDate) && isDay(params.endDate)) ? 'caller' : 'booking',
         persons,
         addons: { boots: anyBoots, helmets: anyHelmet, bootsUniform, helmetUniform },
+        rebuiltFromCancelled,
         approximations,
         internalNote,
       },
