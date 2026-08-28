@@ -87,20 +87,27 @@ export const SLOTS = {
       //
       // "Nobody" is a complete answer for all three. What is not acceptable is
       // silence, because silence used to mean "charge for it anyway".
+      //
+      // Each carries a `fallback`: the value we take when the customer has not
+      // said, and the sentence we print so they know we took it. See the QUOTE
+      // route below for why these are assumed rather than asked.
       boots: {
               label: 'who needs boots',
               ask: 'Does everyone need boots as well, or is anyone bringing their own? Tell us who — boots are charged per person.',
               looksValid: v => ACCESSORY_ANSWER(v),
+              fallback: { value: 'everyone', announce: 'boots for everyone' },
       },
       helmets: {
               label: 'who needs a helmet',
               ask: 'Would you like helmets, and for whom? They are charged per person, and nobody is obliged to take one.',
               looksValid: v => ACCESSORY_ANSWER(v),
+              fallback: { value: 'nobody', announce: 'no helmets' },
       },
       insurance: {
               label: 'damage & theft protection',
               ask: 'Would you like damage & theft protection? It costs 15% of the rental price and covers breakage and theft of the equipment. Yes or no is enough.',
               looksValid: v => ACCESSORY_ANSWER(v),
+              fallback: { value: 'no', announce: 'no damage & theft protection' },
       },
 };
 
@@ -156,10 +163,30 @@ export const ROUTES = {
       // are owed: AlpinGuaranty is 15% of the rental, and on a group of fifteen
       // that is not a detail to discover in the basket. Asked once. Silence the
       // second time means no, and the quote goes out.
+      //
+      // WHAT CHANGED, AND WHY (581658 and the whole family of tickets like it).
+      //
+      // The three extras above are priced, but none of them stops us from
+      // computing a price: every one has an answer we can take by default and
+      // say out loud. Requiring them meant a customer who told us the resort,
+      // the dates, the group and the level - everything that actually sets the
+      // price - still got a question instead of a quote. That is the slow,
+      // robotic exchange people complain about, and it is what earned us the
+      // bad rating on 581658.
+      //
+      // So they move from `needs` to `assumes`. The quote is built on a stated
+      // assumption and the assumption is printed in the reply, where the
+      // customer can correct it in one word. Boots yes, because someone renting
+      // skis nearly always needs them and leaving them out understates the
+      // price; helmets and protection no, because charging for something nobody
+      // asked for is the worse error of the two.
+      //
+      // A stated assumption the customer can refuse is honest. A question that
+      // holds the whole quote hostage is not helpfulness, it is a queue.
       QUOTE: {
               flow: 'Quote Generator',
-              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'children_ages', 'equipment_level',
-                              'boots', 'helmets', 'insurance'],
+              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'children_ages', 'equipment_level'],
+              assumes: ['boots', 'helmets', 'insurance'],
       },
       REQUOTE: {
               flow: 'Requote from booking',
@@ -243,11 +270,37 @@ export function checkSlots(topic, slots) {
               }
       }
 
+      // Assumed slots: never block, always announced.
+      //
+      // If the customer stated one, we use what they said and there is nothing
+      // to announce. If they did not, we take the declared fallback and add it
+      // to `assumedSentence`, which the reply must print verbatim so the
+      // customer can correct it in one word.
+      const assumed = [];
+      const values2 = values;
+      for (const name of (route.assumes || [])) {
+              const def = SLOTS[name];
+              if (!def || !def.fallback) continue;
+              if (def.looksValid(values2[name])) continue;
+              assumed.push({ slot: name, value: def.fallback.value, announce: def.fallback.announce });
+      }
+
+      let assumedSentence = null;
+      if (assumed.length) {
+              const parts = assumed.map(a => a.announce);
+              const last = parts.pop();
+              assumedSentence = 'We have assumed ' +
+                        (parts.length ? parts.join(', ') + ' and ' + last : last) +
+                        '. Tell us if that is wrong and we will re-price it.';
+      }
+
       return {
               missing,
               satisfied,
               nextQuestion,
               nextQuestionAll,
+              assumed,
+              assumedSentence,
               ready: missing.length === 0 && topic !== 'OTHER',
       };
 }

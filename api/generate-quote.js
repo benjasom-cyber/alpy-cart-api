@@ -701,24 +701,82 @@ function norm(s) {
         .trim();
 }
 
-function findShop(shops, resort) {
-      if (!resort) return null;
+// Resort resolution, in order of decreasing certainty.
+//
+// Observed on 581658: the customer wrote "arriving in Val on 7 Feb 27". The old
+// resolver fell through to a plain substring test, "valmalenco" contains "val",
+// and we quoted him a shop in Italy - a different country from the one he was
+// going to. He rated us badly.
+//
+// "Val" is not a resort, it is the beginning of a dozen of them. So instead of
+// returning the first town that happens to contain the letters, we collect every
+// town that could be meant and, when there is more than one, we refuse. A refusal
+// becomes a question to the customer, which is what a human would have asked.
+//
+// Returns { shop } | { ambiguous: true, candidates: [town, ...] } | {}.
+function resolveShop(shops, resort) {
+      if (!resort) return {};
       const q   = norm(resort);
       const qNS = q.replace(/\s/g, '');
+      if (!q) return {};
 
-  for (const s of shops) {
-          const t = norm(s.town);
-          if (t === q || t.replace(/\s/g, '') === qNS) return s;
-  }
-      for (const s of shops) {
-              const tl = norm(s.town);
-              if (tl.includes(q) || tl.replace(/\s/g, '').includes(qNS)) return s;
+      // 1. Exact town name. Never ambiguous, even if several shops share the town.
+      const exact = shops.filter(s => {
+              const t = norm(s.town);
+              return t === q || t.replace(/\s/g, '') === qNS;
+      });
+      if (exact.length) return { shop: exact[0] };
+
+      const distinctTowns = list => {
+              const seen = [];
+              for (const s of list) { const t = norm(s.town); if (seen.indexOf(t) === -1) seen.push(t); }
+              return seen;
+      };
+      const decide = list => {
+              if (!list.length) return null;
+              const towns = distinctTowns(list);
+              if (towns.length > 1) {
+                        return { ambiguous: true, candidates: list.map(s => s.town).filter((t, i, a) => a.indexOf(t) === i) };
+              }
+              return { shop: list[0] };
+      };
+
+      // 2. The town begins with what was written, on a word boundary:
+      //    "val d isere" for "Val d Isere", "val thorens" and "val cenis" for "Val".
+      //    Several distinct towns here means the customer has to tell us which.
+      const prefix = shops.filter(s => {
+              const t = norm(s.town);
+              return t.startsWith(q + ' ') || t.replace(/\s/g, '').startsWith(qNS + ' ');
+      });
+      const byPrefix = decide(prefix);
+      if (byPrefix) return byPrefix;
+
+      // 3. Substring anywhere in the town - only for a token long enough to mean
+      //    something. Below four characters a substring match is noise: that is
+      //    exactly how "Val" reached Valmalenco.
+      if (qNS.length >= 4) {
+              const inside = shops.filter(s => {
+                        const t = norm(s.town);
+                        return t.includes(q) || t.replace(/\s/g, '').includes(qNS);
+              });
+              const bySub = decide(inside);
+              if (bySub) return bySub;
+
+              // 4. Last resort: the shop's own name.
+              const byName = decide(shops.filter(s => {
+                        const n = norm(s.name);
+                        return n.includes(q) || n.replace(/\s/g, '').includes(qNS);
+              }));
+              if (byName) return byName;
       }
-      for (const s of shops) {
-              const nl = norm(s.name);
-              if (nl.includes(q) || nl.replace(/\s/g, '').includes(qNS)) return s;
-      }
-      return null;
+
+      return {};
+}
+
+// Kept for callers that only want a shop or nothing.
+function findShop(shops, resort) {
+      const r = resolveShop(shops, resort);
+      return r.shop || null;
 }
 
 export default async function handler(req, res) {
@@ -857,7 +915,19 @@ export default async function handler(req, res) {
                     town: 'Shop ' + id, name: 'Shop ' + id
           };
   } else if (resort) {
-          shop = findShop(shops, String(resort));
+          const resolved = resolveShop(shops, String(resort));
+          if (resolved.ambiguous) {
+                    const shortlist = resolved.candidates.slice(0, 8);
+                    return res.status(409).json({
+                                error: '"' + resort + '" matches several resorts: ' + shortlist.join(', ') +
+                                       '. Ask the customer which one before quoting - the wrong resort can be ' +
+                                       'in the wrong country.',
+                                reason: 'AMBIGUOUS_RESORT',
+                                resort, candidates: shortlist,
+                                candidateCount: resolved.candidates.length,
+                    });
+          }
+          shop = resolved.shop;
           if (!shop) {
                     return res.status(404).json({
                                 error: 'No shop found for resort: "' + resort + '". Check spelling or use alpy.com to find a valid resort name.',
@@ -899,6 +969,45 @@ export default async function handler(req, res) {
                                          'almost certainly wrong. Today is ' +
                                          today.toISOString().slice(0, 10) + '.',
                                   startDate, endDate,
+                        });
+              }
+      }
+
+      // A rental period nobody would ever book is not a quote either.
+      //
+      // Observed on 581658: the customer wrote "arriving in Val on 7 Feb 27, need
+      // to hire from Sunday 8 Feb. The shop has an online offer until 31 Aug".
+      // "until 31 Aug" is the deadline of a promotion, not the end of the rental,
+      // and the classifier took it as endDate. We priced 205 days - 3,436.50 EUR -
+      // and sent it to the customer with a straight face. He rated us badly and
+      // said we had passed him to a robot that could not answer.
+      //
+      // Ski rentals run a week, two at the outside. Benjamin's rule: past 14 days
+      // we do not quote automatically. Beyond that it is either a parsing failure
+      // or a genuinely unusual request, and both belong to a human - so we refuse
+      // to price it and the flow's error branch hands it over.
+      const MAX_RENTAL_DAYS = 14;
+      if (startDate && endDate && !missing.length) {
+              const d0 = new Date(startDate);
+              const d1 = new Date(endDate);
+              const spanDays = Math.round((d1 - d0) / 86400000) + 1;
+
+              if (spanDays < 1) {
+                        return res.status(400).json({
+                                  error: 'End date ' + endDate + ' is before start date ' + startDate +
+                                         '. The period could not be read reliably.',
+                                  startDate, endDate,
+                        });
+              }
+              if (spanDays > MAX_RENTAL_DAYS) {
+                        return res.status(400).json({
+                                  error: 'Rental period is ' + spanDays + ' days (' + startDate + ' to ' +
+                                         endDate + '), which exceeds the ' + MAX_RENTAL_DAYS + '-day maximum. ' +
+                                         'A date this far out is almost always a promotion deadline or a ' +
+                                         'booking-window date read as the end of the rental. Ask the customer ' +
+                                         'for the return date instead of pricing this.',
+                                  startDate, endDate, days: spanDays,
+                                  reason: 'PERIOD_TOO_LONG',
                         });
               }
       }

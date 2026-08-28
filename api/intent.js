@@ -450,7 +450,27 @@ async function fetchCustomerThread(ticketId) {
                         Number(c.author_id) !== Number(requester) &&
                         !watching.has(Number(c.author_id)));
 
+              // The subject line is the customer's words too, and we were throwing
+              // it away.
+              //
+              // Observed on 581658: the customer put "Val Thorens" in the subject
+              // and wrote only "arriving in Val" in the body. We read the body,
+              // saw "Val", and quoted a shop in Valmalenco, Italy. The one place
+              // where the resort was written in full was the one place we never
+              // looked.
+              //
+              // It is read as the OLDEST source, below every comment: a subject is
+              // written once, at the start, and never updated, so anything the
+              // customer says later must win. It is shown to the detectors at the
+              // head of the transcript, where the resort is extracted. And it is
+              // deliberately NOT a turn - it does not count towards turns_read or
+              // the repeat-ask guard, because nobody "said" it twice.
+              const subject = String(ticket.subject || '')
+                .replace(/^\s*(re|fw|fwd|tr|aw|wg)\s*:\s*/gi, '')
+                .trim();
+
               return { turns: mine, text: mine.join('\n\n'), count: mine.length,
+                       subject,
                        agentReplied: !!humanReply,
                        agentRepliedAt: humanReply ? humanReply.created_at : null,
                        status: 'ok:' + comments.length + '_comments' +
@@ -530,10 +550,21 @@ const PRODUCT_ANSWERS = [
  * contain the slots we wanted. A question deserves its answer even when it
  * arrives instead of the information we asked for.
  */
-function buildTranscript(turns) {
+function buildTranscript(turns, subject) {
       if (!turns || !turns.length) return '';
       const numbered = turns.map((t, i) => 'Customer, message ' + (i + 1) + ' of ' + turns.length + ':\n' + t);
       let out = numbered.join('\n\n');
+      // The subject line, at the head, labelled for what it is.
+      //
+      // 581658: "Val Thorens" was in the subject and only "Val" in the body. The
+      // detector never saw the subject, resolved "Val" on its own, and we quoted
+      // Valmalenco - a different country. A customer who names the resort once,
+      // in the title, has named it.
+      //
+      // It sits ABOVE the messages and outside the numbering: it is context, not
+      // a turn, and a detector must not count it as something the customer said
+      // twice.
+      if (subject) out = 'Email subject: ' + subject + '\n\n' + out;
       if (out.length > 8000) out = '[…earlier messages omitted…]\n\n' + out.slice(out.length - 8000);
       // The date travels INSIDE the transcript, not beside it.
       //
@@ -726,6 +757,10 @@ export default async function handler(req, res) {
       // drops empty values, so a turn that says nothing about dates cannot erase
       // the dates an earlier turn gave.
       const fromThread = {};
+      // The subject first, so any comment can overrule it. See fetchCustomerThread.
+      if (thread.subject) {
+              Object.assign(fromThread, cleanSlots(extractFromMessage(thread.subject)));
+      }
       if (thread.turns.length) {
               for (const turn of thread.turns) Object.assign(fromThread, cleanSlots(extractFromMessage(turn)));
       }
@@ -916,6 +951,17 @@ export default async function handler(req, res) {
               // comment in _slots.js: a flow has no memory between comments, so
               // one question per turn can never collect six things.
               next_question_all: check.nextQuestionAll,
+              // What we took by default on the paid extras, in one sentence the
+              // reply must print as-is.
+              //
+              // This is the other half of not gating on boots, helmets and
+              // protection: we price them on an assumption, and the customer
+              // reads the assumption in the same message as the figure. An
+              // assumption stated is correctable in one word; an assumption
+              // hidden is a surprise at the till, which is what we were trying
+              // to avoid when we made them gates in the first place.
+              assumptions: check.assumedSentence || '',
+              assumed_slots: (check.assumed || []).map(a => a.slot).join(','),
               action,
               // The whole gate in one value.
               //
@@ -965,7 +1011,7 @@ export default async function handler(req, res) {
               // empty detector input classifies as OTHER and closes the gate on
               // every ticket at once. Degraded memory is a bad day; a silent
               // outage across all capabilities is a bad week.
-              transcript: buildTranscript(thread.turns) ||
+              transcript: buildTranscript(thread.turns, thread.subject) ||
                 (String(message || '').trim()
                   ? 'Customer, message 1 of 1:\n' + String(message).trim()
                   : ''),
