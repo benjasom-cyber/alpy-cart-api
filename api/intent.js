@@ -386,6 +386,100 @@ function zdAuth() {
  * whether to repeat - feeding them back in is how a bot ends up reading its own
  * words as evidence.
  */
+/**
+ * What the customer booked LAST TIME, read straight from Odin.
+ *
+ * "The same as last year" and "same specification as before" are among the most
+ * common things a returning customer writes, and until now we answered them by
+ * asking the questions the customer had just told us not to ask. On 581788 that
+ * produced a question about children who do not exist - the previous booking was
+ * two adults - and the customer had to explain themselves twice.
+ *
+ * Vercel CAN reach this route. The IP block that stops us calling Odin applies
+ * to /webhook/*; GET /api/v2/booking/{ref} is public and requote-booking.js has
+ * been calling it from Vercel for weeks. So the history lookup belongs here,
+ * where every flow gets it for free, and not as a step in one flow.
+ *
+ * Returns a short prose summary, or '' - never throws, never blocks. A slow or
+ * absent Odin costs us the history and nothing else, so the timeout is short and
+ * every failure degrades to exactly the behaviour we had before.
+ */
+/**
+ * "The same as last time."
+ *
+ * Detected on the customer's own words, never inferred. It is the one phrase
+ * that licenses us to carry a previous booking's CHOICES into a new quote -
+ * resort, discipline, level, who needs boots - because the customer has just
+ * told us to. Dates are never carried: nobody means "the same week last year".
+ *
+ * Deliberately narrow. A customer who writes "I booked with you last year" is
+ * giving context, not an instruction, and gets no prefill.
+ */
+const SAME_AS_BEFORE = new RegExp(
+      '(same|identical|as)\\s+(as\\s+)?(last|previous|before|last\\s+year|last\\s+time)' +
+      '|same\\s+(spec|specification|equipment|setup|kit|as\\s+before)' +
+      '|(comme|identique\\s+a)\\s+(l.?an\\s+dernier|la\\s+derniere\\s+fois|avant|precedemment)' +
+      '|meme\\s+(chose|equipement|materiel|configuration)\\s+(qu|que)' +
+      '|(wie|dasselbe)\\s+(letztes\\s+jahr|beim\\s+letzten\\s+mal)',
+      'i');
+
+function saysSameAsBefore(text) {
+      const t = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return SAME_AS_BEFORE.test(t);
+}
+
+const ODIN_BASE = 'https://odin.alpy.com';
+
+async function fetchBookingHistory(ref) {
+      const code = String(ref || '').trim().toUpperCase();
+      if (!/^[A-Z0-9]{4,12}$/.test(code)) return '';
+
+      let booking = null;
+      try {
+              const ctrl = new AbortController();
+              const t = setTimeout(() => ctrl.abort(), 4000);
+              const r = await fetch(ODIN_BASE + '/api/v2/booking/' + encodeURIComponent(code),
+                                    { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+              clearTimeout(t);
+              if (!r.ok) return '';
+              booking = await r.json();
+      } catch { return ''; }
+      if (!booking || typeof booking !== 'object') return '';
+
+      const day = v => { const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v || '')); return m ? m[1] : ''; };
+      const from = day(booking.rentalPeriod && booking.rentalPeriod.from);
+      const to   = day(booking.rentalPeriod && booking.rentalPeriod.to);
+
+      // Age and equipment per person, plus who had boots and who had a helmet.
+      // This is the part that answers "the same as before": it is the shape of
+      // the group, not the price, that the customer is referring to.
+      const people = [];
+      let boots = 0, helmets = 0;
+      for (const item of (booking.equipment || [])) {
+              const age  = (item.personalInfo && parseInt(item.personalInfo.age, 10)) || null;
+              const name = String(item.name || '').trim();
+              const kind = /snowboard|board/i.test(name) ? 'snowboard' : 'ski';
+              people.push((age ? age + 'yr' : 'adult') + ' ' + kind + (name ? ' (' + name + ')' : ''));
+              for (const a of (item.accessories || [])) {
+                        const an = String(a.name || '').toLowerCase();
+                        if (a.definitionId === 1 || an.indexOf('boot') > -1) boots++;
+                        if (a.definitionId === 2 || an.indexOf('helmet') > -1 || an.indexOf('casque') > -1) helmets++;
+              }
+      }
+      if (!people.length) return '';
+
+      const shop = (booking.shop && (booking.shop.name || booking.shop.town)) || '';
+      const town = (booking.shop && booking.shop.town) || '';
+
+      const bits = [];
+      bits.push('Booking ' + code + ':');
+      if (town) bits.push(' resort ' + town + (shop && shop !== town ? ' (' + shop + ')' : '') + ';');
+      if (from && to) bits.push(' ' + from + ' to ' + to + ';');
+      bits.push(' ' + people.length + ' person(s) - ' + people.join(', ') + ';');
+      bits.push(' boots for ' + boots + ', helmets for ' + helmets + '.');
+      return bits.join('');
+}
+
 async function fetchCustomerThread(ticketId) {
       // Why the memory is off is operational information, not debug output. A
       // silent null was enough to spend an afternoon guessing between "no token",
@@ -570,7 +664,7 @@ const PRODUCT_ANSWERS = [
  * contain the slots we wanted. A question deserves its answer even when it
  * arrives instead of the information we asked for.
  */
-function buildTranscript(turns, subject, knownRef) {
+function buildTranscript(turns, subject, knownRef, history) {
       if (!turns || !turns.length) return '';
       const numbered = turns.map((t, i) => 'Customer, message ' + (i + 1) + ' of ' + turns.length + ':\n' + t);
       let out = numbered.join('\n\n');
@@ -592,6 +686,14 @@ function buildTranscript(turns, subject, knownRef) {
       // know the customer never typed it - those are different facts and a bare
       // reference in the text would collapse them into one. Hence the wording:
       // it says where the code came from, in the same breath as the code.
+      // What they booked last time, above everything else: it is the answer to
+      // "the same as before", and a detector that reads it can stop asking.
+      if (history) {
+              out = 'WHAT THIS CUSTOMER BOOKED LAST TIME (from our records, not ' +
+                    'stated by them now): ' + history + '\nUse it to understand ' +
+                    '"the same as before". Never reuse the dates - those are always new.\n\n' + out;
+      }
+
       if (knownRef) {
               out = 'Known from our records (NOT stated by the customer): this ' +
                     'customer\'s most recent booking with us is ' + knownRef +
@@ -907,6 +1009,51 @@ export default async function handler(req, res) {
               usedRefFromHistory = true;
       }
 
+      // ── What they booked last time ───────────────────────────────────────────
+      //
+      // Read for a QUOTE or a REQUOTE, and for one reason: a returning customer
+      // who writes "the same as last year" is telling us the answers, not asking
+      // to be interviewed. On 581788 we asked that customer about children when
+      // the booking they were pointing at held two adults.
+      //
+      // The reference can come from either side - one the customer quoted, or
+      // one the email lookup found - because reading a booking changes nothing.
+      // What it may DO with what it reads is the part that is fenced.
+      let history = '';
+      let historyApplied = [];
+      const wantsSame = saysSameAsBefore(message) ||
+                        (thread.turns || []).some(saysSameAsBefore);
+      const refForHistory = slots.booking_ref || refFromHistory;
+
+      if ((topic === 'QUOTE' || topic === 'REQUOTE') && refForHistory) {
+              history = await fetchBookingHistory(refForHistory);
+      }
+
+      // Prefill ONLY on the customer's own instruction, and only the choices
+      // that survive a year. Dates never carry: nobody means the same week
+      // twelve months on, and a silently reused date is the 581658 failure
+      // wearing different clothes. The ages of children are not carried either
+      // - a child who was 7 last winter is 8 now, and a quote priced on last
+      // year's age is wrong at the till, which is the exact harm children_ages
+      // exists to prevent.
+      if (history && wantsSame && topic === 'QUOTE') {
+              const townMatch = history.match(/resort ([^;(]+)/);
+              if (townMatch && !slots.resort_name && !slots.shop_name) {
+                        slots.resort_name = townMatch[1].trim();
+                        historyApplied.push('resort_name');
+              }
+              if (!slots.equipment_level) {
+                        const kinds = [];
+                        if (/\bski\b/.test(history)) kinds.push('ski');
+                        if (/snowboard/.test(history)) kinds.push('snowboard');
+                        if (kinds.length) {
+                                  slots.equipment_level = 'same as booking ' + refForHistory +
+                                                          ' (' + kinds.join(' and ') + ') - see the history line in the transcript';
+                                  historyApplied.push('equipment_level');
+                        }
+              }
+      }
+
       // Not const: a second pass over an unanswered paid option rewrites this.
       // See the declineUnstatedExtras block below.
       let check = checkSlots(topic, slots);
@@ -1036,6 +1183,11 @@ export default async function handler(req, res) {
               // quoted.
               ref_from_history: refFromHistory,
               used_ref_from_history: usedRefFromHistory,
+              // The previous booking, in one line, and which slots it filled.
+              // Both travel so a human reading the run can see that a value came
+              // from history rather than from the customer's message.
+              booking_history: history,
+              history_applied: historyApplied.join(','),
               assumed_slots: (check.assumed || []).map(a => a.slot).join(','),
               action,
               // The whole gate in one value.
@@ -1086,7 +1238,7 @@ export default async function handler(req, res) {
               // empty detector input classifies as OTHER and closes the gate on
               // every ticket at once. Degraded memory is a bad day; a silent
               // outage across all capabilities is a bad week.
-              transcript: buildTranscript(thread.turns, thread.subject, thread.knownRef) ||
+              transcript: buildTranscript(thread.turns, thread.subject, thread.knownRef, history) ||
                 (String(message || '').trim()
                   ? 'Customer, message 1 of 1:\n' + String(message).trim()
                   : ''),
@@ -1144,6 +1296,8 @@ export default async function handler(req, res) {
       // wants the raw list.
       body.missinglabels = check.nextQuestionAll || missingLabels.join(', ');
       body.reffromhistory = body.ref_from_history;
+      body.bookinghistory = body.booking_history;
+      body.historyapplied = body.history_applied;
       body.usedreffromhistory = body.used_ref_from_history;
       body.agentnote = body.agentNote;
 
