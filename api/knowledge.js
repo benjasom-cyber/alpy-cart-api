@@ -168,12 +168,13 @@ charged.
 CHEQUES VACANCES / ANCV
 Depends on the shop. Where accepted, the usual arrangement is a deposit online
 and the remainder on site.
+Most french shops accept it when paying the deposit part online, you can generally use cheques vacances on spot
 
 A PROMOTION CODE IS REFUSED
 By far the commonest cause is a space copied into the field along with the code.
 Ask them to retype it. A code cannot be added to a booking that is already
 confirmed — the only route is to cancel and rebook, and the cancellation fee
-would apply, so it is rarely worth it.
+would apply (if alpinflexi not included: usually is)
 
 THE PRODUCT PAGE WILL NOT LOAD
 Almost always cache or cookies: a hard refresh, clearing the cache, an incognito
@@ -212,7 +213,7 @@ A SPECIFIC BRAND OR MODEL
 Not bookable. We rent price categories, and the shop selects the actual ski on
 the day and fits it to the skier. The models shown on the website are
 illustrative. A customer set on one model can ask the shop directly with the
-contacts on their voucher.
+contacts on their voucher. After the online booking, the customer receives the direct contact of the store, it is totally fine to organize a specific brand directly with the store after booking made.
 
 THE CATEGORIES
 3-star Blue/Bronze for beginners and careful skiers; 4-star Red/Silver for
