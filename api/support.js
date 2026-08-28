@@ -12,9 +12,15 @@
  *   unsubscribe-newsletter  → POST /api/unsubscribe-newsletter
  *   large-group-quote       → POST /api/large-group-quote
  *   resend-voucher          → POST /api/resend-voucher
+ *   knowledge               → GET  /api/knowledge
  *
  * Vercel rewrites in vercel.json forward the legacy endpoint paths here,
  * so all existing Zendesk custom action URLs continue to work unchanged.
+ *
+ * Everything routed here lives in an api/_*.js module. The underscore is what
+ * keeps it out of Vercel's function count: this project sits exactly on the
+ * Hobby plan's twelve-function limit, and a thirteenth file in api/ without an
+ * underscore fails the whole deployment.
  */
 
 import { handler as checkDateChange } from './_check-date-change.js';
@@ -24,6 +30,7 @@ import { handler as updatePersonalInfo } from './_update-personal-info.js';
 import { handler as unsubscribeNewsletter } from './_unsubscribe-newsletter.js';
 import { handler as largeGroupQuote } from './_large-group-quote.js';
 import { handler as resendVoucher } from './_resend-voucher.js';
+import { handler as knowledge } from './_knowledge.js';
 
 const HANDLERS = {
   'check-date-change': checkDateChange,
@@ -33,6 +40,7 @@ const HANDLERS = {
   'unsubscribe-newsletter': unsubscribeNewsletter,
   'large-group-quote': largeGroupQuote,
   'resend-voucher': resendVoucher,
+  'knowledge': knowledge,
 };
 
 export default async function handler(req, res) {
