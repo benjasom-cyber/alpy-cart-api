@@ -17,6 +17,7 @@
     { "source": "/api/update-personal-info", "destination": "/api/support?action=update-personal-info" },
     { "source": "/api/unsubscribe-newsletter", "destination": "/api/support?action=unsubscribe-newsletter" },
     { "source": "/api/large-group-quote", "destination": "/api/support?action=large-group-quote" },
-    { "source": "/api/resend-voucher", "destination": "/api/support?action=resend-voucher" }
+    { "source": "/api/resend-voucher", "destination": "/api/support?action=resend-voucher" },
+    { "source": "/api/knowledge", "destination": "/api/support?action=knowledge" }
   ]
 }
