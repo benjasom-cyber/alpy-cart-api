@@ -36,67 +36,64 @@
 // Answering a snowbrainer.com customer about "Alpinflexi" tells them, correctly,
 // that we did not look at who they are.
 const BRAND_PRODUCTS = {
-  alpy: {
-    label: 'alpy.com',
-    cancellation: 'Alpinflexi',
-    damage: 'Alpinguaranty',
-    accident: 'Alpinsafety',
-    accidentPlus: 'Alpinsafety Plus',
+  // Read off each brand's own terms page. Alpinsafety and Alpinsafety Plus keep
+  // their name everywhere; the cancellation cover and the damage/theft cover are
+  // renamed on every single brand, which is why answering with the wrong one is
+  // both easy to do and obvious to the customer.
+  alpy: { label: 'alpy.com', cancellation: 'Alpinflexi', damage: 'Alpinguaranty',
     terms: 'https://www.alpy.com/en/terms',
-    offers: 'https://www.alpy.com/en/ski-rental/additional-offers',
-  },
-  snowbrainer: {
-    label: 'snowbrainer.com',
-    cancellation: 'Snowflexi',
-    damage: 'Alpinguaranty',
-    accident: 'Alpinsafety',
-    accidentPlus: 'Alpinsafety Plus',
-    terms: 'https://www.snowbrainer.com/en/terms',
-    offers: '',
-  },
-  // location ski moins cher: Alpinguaranty does not exist on this brand at all.
-  lsmc: {
-    label: 'location ski moins cher',
-    cancellation: 'the cancellation protection',
-    damage: null,
-    accident: 'Alpinsafety',
-    accidentPlus: 'Alpinsafety Plus',
-    terms: '',
-    offers: '',
-  },
+    offers: 'https://www.alpy.com/en/ski-rental/additional-offers' },
+
+  snowbrainer: { label: 'snowbrainer.com', cancellation: 'SNOWFLEX', damage: 'SNOWGUARANTY',
+    terms: 'https://www.snowbrainer.com/en/terms', offers: '' },
+
+  lsmc: { label: 'location-ski-moins-cher.com', cancellation: 'SKIFLEXI', damage: 'SKIGUARANTY',
+    terms: 'https://www.location-ski-moins-cher.com/fr/conditions', offers: '' },
+
+  bestprice: { label: 'best-price-ski-rental.com', cancellation: 'SKIFLEXI', damage: 'SKIGUARANTY',
+    terms: 'https://www.best-price-ski-rental.com/en/terms', offers: '' },
+
+  skidiscountfr: { label: 'skidiscount.fr', cancellation: 'SKIFLEXI', damage: 'SKIGUARANTY',
+    terms: 'https://www.skidiscount.fr/fr/conditions', offers: '' },
+
+  skidiscountuk: { label: 'skidiscount.co.uk', cancellation: 'SKIFLEXI', damage: 'SKIGUARANTY',
+    terms: 'https://www.skidiscount.co.uk/en/terms', offers: '' },
+
+  skimarie: { label: 'skimarie.fr', cancellation: 'marieANNULATION', damage: 'marieASSURANCE',
+    terms: 'https://www.skimarie.fr/fr/conditions', offers: '' },
+
+  simplytoski: { label: 'simply to SKI (simplytoski.fr)', cancellation: 'simplyANNULATION',
+    damage: 'simplyGARANTIE', terms: 'https://www.simplytoski.fr/fr/conditions', offers: '' },
+
+  slopefox: { label: 'slopefox.co.uk', cancellation: 'SLOPEFLEX', damage: 'SLOPEGUARANTY',
+    terms: 'https://www.slopefox.co.uk/en/terms', offers: '' },
 };
 
 /**
- * Zendesk brand ids, read from GET /api/v2/brands.json on this instance.
+ * Zendesk brand ids, from GET /api/v2/brands.json on this instance.
  *
  * The brand is the only reliable signal for who the customer thinks they are
- * writing to. It is not in the Odin booking payload and it cannot be inferred
- * from the shop, so the flow passes the trigger's Brand ID and we resolve it
- * here. Ids are stable; names get edited.
+ * writing to. It is not in the Odin booking payload and cannot be inferred from
+ * the shop, so the flow passes the trigger's Brand ID and we resolve it here.
+ * Ids are stable; names get edited.
  *
- * Every brand on the instance is listed, including the ones we do not answer
- * for, so that adding one later is a matter of writing its product names rather
- * than rediscovering that it exists:
- *
- *   246961            ALPY.com                    (default)   answered
- *   360000234758      Snowbrainer.com                         answered
- *   360000232817      location-ski-moins-cher.com             answered
- *   10594343447837    Skirent-Simple Booking                  HANDOVER
- *   360000234878      best-price-ski-rental.com               HANDOVER
- *   360000306538      Hervis                                  HANDOVER
- *   360000304717      pistenfuchs.de                          HANDOVER
- *   6898647504797     simply to SKI                           HANDOVER
- *   360000306518      skidiscount.co.uk                       HANDOVER
- *   360000234818      skidiscount.fr                          HANDOVER
- *   360000306598      skimarie.fr                             HANDOVER
- *   360000306498      slopefox.co.uk                          HANDOVER
- *   23016833469597    Swissrent.com                           HANDOVER
- *   6793694668829     ALPINRESORTS.com Bike Rental            HANDOVER
+ * The brands NOT listed are handovers, deliberately:
+ *   360000304717    pistenfuchs.de           terms page does not render
+ *   23016833469597  Swissrent.com            runs on a different platform
+ *   10594343447837  Skirent - Simple Booking we are the shop; names are the
+ *   360000306538    Hervis                   partner's own
+ *   6793694668829   ALPINRESORTS Bike Rental dead brand, old name of Alpy
  */
 const BRAND_IDS = {
-  '246961': 'alpy',
-  '360000234758': 'snowbrainer',
-  '360000232817': 'lsmc',
+  '246961':         'alpy',
+  '360000234758':   'snowbrainer',
+  '360000232817':   'lsmc',
+  '360000234878':   'bestprice',
+  '360000234818':   'skidiscountfr',
+  '360000306518':   'skidiscountuk',
+  '360000306598':   'skimarie',
+  '6898647504797':  'simplytoski',
+  '360000306498':   'slopefox',
 };
 
 function brandBlock(brandKey) {
@@ -104,10 +101,9 @@ function brandBlock(brandKey) {
   const lines = [
     'BRAND FOR THIS TICKET: ' + b.label,
     'Cancellation protection is called: ' + b.cancellation,
-    b.damage
-      ? 'Damage & theft protection is called: ' + b.damage
-      : 'This brand does NOT sell a damage & theft protection. Do not mention one.',
-    'Accident protections are called: ' + b.accident + ' and ' + b.accidentPlus,
+    'Damage & theft protection is called: ' + b.damage,
+    // The one pair that never changes name, on any brand.
+    'Accident protections are called: Alpinsafety and Alpinsafety Plus',
   ];
   if (b.terms) lines.push('Terms link to use: ' + b.terms);
   if (b.offers) lines.push('Additional offers link to use: ' + b.offers);
@@ -167,14 +163,15 @@ charged.
 
 CHEQUES VACANCES / ANCV
 Depends on the shop. Where accepted, the usual arrangement is a deposit online
-and the remainder on site.
-Most french shops accept it when paying the deposit part online, you can generally use cheques vacances on spot
+and the remainder on site. Most French shops accept them: pay the deposit part
+online, and the cheques vacances can generally be used on the spot.
 
 A PROMOTION CODE IS REFUSED
 By far the commonest cause is a space copied into the field along with the code.
 Ask them to retype it. A code cannot be added to a booking that is already
-confirmed — the only route is to cancel and rebook, and the cancellation fee
-would apply (if alpinflexi not included: usually is)
+confirmed — the only route is to cancel and rebook. A cancellation fee would
+apply if the cancellation protection is not on the booking; it usually is, in
+which case rebooking costs nothing.
 
 THE PRODUCT PAGE WILL NOT LOAD
 Almost always cache or cookies: a hard refresh, clearing the cache, an incognito
@@ -213,7 +210,9 @@ A SPECIFIC BRAND OR MODEL
 Not bookable. We rent price categories, and the shop selects the actual ski on
 the day and fits it to the skier. The models shown on the website are
 illustrative. A customer set on one model can ask the shop directly with the
-contacts on their voucher. After the online booking, the customer receives the direct contact of the store, it is totally fine to organize a specific brand directly with the store after booking made.
+contacts on their voucher. After booking, the customer receives the shop's direct
+contact details, and arranging a specific brand with the shop afterwards is
+perfectly fine — say so rather than closing the subject.
 
 THE CATEGORIES
 3-star Blue/Bronze for beginners and careful skiers; 4-star Red/Silver for
@@ -310,10 +309,13 @@ Clothing, lift passes, ski lessons, goggles, telemark equipment. Sledges are
 only occasionally available and not normally bookable online.
 
 SKI LESSONS
-We do not sell them. Point the customer to ski-pro.com — the flow must ask an
-agent for the correct referral link rather than inventing one.
-The link looks like this: https://ski-pro.com/en/ski-lessons/france/savoie/la-plagne?referrer=alpinres
-
+We do not sell them. Point the customer to ski-pro.com, using a link that carries
+our referral parameter — we are paid per booking, and a link without it earns us
+nothing. The shape is:
+  https://ski-pro.com/en/ski-lessons/france/savoie/la-plagne?referrer=alpinres
+Keep ?referrer=alpinres and swap the country / region / resort for the customer's
+destination. If you cannot build the resort path with confidence, hand over
+rather than send a broken link.
 
 CHILD FOR FREE
 A shop-specific offer, mostly in Austria and never in France, with conditions set
