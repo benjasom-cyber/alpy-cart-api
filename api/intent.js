@@ -926,6 +926,29 @@ export default async function handler(req, res) {
                         return hit ? hit.replace(/^awaiting__/, '') : null;
               })()
       );
+      // A quote we OFFERED is not a question we ASKED. Different tag, on purpose.
+      //
+      // General questions and Shop services both end by offering to prepare a
+      // quote. When the customer replies "oui avec plaisir", that reply matches
+      // no keyword and carries no topic, so without a marker it lands on OTHER
+      // and a human reads a message that says yes to something we proposed.
+      //
+      // Reusing awaiting__quote would have routed it - and then tripped the
+      // anti-loop rule below, which reads awaiting__ as "we already asked for
+      // these details and they still are not here" and hands over. We never
+      // asked. So the offer carries its own tag, it feeds the topic decision
+      // exactly like a pending topic, and it is deliberately absent from
+      // alreadyAsked: the first real question about the rental has yet to be
+      // put, and putting it is the whole point.
+      const offeredTopic = normaliseTopic(
+              params.offered_topic ?? params.offeredtopic ??
+              (function () {
+                        const list = Array.isArray(tags) ? tags : String(tags || '').split(/[,\s]+/);
+                        const hit = list.map(t => String(t || '').trim())
+                          .find(t => /^offered__/.test(t));
+                        return hit ? hit.replace(/^offered__/, '') : null;
+              })()
+      );
       // What the message says outright wins over what the model reported: the
       // customer's own words are the better source, and a model that paraphrases
       // a reference gets it wrong.
@@ -1044,6 +1067,7 @@ export default async function handler(req, res) {
       // Layer 2 - Alpy vocabulary. Layer 3 - whatever the caller's model said.
       const decision = fromTags || detectFromKeywords(message) ||
                        (pendingTopic ? { topic: pendingTopic, source: 'pending_topic', blocked: false } : null) ||
+                       (offeredTopic ? { topic: offeredTopic, source: 'offered_topic', blocked: false } : null) ||
                        (llmTopic ? { topic: llmTopic, source: 'llm', blocked: false } : null) ||
                        { topic: 'OTHER', source: 'none', blocked: false };
 
