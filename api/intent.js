@@ -122,6 +122,18 @@ const KEYWORDS = [
         re: /\b(helmets?|casques?|helm\w*)\b[\s\S]{0,40}\b(compulsory|mandatory|obligatoire|obligatorisch|pflicht|required\s+by\s+law)\b|\bhelmpflicht\b/i },
       { topic: 'GENERAL_QUESTION',
         re: /\b(promo(?:tion)?\s+code|code\s+promo|gutschein\s?code|discount\s+code)\b[\s\S]{0,40}\b(does\s+not|doesn.t|not\s+work\w*|invalid|refus\w*|ne\s+(?:fonctionne|marche)\s+pas|funktioniert\s+nicht)\b/i },
+      // Delivery, and how the shop types differ.
+      //
+      // Added once the answer book learned to answer them. Before that these
+      // landed as "no capability" and a human wrote the same paragraph again:
+      // the router has to know a question is answerable, or the answer might as
+      // well not exist. The delivery words are paired with an equipment or
+      // accommodation word on purpose - "livraison" alone also means the parcel
+      // a shop is waiting for, and that is not this.
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(deliver\w*|livr\w*|liefer\w*|zustell\w*|drop.?off|d[eé]pose\w*)\b[\s\S]{0,60}\b(accommodation|apartment|appartement|apart\w*|hotel|h[oô]tel|chalet|residence|r[eé]sidence|unterkunft|ferienwohnung|lodging|equipment|mat[eé]riel|skis?|ski\s+set|ausr[uü]stung)\b|\b(accommodation|apartment|appartement|hotel|h[oô]tel|chalet|unterkunft)\b[\s\S]{0,60}\b(deliver\w*|livr\w*|liefer\w*)\b/i },
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(top.?shop|best\s+offer|virtual\s+shop|magasin\s+virtuel)\b|\b(difference|diff[eé]rence|unterschied)\b[\s\S]{0,50}\b(shops?|magasins?|gesch[aä]ft\w*|l[aä]den)\b/i },
 ];
 
 /**
