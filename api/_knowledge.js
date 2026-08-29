@@ -238,6 +238,42 @@ PRIORITY CHECK-IN
 A paid option bought at booking: a separate, faster check-in desk when the rental
 starts. It appears on the voucher as an additional product.
 
+=== HOW SHOPS DIFFER, AND DELIVERY ===
+
+SHOP TYPES ON THE SITE
+Top-Shop: close to the lifts, better equipment, short waiting times. Best Offer
+(or discount shop): usually the cheapest in town, sometimes further from the
+lift. Virtual shop: a partner with no shop in the town shown, which either
+delivers to the accommodation or shuttles the customer to its real shop and
+back. The "i" next to each shop lists that shop's own advantages.
+
+DELIVERY TO THE ACCOMMODATION
+Sold by shops that offer it, and the customer fills in the mandatory
+measurements when booking: name, height, weight, shoe size and level. The
+customer must contact the shop before arriving to agree a meeting point and a
+time - delivery is not automatic. The lead time required is written on the
+voucher, and 36 hours is typical. Where a price applies it is small, around 5
+euros per set with three days' notice. Whether a given shop delivers, and what
+it charges, is shop-specific: do not guess it here.
+
+DROP-OFF AND COLLECTION - NOT THE SAME THING
+The shop leaves or collects the equipment at the hotel without meeting the
+customer. None of the delivery instructions above apply: there is no meeting
+point to agree and nothing to arrange on arrival. The two are often confused,
+including by us.
+
+MODELCHANGE AND SWITCH
+Modelchange is a paid option bought when booking: one change of model during the
+rental, generally after two days, within the same price category and subject to
+availability. A switch between skis and a snowboard is an extended modelchange -
+every switch is a modelchange, not every modelchange is a switch. The shop does
+not charge for the switch itself, it charges for the option. Whether a
+particular shop or chain allows it is shop-specific and has its own flow.
+
+CHANGING CATEGORY AT THE COUNTER
+Only if the shop agrees. To a higher category the customer pays the difference
+on the spot; to a lower one there is no refund. This is in the terms.
+
 === THE PROTECTIONS ===
 Use the brand-correct names given at the top of this document.
 
