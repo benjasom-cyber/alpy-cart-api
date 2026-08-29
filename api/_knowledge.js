@@ -308,6 +308,69 @@ Maximum 14 days per booking — a longer stay needs two bookings. Maximum 50 peo
 per booking. Most shops stop accepting bookings at a cut-off before the first
 day, often 3pm the day before.
 
+=== CANCELLATION AFTER THE RENTAL HAS STARTED ===
+
+The answer is no. How we say it is the whole point, and it follows a fixed order.
+Skipping a step is what turns a correct answer into a bad rating.
+
+1. THANK THEM AND NAME THE FEELING, WITHOUT CONCEDING THE POINT.
+   "We can totally understand your frustration", "we cannot be satisfied that the
+   service did not match your expectations". We are not indifferent, and we say so
+   before we say no.
+
+2. POINT TO THE RULE THEY ALREADY MET.
+   No cancellation or change is possible after 08:00 on the day before the first
+   rental day. They accepted the terms when booking, and the deadline is printed
+   IN CAPITAL LETTERS on the voucher and in the confirmation email. We say this to
+   show the process is transparent, not to win an argument: the rule was visible
+   before they needed it.
+
+3. GIVE THE ANALOGY.
+   You cannot cancel a hotel night once the date has passed, or a flight once the
+   plane has left. Our industry works the same way. The equipment was reserved for
+   them for the whole period: what they paid for is the availability of that
+   equipment over those dates, and it was held for them.
+
+4. EXPLAIN WHY THE RULE EXISTS, WITHOUT HIDING BEHIND IT.
+   We are an intermediary. We can offer very competitive prices because we respect
+   a small number of partner rules, and one of them is that a booking cannot be
+   cancelled after the first rental day. We have to respect our customers and our
+   shop partners equally. Never write "we are only an intermediary" and stop there.
+
+5. NAME THE PROTECTION THAT WOULD HAVE COVERED IT.
+   Alpinsafety Plus exists precisely because skiing is a dangerous sport and plans
+   change: it refunds the days not used. It was not on this booking. State it as
+   the reason the answer is what it is - never as a reproach, never "you should
+   have".
+
+6. SAY THE NO PLAINLY, ONCE.
+   We are unable to process this claim on this booking. One sentence. Do not
+   repeat it, do not decorate it.
+
+7. OPEN THE NEXT DOOR, AND MEAN IT.
+   This is the part that must never be dropped. Not being able to do anything on
+   THIS booking does not mean we are unwilling to help. Invite them to contact us
+   before their next booking and we will organise a special price or a credit for
+   them. Our exchanges are stored, so we will remember them. That offer is real:
+   it is what turns a refusal into a customer we keep.
+
+AND THE MEDICAL DOOR
+Where injury or illness is involved, the no is not the end of the conversation.
+Ask for BOTH documents: a medical certificate dated inside the rental period, and
+the shop's written confirmation of the early return. With Alpinsafety Plus the
+claim then goes to ERV on +41 848 801 803 - we cannot file it for them. Without a
+protection, those two documents are what allows a goodwill gesture on the unused
+days of the affected person only, decided by a human, never by this flow.
+
+Open that door while laying the ground for the no, in the same message. A customer
+told only "no" argues; a customer told "no, and here is the route that does exist"
+sends the certificate.
+
+WHAT NEVER APPEARS IN THIS ANSWER
+No blame. No "you should have read". No promise of an amount. No refund figure
+that has not been simulated in Odin. And never a gesture covering the whole party
+when one person was injured - that one causes real problems with the shop.
+
 === WHAT WE DO AND DO NOT SELL ===
 
 WE DO NOT RENT
