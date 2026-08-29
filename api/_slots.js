@@ -211,12 +211,24 @@ export const ROUTES = {
       // front of an agent. It never touches the booking and never creates a
       // coupon.
       //
-      // booking_ref is required because everything the agent needs to decide -
-      // the dates, whether Alpinsafety or Alpinsafety Plus is on the booking,
-      // what the unused days are worth - is only knowable from the booking.
+      // needs is deliberately empty, and it used to be ['booking_ref'].
+      //
+      // Everything the answer depends on - the dates, whether Alpinsafety Plus is
+      // on the booking, whether they bought the cancellation cover - is only
+      // knowable from the booking, so the reference genuinely is required. But
+      // requiring it HERE meant asking the customer for it, and the flow can now
+      // find it on its own: it reads the requester's address, searches Odin on
+      // that address, and takes the most recent booking whose rental has already
+      // started. Gating on the slot therefore bought nothing and cost a round
+      // trip - the worst possible one, since it lands on someone who has just
+      // written to us injured.
+      //
+      // The flow still refuses to answer blind: if neither the message nor the
+      // email address yields a booking, it hands over with a note saying so.
+      // That check belongs there, where the booking is actually read, not here.
       CANCELLATION_AFTER: {
               flow: 'Cancellation after start',
-              needs: ['booking_ref'],
+              needs: [],
       },
       // Questions that need knowledge and no action at all.
       //
