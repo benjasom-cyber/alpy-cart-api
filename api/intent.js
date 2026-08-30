@@ -505,6 +505,105 @@ function saysSameAsBefore(text) {
       return SAME_AS_BEFORE.test(t);
 }
 
+
+/**
+ * The resort the customer named without naming it.
+ *
+ * On 581828 the customer wrote the name of a lift and the name of a shop he did
+ * NOT want, never the town. The extractor looked for a resort in the shape it
+ * knows, found none, and asked a question whose answer was already on the page.
+ * That is the same failure as 581704 and 581788 wearing a third disguise: the
+ * information was there in a form we did not recognise.
+ *
+ * Adding another keyword pattern would only have covered the next case badly.
+ * Our own shop table already carries the town of all 931 shops, so a shop name
+ * anywhere in the thread resolves the town exactly - no guessing, no Odin call,
+ * no new step in any flow.
+ *
+ * Deliberately conservative:
+ *  - only distinctive words count. "Ski", "Sport", "Rental", "Verleih" and their
+ *    friends appear in hundreds of shop names and would match everything.
+ *  - a token must be at least 5 characters and match on a word boundary.
+ *  - if two different towns match, we resolve NOTHING. An ambiguous guess about
+ *    where someone is skiing is worse than a question.
+ *
+ * A shop the customer REFUSES still tells us the town - that is the whole point
+ * of 581828, where "not the Cianross" was the only geographic fact in the mail.
+ * So the town is taken and the shop is recorded as excluded, never proposed.
+ */
+const SHOPS_URL_FOR_PLACES =
+  'https://raw.githubusercontent.com/benjasom-cyber/alpy-cart-api/main/api/shops_data.json';
+
+const GENERIC_SHOP_WORDS = new Set([
+  'ski', 'skis', 'skiing', 'sport', 'sports', 'sportshop', 'rental', 'rent',
+  'rentals', 'verleih', 'skiverleih', 'noleggio', 'location', 'shop', 'store',
+  'center', 'centre', 'point', 'service', 'salon', 'snow', 'board', 'snowboard',
+  'intersport', 'sportservice', 'skirental', 'skiservice', 'sci', 'neige',
+  'montagne', 'mountain', 'alpin', 'alpine', 'des', 'the', 'and', 'und',
+]);
+
+let _shopPlaces = null;
+
+function deaccent(x) {
+  return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+async function loadShopPlaces() {
+  if (_shopPlaces) return _shopPlaces;
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(SHOPS_URL_FOR_PLACES, { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) return (_shopPlaces = []);
+    const rows = await r.json();
+    _shopPlaces = (Array.isArray(rows) ? rows : []).map(row => ({
+      name: row.name,
+      town: row.town,
+      tokens: deaccent(row.name).split(/[^a-z0-9]+/)
+        .filter(w => w.length >= 5 && !GENERIC_SHOP_WORDS.has(w)),
+    })).filter(x => x.tokens.length);
+    return _shopPlaces;
+  } catch {
+    // No table, no resolution, and the flow behaves exactly as it did before.
+    return (_shopPlaces = []);
+  }
+}
+
+/** Was this mention a refusal? "not the X", "pas le X", "non ... X". */
+function mentionIsRefused(hay, at) {
+  const before = hay.slice(Math.max(0, at - 90), at);
+  return /\b(not|no|nicht|kein|keine|pas|non|nessun|senza|other than|anything but|instead of)\b/i.test(before);
+}
+
+async function resolvePlaceFromShops(text) {
+  const hay = deaccent(text);
+  if (hay.length < 8) return null;
+  const shops = await loadShopPlaces();
+  const byTown = new Map();
+
+  for (const shop of shops) {
+    for (const tok of shop.tokens) {
+      const at = hay.indexOf(tok);
+      if (at < 0) continue;
+      const before = at === 0 ? ' ' : hay.charAt(at - 1);
+      const after = hay.charAt(at + tok.length) || ' ';
+      if (/[a-z0-9]/.test(before) || /[a-z0-9]/.test(after)) continue;
+      const cur = byTown.get(shop.town) || { town: shop.town, shops: [], refused: [] };
+      if (mentionIsRefused(hay, at)) {
+        if (!cur.refused.includes(shop.name)) cur.refused.push(shop.name);
+      } else if (!cur.shops.includes(shop.name)) {
+        cur.shops.push(shop.name);
+      }
+      byTown.set(shop.town, cur);
+      break;
+    }
+  }
+
+  if (byTown.size !== 1) return null;   // nothing, or ambiguous - ask instead
+  return byTown.values().next().value;
+}
+
 const ODIN_BASE = 'https://odin.alpy.com';
 
 async function fetchBookingHistory(ref) {
@@ -1122,6 +1221,26 @@ export default async function handler(req, res) {
       // What it may DO with what it reads is the part that is fenced.
       let history = '';
       let historyApplied = [];
+
+      // Before asking WHERE, look at what they already wrote. A shop name they
+      // mentioned - even one they ruled out - names the town exactly.
+      let placeFound = null;
+      if ((topic === 'QUOTE' || topic === 'REQUOTE' || topic === 'GENERAL_QUESTION') &&
+          !slots.resort_name && !slots.shop_name) {
+              const wholeThread = [thread.subject, message]
+                .concat(thread.turns || []).filter(Boolean).join('\n');
+              placeFound = await resolvePlaceFromShops(wholeThread);
+              if (placeFound) {
+                        slots.resort_name = placeFound.town;
+                        historyApplied.push('resort_name_from_shop');
+                        // A shop named positively is a preference worth keeping.
+                        // A shop refused is never proposed, and never becomes a slot.
+                        if (placeFound.shops.length === 1 && !placeFound.refused.length) {
+                                  slots.shop_name = placeFound.shops[0];
+                                  historyApplied.push('shop_name_from_mention');
+                        }
+              }
+      }
       const wantsSame = saysSameAsBefore(message) ||
                         (thread.turns || []).some(saysSameAsBefore);
       const refForHistory = slots.booking_ref || refFromHistory;
@@ -1289,6 +1408,8 @@ export default async function handler(req, res) {
               // from history rather than from the customer's message.
               booking_history: history,
               history_applied: historyApplied.join(','),
+      resolved_place: placeFound ? placeFound.town : '',
+      excluded_shops: placeFound ? placeFound.refused.join(' | ') : '',
               assumed_slots: (check.assumed || []).map(a => a.slot).join(','),
               action,
               // The whole gate in one value.
