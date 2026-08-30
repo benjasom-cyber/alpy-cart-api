@@ -8,7 +8,7 @@
     "api/get-cheapest-shop.js": { "memory": 128, "maxDuration": 15 },
     "api/execute-date-change.js":{ "memory": 128, "maxDuration": 15 },
     "api/odin-auth.js": { "memory": 128, "maxDuration": 10 },
-    "api/support.js": { "memory": 256, "maxDuration": 30 }
+    "api/support.js": { "memory": 256, "maxDuration": 60 }
   },
   "rewrites": [
     { "source": "/api/check-date-change", "destination": "/api/support?action=check-date-change" },
@@ -18,6 +18,11 @@
     { "source": "/api/unsubscribe-newsletter", "destination": "/api/support?action=unsubscribe-newsletter" },
     { "source": "/api/large-group-quote", "destination": "/api/support?action=large-group-quote" },
     { "source": "/api/resend-voucher", "destination": "/api/support?action=resend-voucher" },
-    { "source": "/api/knowledge", "destination": "/api/support?action=knowledge" }
+    { "source": "/api/knowledge", "destination": "/api/support?action=knowledge" },
+    { "source": "/api/review-run", "destination": "/api/support?action=review-run" },
+    { "source": "/api/review-digest", "destination": "/api/support?action=review-digest" }
+  ],
+  "crons": [
+    { "path": "/api/review-run", "schedule": "0 5 * * *" }
   ]
 }
