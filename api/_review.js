@@ -83,6 +83,8 @@ const MARK = 'SKIBOT-REVIEW';
 const AI_TAGS = new Set([
   'offered__quote',
   'skibot_answered',
+  'skibot_handled',
+  'general_question_answered',
   'ai_answered',
 ]);
 const AI_TAG_PREFIXES = ['awaiting__', 'offered__', 'skibot__'];
@@ -112,6 +114,40 @@ const BUDGET_MS = 48000;
 // without multiplying load; more than three and the Zendesk rate limiter starts
 // answering 429 to the comment reads, which would cost more than it saves.
 const CONCURRENCY = 3;
+
+/**
+ * Which flow wrote this, and therefore which rules apply.
+ *
+ * The first live run failed 5 replies out of 5, and three of those were my
+ * mistake, not the flow's. The rubric was written for the general-questions
+ * flow - which is forbidden to touch a specific booking - and then applied to
+ * the cancellation flow, whose entire job is to read a booking from Odin and
+ * tell the customer its dates. Two perfectly correct answers were graded HIGH
+ * severity for doing exactly what they were built to do.
+ *
+ * A reviewer that reopens correct tickets is worse than no reviewer, so the
+ * rules are now selected by the tags the flow itself left behind.
+ */
+function flowProfile(tags) {
+  const t = tags || [];
+  if (t.indexOf('awaiting__cancellation') > -1) return 'cancellation';
+  if (t.indexOf('general_question') > -1 || t.indexOf('general_question_answered') > -1) return 'general';
+  if (t.indexOf('depot') > -1 || t.indexOf('shop_services') > -1) return 'general';
+  return 'unknown';
+}
+
+/**
+ * A ticket the flow already escalated needs nothing from us.
+ *
+ * When a flow ends in handover it has already said so, tagged the ticket and
+ * put it in front of a human. Grading that reply can only produce a note on a
+ * ticket somebody is already reading - noise on the exact tickets where
+ * attention is already where it should be.
+ */
+function alreadyWithHuman(tags) {
+  const t = tags || [];
+  return t.indexOf('needs_human') > -1 || t.indexOf('handover_done') > -1;
+}
 
 function isAiTouched(tags) {
   for (const t of tags || []) {
@@ -223,6 +259,12 @@ const RUBRIC = [
 '  the message itself.',
 '- It replies to a complaint, an injury, an illness or a legal threat. Those are',
 '  never ours to answer.',
+'',
+'=== NOT PART OF THE MESSAGE ===',
+'Ignore the signature block at the end - the name, the company, the phone number,',
+'the email address, the website. It is appended by the mail system, it is the same',
+'on every reply the company sends, and the flow did not write it. A contact detail',
+'that appears there is never an invented fact. Judge only the body above it.',
 '',
 '=== DO NOT FAIL IT FOR ===',
 'Being short. Being warm. Offering a quote or naming our protections - that is',
@@ -427,7 +469,11 @@ async function reviewTicket(ticket, opts) {
   const commentId = picked.comment.id;
   out.comment = commentId;
 
+  const profile = flowProfile(ticket.tags);
+  out.profile = profile;
+
   if (alreadyReviewed(comments, commentId)) { out.skipped = 'already reviewed'; return out; }
+  if (alreadyWithHuman(ticket.tags)) { out.skipped = 'already handed to a human'; return out; }
 
   const message = strip(picked.comment.plain_body || picked.comment.body);
   if (!message) { out.skipped = 'empty reply'; return out; }
@@ -435,8 +481,29 @@ async function reviewTicket(ticket, opts) {
   const knowledge = knowledgeFor(ticket.brand_id);
   const transcript = buildTranscript(comments, picked.index, ticket.requester_id);
 
+  const profileNote = profile === 'cancellation'
+    ? ['=== WHAT THIS PARTICULAR FLOW WAS ALLOWED TO DO ===',
+       'This reply came from the cancellation flow. That flow reads the customer own',
+       'booking from the live reservation system and is REQUIRED to state its dates,',
+       'its reference and whether a cancellation is free. Those facts are true by',
+       'construction and are NOT in the reference material below - the book holds',
+       'general rules, not one customer booking.',
+       '',
+       'So do NOT fail this reply for naming a booking reference, a rental start date,',
+       'a cancellation deadline or whether fees apply. BOOKING_SPECIFIC does not exist',
+       'for this flow. Judge the rest: promises, interference in an insurance claim,',
+       'sending the customer to a shop, language, leaked reasoning, and whether a',
+       'complaint or injury was answered that should not have been.'].join('\n')
+    : ['=== WHAT THIS PARTICULAR FLOW WAS ALLOWED TO DO ===',
+       'This reply came from a flow that answers general questions only. It has no',
+       'access to any individual booking and must never state one booking dates,',
+       'price or status. Everything factual it says must come from the reference',
+       'material below.'].join('\n');
+
   const prompt = [
     RUBRIC,
+    '',
+    profileNote,
     '',
     '=== THE REFERENCE MATERIAL THE FLOW WAS ALLOWED TO USE ===',
     knowledge || '(none - this brand has no confirmed answer book, so ANY product name or ' +
