@@ -85,7 +85,28 @@ const KEYWORDS = [
       // The article is optional on purpose. "Cancel booking BT4WSA" is the way
       // customers actually write it, and requiring "my" or "the" meant the
       // keyword layer missed it and the whole decision fell to the model.
-      { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|this)?\s*(booking|reservation|order|rental)|annul(?:er|ation)\s+(?:de\s+)?(?:ma|la|notre|cette)?\s*r[eé]servation|storno)\b/i },
+      // Three ways a customer asks for a cancellation, and the first version of
+      // this rule only caught one of them.
+      //
+      // On 581832 the customer wrote "Please kindly cancel the second booking
+      // under confirmation BCGUA7". The article was there, the noun was there -
+      // but the word "second" sat between them, and the rule required them
+      // adjacent. The keyword layer missed, the decision fell to the model, and
+      // the model answered OTHER. A perfectly clear cancellation was routed to
+      // nobody because of one adjective.
+      //
+      // So: allow up to two words between the article and the noun, and accept
+      // "cancel <REFERENCE>" on its own - which is how customers write it once
+      // they have quoted the reference earlier in the message.
+      { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|this|that)?\s*(?:\w+\s+){0,2}(booking|reservation|order|rental)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation)\s+(?:de\s+)?(?:ma|la|notre|cette)?\s*(?:\w+\s+){0,2}r[eé]servation|storno)\b/i },
+      // A double booking IS a cancellation request, and it is one of the most
+      // common ones: the payment page errored, the customer tried again, and now
+      // they hold two. Nothing about that sentence says "cancel my booking" in
+      // the shape above, so it used to fall through to the model - and the model
+      // called it OTHER. The pairing is what makes it safe: the word duplicate
+      // alone is a statement, duplicate plus a cancel or refund word is a request.
+      { topic: 'CANCELLATION',
+        re: /\b(duplicate|duplicated|double|twice|two\s+(?:identical|same)\s+bookings?|en\s+double|deux\s+fois|doppelt|doppelte)\b[\s\S]{0,300}\b(cancel\w*|annul\w*|storn\w*|refund\w*|rembours\w*|erstatt\w*)/i },
       { topic: 'DATE_CHANGE',   re: /\b(change\s+(my|the)\s+dates?|move\s+(my|the)\s+booking|postpone|d[eé]caler|changer\s+(mes|les)\s+dates?|different\s+dates?)\b/i },
       // REQUOTE is re-pricing a booking that already exists, so it sits AFTER
       // DATE_CHANGE: a customer moving their dates wants the date-change flow,
