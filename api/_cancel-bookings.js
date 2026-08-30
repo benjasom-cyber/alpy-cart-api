@@ -175,6 +175,10 @@ export async function handler(req, res) {
 
   const cancelled = [];
   const failed = [];
+  // Whatever the single-booking endpoint returned last. We hand its fields back
+  // untouched so the existing custom action, whose declared outputs are the ones
+  // that endpoint produces, keeps working when its URL is pointed here.
+  let lastBody = null;
   for (const ref of checked) {
     let r;
     try {
@@ -182,7 +186,7 @@ export async function handler(req, res) {
     } catch (e) {
       r = { ok: false, status: 0, body: { error: String(e && e.message || e).slice(0, 200) } };
     }
-    if (r.ok) { cancelled.push(ref); continue; }
+    if (r.ok) { cancelled.push(ref); lastBody = r.body || lastBody; continue; }
     // No retry. See the header: an error is not proof that nothing happened.
     failed.push({ ref, status: r.status, detail: (r.body && (r.body.error || r.body.message)) || '' });
     break;
@@ -190,7 +194,28 @@ export async function handler(req, res) {
 
   const notCancelled = checked.filter(r => cancelled.indexOf(r) === -1);
 
+  const summaryText = failed.length === 0
+    ? (cancelled.length === 1
+        ? 'Booking ' + cancelled[0] + ' has been cancelled.'
+        : 'Bookings ' + cancelled.join(', ') + ' have been cancelled.')
+    : 'Cancelled: ' + (cancelled.join(', ') || 'none') + '. Stopped on ' + failed[0].ref +
+      '. Do NOT retry automatically - check in Odin what actually went through before ' +
+      'doing anything else, then finish by hand.';
+
   return res.status(200).json({
+    // ── Backward-compatible fields ────────────────────────────────────────
+    // The cancel_booking custom action declares exactly these outputs. Keeping
+    // them means pointing its URL here changes nothing downstream: a flow that
+    // cancels one booking behaves as it always did, and the same flow now also
+    // handles two. Anything the single endpoint returned that we do not
+    // override is passed through untouched.
+    ...(lastBody && typeof lastBody === 'object' ? lastBody : {}),
+    success: failed.length === 0,
+    message: summaryText,
+    bookingreference: cancelled.join(', '),
+    bookingReference: cancelled.join(', '),
+
+    // ── What is new ───────────────────────────────────────────────────────
     ok: failed.length === 0,
     action: failed.length === 0 ? 'DONE' : 'HANDOVER',
     cancelled,
@@ -198,13 +223,7 @@ export async function handler(req, res) {
     failed,
     count: cancelled.length,
     // Ready to paste into a public reply or an internal note by the caller.
-    summary: failed.length === 0
-      ? (cancelled.length === 1
-          ? 'Booking ' + cancelled[0] + ' has been cancelled.'
-          : 'Bookings ' + cancelled.join(', ') + ' have been cancelled.')
-      : 'Cancelled: ' + (cancelled.join(', ') || 'none') + '. Stopped on ' + failed[0].ref +
-        '. Do NOT retry automatically - check in Odin what actually went through before ' +
-        'doing anything else, then finish by hand.',
+    summary: summaryText,
   });
 }
 

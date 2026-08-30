@@ -1539,6 +1539,11 @@ export default async function handler(req, res) {
       // whole list to /api/cancel-bookings; it is not a fallback for booking_ref.
       targetRefs: targets,
       targetrefs: targets,
+      // The same list as plain text. An action flow passes text between steps far
+      // more reliably than it passes an array, and the cancel endpoint splits on
+      // commas - so this is what the flow should feed to bookingreference.
+      targetRefsText: targets.join(', '),
+      targetrefstext: targets.join(', '),
       // Named by the customer, deliberately NOT acted on.
       refsNotActedOn: targets.length ? multipleRefs.filter(r => targets.indexOf(r) === -1) : [],
               agentNote: escalation ? escalation : (action === 'HANDOVER'
