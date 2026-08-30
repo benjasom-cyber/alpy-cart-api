@@ -21,7 +21,10 @@
     { "source": "/api/knowledge", "destination": "/api/support?action=knowledge" },
     { "source": "/api/review-run", "destination": "/api/support?action=review-run" },
     { "source": "/api/review-digest", "destination": "/api/support?action=review-digest" },
-    { "source": "/api/review-report", "destination": "/api/support?action=review-report" }
+    { "source": "/api/review-report", "destination": "/api/support?action=review-report" },
+    { "source": "/api/training-run", "destination": "/api/support?action=training-run" },
+    { "source": "/api/training-digest", "destination": "/api/support?action=training-digest" },
+    { "source": "/api/cancel-bookings", "destination": "/api/support?action=cancel-bookings" }
   ],
   "crons": [
     { "path": "/api/review-run", "schedule": "0 5 * * *" }
