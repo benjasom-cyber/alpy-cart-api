@@ -20,7 +20,8 @@
     { "source": "/api/resend-voucher", "destination": "/api/support?action=resend-voucher" },
     { "source": "/api/knowledge", "destination": "/api/support?action=knowledge" },
     { "source": "/api/review-run", "destination": "/api/support?action=review-run" },
-    { "source": "/api/review-digest", "destination": "/api/support?action=review-digest" }
+    { "source": "/api/review-digest", "destination": "/api/support?action=review-digest" },
+    { "source": "/api/review-report", "destination": "/api/support?action=review-report" }
   ],
   "crons": [
     { "path": "/api/review-run", "schedule": "0 5 * * *" }
