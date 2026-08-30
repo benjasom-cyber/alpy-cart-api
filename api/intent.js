@@ -1372,20 +1372,31 @@ export default async function handler(req, res) {
               targets = designatedRefs(wholeText, multipleRefs);
       }
 
-      if (targets.length) {
-              // Act on exactly what the customer pointed at. One or several - the
-              // number is theirs to decide, not ours. Everything they named
-              // without pointing at it stays untouched and is listed in the note,
-              // so the choice is visible rather than silent.
+      if (targets.length === 1) {
+              // Exactly what the customer pointed at, and nothing else. The other
+              // references they named are context - on 581832, "First booking:
+              // B91NDK" was the customer telling us which one to keep.
               slots.booking_ref = targets[0];
               check = checkSlots(topic, slots);
               action = check.ready ? 'RUN' : 'ASK';
-              escalation = targets.length > 1
-                ? 'The customer asked us to act on ' + targets.length + ' bookings (' +
-                  targets.join(', ') + '). They are handled together by ' +
-                  '/api/cancel-bookings, which checks every one of them belongs to the ' +
-                  'requester before cancelling any, and cancels nothing if one fails.'
-                : null;
+              escalation = null;
+      } else if (targets.length > 1) {
+              // Several bookings genuinely to act on, and the capability flow
+              // handles ONE booking per run - it cancels through the Odin MCP
+              // steps and computes the refund itself, in a chain that has no loop
+              // in it. Passing it the first of two would cancel one booking, tell
+              // the customer it was done, and silently leave the second standing.
+              //
+              // That is worse than handing over, so we hand over, and we say
+              // exactly what has to happen. Wiring the multi-booking path
+              // (api/_cancel-bookings.js) means giving it the same refund
+              // behaviour as the flow, and that is not something to guess at.
+              action = 'HANDOVER';
+              escalation = 'The customer asked us to cancel ' + targets.length +
+                           ' bookings (' + targets.join(', ') + '). Each one is clearly ' +
+                           'designated - do not ask them which. Our cancellation flow ' +
+                           'handles one booking per run, so cancel them by hand, together, ' +
+                           'and reply once.';
       } else if (multipleRefs.length > 1 && topic !== 'OTHER') {
               action = 'HANDOVER';
               escalation = 'The customer named ' + multipleRefs.length + ' bookings (' +
