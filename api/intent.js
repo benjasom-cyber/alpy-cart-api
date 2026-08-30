@@ -180,17 +180,45 @@ const INTERNAL_DOMAINS = [
  */
 const FORWARD_PREFIX = /^\s*(WG|TR|FW|FWD)\s*:/i;
 
-function detectInternalSender(message, senderEmail) {
+function detectInternalSender(message, senderEmail, subject) {
       const from = String(senderEmail || '').trim();
       if (from && INTERNAL_DOMAINS.some(re => re.test(from))) {
               return { topic: 'OTHER', source: 'internal_sender', blocked: true };
       }
 
-      // Only the first line is eligible - a forward prefix lives there or
-      // nowhere. Scanning the whole body would match every quoted thread.
+      // The subject carries the forward prefix far more often than the body.
+      //
+      // Found on 581757: a partner shop forwarded "FW: Alpy.com: Neue Buchung
+      // eingegangen!" and wrote "bitte buchungen stoppen" underneath. The body's
+      // first line was "Hallo", so this check passed it through, the flow read a
+      // cancellation, and we replied to the SHOP offering to cancel a CUSTOMER's
+      // booking by name. The booking was not theirs to cancel.
+      //
+      // The subject is the one place a forward always announces itself.
+      if (FORWARD_PREFIX.test(String(subject || ''))) {
+              return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
+      }
+
+      // Only the first line of the body is eligible - a forward prefix lives
+      // there or nowhere. Scanning the whole body would match every quoted thread.
       const firstLine = String(message || '').split(/\r?\n/).find(l => l.trim() !== '') || '';
       if (FORWARD_PREFIX.test(firstLine)) {
               return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
+      }
+
+      // A company writing to us about the season, not a customer writing about a trip.
+      //
+      // Same ticket: a legal-entity signature (GmbH, UID, FN) with a message about
+      // stopping bookings and agreeing conditions before the season. That is a
+      // partner negotiating commercial terms. No flow should answer it, and the
+      // cancellation flow least of all - "stop the bookings" is not "cancel mine".
+      const body = String(message || '');
+      const hasCompanySignature =
+              /\b(gmbh|s\.?r\.?o\.?|s\.?a\.?r\.?l\.?|ltd\b|b\.?v\.?|a\.?g\b|UID\s*[A-Z]{2}|FN\s*\d{4,}|VAT\s*(?:no|number|ID))/i.test(body);
+      const talksBusiness =
+              /\b(buchungen\s+stoppen|stop\s+(?:all\s+)?bookings|arr[eê]ter\s+les\s+r[eé]servations|konditionen|conditions?\s+for\s+(?:the\s+)?(?:next\s+)?season|vor\s+der\s+saison|preise\s+(?:bekannt|festgelegt)|tarifs?\s+(?:de\s+la\s+)?saison|commission|vertrag|contract)\b/i.test(body);
+      if (hasCompanySignature && talksBusiness) {
+              return { topic: 'OTHER', source: 'partner_business', blocked: true };
       }
 
       return null;
@@ -1015,7 +1043,7 @@ export default async function handler(req, res) {
       // Layer 0 - internal or partner sender. Layer 1 - native tags.
       // Either one stops the whole thing, before any topic is considered.
       const fromTags = detectFromTags(tags);
-      const blocked = detectInternalSender(message, senderEmail) || (fromTags && fromTags.blocked ? fromTags : null);
+      const blocked = detectInternalSender(message, senderEmail, thread.subject) || (fromTags && fromTags.blocked ? fromTags : null);
       if (blocked) {
               const note = blocked.source === 'internal_sender'
                 ? 'This is internal or partner mail, not a customer request. Route it to the right team - no flow should answer it.'
