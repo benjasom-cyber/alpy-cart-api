@@ -440,6 +440,30 @@ function buildKnowledge(brandKey) {
   return [brandBlock(brandKey), '', VOCABULARY, '', FACTS].join('\n');
 }
 
+/**
+ * The same brand resolution the HTTP handler does, pulled out so other modules
+ * can reuse it without an HTTP round trip.
+ *
+ * _review.js needs the exact book the flow was allowed to use, because judging a
+ * reply against a DIFFERENT book is worse than not judging it at all: it would
+ * fail correct answers for facts the flow never had, and pass wrong ones the
+ * flow invented. One function, one source, both callers.
+ */
+export function resolveBrand(raw) {
+  const r = String(raw ?? '').trim().toLowerCase();
+  if (BRAND_IDS[r]) return BRAND_IDS[r];
+  if (r.includes('snowbrain')) return 'snowbrainer';
+  if (r.includes('moins cher') || r.includes('lsmc')) return 'lsmc';
+  if (r.includes('alpy')) return 'alpy';
+  return null;
+}
+
+/** The book for a brand id or name, or '' when the brand is not supported. */
+export function knowledgeFor(raw) {
+  const key = resolveBrand(raw);
+  return key ? buildKnowledge(key) : '';
+}
+
 export async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -452,11 +476,7 @@ export async function handler(req, res) {
   const raw = String(params.brand ?? params.brandId ?? params.brandid ??
                      params.brandName ?? params.brandname ?? '').trim().toLowerCase();
 
-  let brandKey = null;
-  if (BRAND_IDS[raw]) brandKey = BRAND_IDS[raw];
-  else if (raw.includes('snowbrain')) brandKey = 'snowbrainer';
-  else if (raw.includes('moins cher') || raw.includes('lsmc')) brandKey = 'lsmc';
-  else if (raw.includes('alpy')) brandKey = 'alpy';
+  const brandKey = resolveBrand(raw);
 
   // Deliberately closed rather than open.
   //

@@ -13,6 +13,8 @@
  *   large-group-quote       → POST /api/large-group-quote
  *   resend-voucher          → POST /api/resend-voucher
  *   knowledge               → GET  /api/knowledge
+ *   review-run              → POST /api/review-run      (secret required)
+ *   review-digest           → GET  /api/review-digest   (secret required)
  *
  * Vercel rewrites in vercel.json forward the legacy endpoint paths here,
  * so all existing Zendesk custom action URLs continue to work unchanged.
@@ -31,6 +33,7 @@ import { handler as unsubscribeNewsletter } from './_unsubscribe-newsletter.js';
 import { handler as largeGroupQuote } from './_large-group-quote.js';
 import { handler as resendVoucher } from './_resend-voucher.js';
 import { handler as knowledge } from './_knowledge.js';
+import { handler as review } from './_review.js';
 
 const HANDLERS = {
   'check-date-change': checkDateChange,
@@ -41,6 +44,10 @@ const HANDLERS = {
   'large-group-quote': largeGroupQuote,
   'resend-voucher': resendVoucher,
   'knowledge': knowledge,
+  // Both review actions share one handler: it reads req.query.action itself, so
+  // the two URLs stay separate for the caller while the code stays single.
+  'review-run': review,
+  'review-digest': review,
 };
 
 export default async function handler(req, res) {
