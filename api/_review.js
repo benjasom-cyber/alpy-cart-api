@@ -94,6 +94,25 @@ const T_HUMAN    = 'needs_human';
 
 const STATUS_OPEN = 'open';
 
+// A run must always answer, even when it has not finished.
+//
+// The first live run died on FUNCTION_INVOCATION_TIMEOUT: a 72h window, tickets
+// judged strictly one after another, one Claude call each. Vercel killed it at
+// 60s and the caller got an error instead of the twelve verdicts that were
+// already computed - the work was done and thrown away.
+//
+// So the loop now watches the clock and stops dispatching before the platform
+// stops it. A partial answer with `remaining` in it is a useful answer: nothing
+// is lost, because a ticket already judged carries its note and the next run
+// skips it. A timeout is not.
+const BUDGET_MS = 48000;
+
+// Three at a time. The wall-clock cost of a ticket is almost entirely one
+// Claude call spent waiting, so a little concurrency multiplies throughput
+// without multiplying load; more than three and the Zendesk rate limiter starts
+// answering 429 to the comment reads, which would cost more than it saves.
+const CONCURRENCY = 3;
+
 function isAiTouched(tags) {
   for (const t of tags || []) {
     if (AI_TAGS.has(t)) return true;
@@ -489,13 +508,17 @@ async function runReview(req, res) {
     .filter(t => isAiTouched(t.tags))
     .slice(0, limit);
 
+  const began = Date.now();
   const results = [];
-  for (const t of candidates) {
-    try {
-      results.push(await reviewTicket(t, { dry }));
-    } catch (e) {
-      results.push({ ticket: t.id, error: String(e && e.message || e).slice(0, 300) });
-    }
+  let cut = 0;
+  for (let i = 0; i < candidates.length; i += CONCURRENCY) {
+    if (Date.now() - began > BUDGET_MS) { cut = candidates.length - i; break; }
+    const slice = candidates.slice(i, i + CONCURRENCY);
+    const done = await Promise.all(slice.map(async t => {
+      try { return await reviewTicket(t, { dry }); }
+      catch (e) { return { ticket: t.id, error: String(e && e.message || e).slice(0, 300) }; }
+    }));
+    for (const r of done) results.push(r);
   }
 
   const failures = results.filter(r => r.verdict === 'FAIL');
@@ -506,6 +529,10 @@ async function runReview(req, res) {
     model: MODEL,
     scanned: (sj.results || []).length,
     aiTouched: candidates.length,
+    // Not an error. Call again with the same parameters: everything already
+    // judged is skipped by its comment id, so a second call resumes here.
+    remaining: cut,
+    timedOut: cut > 0,
     reviewed: results.filter(r => r.verdict).length,
     passed: results.filter(r => r.verdict === 'PASS').length,
     failed: failures.length,
