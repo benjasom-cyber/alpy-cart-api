@@ -604,6 +604,55 @@ async function resolvePlaceFromShops(text) {
   return byTown.values().next().value;
 }
 
+
+/**
+ * Mentioning two bookings is not the same as asking us to touch two bookings.
+ *
+ * The rule that sent every multi-reference message to a human was written for
+ * ticket 581695. It was wrong for 581832, where the customer explained a
+ * duplicate booking, quoted both references so we could tell them apart, and
+ * then wrote: "Please kindly cancel the second booking under confirmation
+ * BCGUA7". Counting references and stopping there threw away the sentence that
+ * contained the instruction.
+ *
+ * So we count the bookings the customer asks us to ACT ON, not the ones they
+ * name - and if they ask for three cancellations, that is three cancellations,
+ * not a reason to fetch a human. "Our flows act on one booking at a time" was a
+ * statement about our plumbing, never about their request; the plumbing now
+ * loops (see api/_cancel-bookings.js).
+ *
+ * The test is per sentence, and deliberately narrow, because the cost of being
+ * wrong is cancelling the booking someone wanted to keep:
+ *
+ *  - a reference counts as a target only inside a sentence that also carries an
+ *    action word;
+ *  - a reference that never appears in such a sentence is context, never a
+ *    target - that is what protects B91NDK on 581832;
+ *  - nothing designated at all means we hand over exactly as before.
+ *
+ * "Please cancel B91NDK and BCGUA7" is therefore two targets, and both get
+ * cancelled. That is what the customer wrote.
+ */
+const ACTION_CUE = new RegExp(
+      'cancel|cancell|annul|annull|storn|disdet|refund|rembours|erstatt|rimbors' +
+      '|delete|supprim|loschen|loeschen|revoke|withdraw|retir',
+      'i');
+
+function designatedRefs(text, refs) {
+      if (!Array.isArray(refs) || !refs.length) return [];
+      const raw = String(text || '');
+      // Sentence-ish: line breaks and terminal punctuation. A reference and the
+      // verb that governs it live in the same breath; across a paragraph break
+      // they do not.
+      const parts = raw.split(/[\n\r]+|(?<=[.!?])\s+/);
+      const hits = new Set();
+      for (const part of parts) {
+              if (!ACTION_CUE.test(part)) continue;
+              for (const r of refs) if (part.indexOf(r) > -1) hits.add(r);
+      }
+      return [...hits];
+}
+
 const ODIN_BASE = 'https://odin.alpy.com';
 
 async function fetchBookingHistory(ref) {
@@ -1316,12 +1365,33 @@ export default async function handler(req, res) {
 
       // One: the request spans several bookings. No capability we have edits
       // five bookings at once, so asking for "the" reference can only loop.
+      let targets = [];
       if (multipleRefs.length > 1 && topic !== 'OTHER') {
+              const wholeText = [thread.subject, message]
+                .concat(thread.turns || []).filter(Boolean).join('\n');
+              targets = designatedRefs(wholeText, multipleRefs);
+      }
+
+      if (targets.length) {
+              // Act on exactly what the customer pointed at. One or several - the
+              // number is theirs to decide, not ours. Everything they named
+              // without pointing at it stays untouched and is listed in the note,
+              // so the choice is visible rather than silent.
+              slots.booking_ref = targets[0];
+              check = checkSlots(topic, slots);
+              action = check.ready ? 'RUN' : 'ASK';
+              escalation = targets.length > 1
+                ? 'The customer asked us to act on ' + targets.length + ' bookings (' +
+                  targets.join(', ') + '). They are handled together by ' +
+                  '/api/cancel-bookings, which checks every one of them belongs to the ' +
+                  'requester before cancelling any, and cancels nothing if one fails.'
+                : null;
+      } else if (multipleRefs.length > 1 && topic !== 'OTHER') {
               action = 'HANDOVER';
               escalation = 'The customer named ' + multipleRefs.length + ' bookings (' +
-                           multipleRefs.join(', ') + '). Our flows act on one booking at a ' +
-                           'time, so none of them can carry this out. Handle it manually - and ' +
-                           'do not ask for "the" booking reference, it has already been given.';
+                           multipleRefs.join(', ') + ') without saying, in a sentence we can ' +
+                           'read, which of them to act on. Handle it manually - and do not ask ' +
+                           'for "the" booking reference, it has already been given.';
       }
 
       // Asked once. The second time, silence on a paid option means no.
@@ -1465,6 +1535,12 @@ export default async function handler(req, res) {
                   ? 'Customer, message 1 of 1:\n' + String(message).trim()
                   : ''),
               bookingRefs: multipleRefs.length > 1 ? multipleRefs : null,
+      // Every booking the customer asked us to act on. The caller passes this
+      // whole list to /api/cancel-bookings; it is not a fallback for booking_ref.
+      targetRefs: targets,
+      targetrefs: targets,
+      // Named by the customer, deliberately NOT acted on.
+      refsNotActedOn: targets.length ? multipleRefs.filter(r => targets.indexOf(r) === -1) : [],
               agentNote: escalation ? escalation : (action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
                 : (action === 'ASK'

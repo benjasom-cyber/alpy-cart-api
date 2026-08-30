@@ -15,6 +15,10 @@
  *   knowledge               → GET  /api/knowledge
  *   review-run              → POST /api/review-run      (secret required)
  *   review-digest           → GET  /api/review-digest   (secret required)
+ *   review-report           → POST /api/review-report   (run + email the summary)
+ *   training-run            → POST /api/training-run     (sandbox only)
+ *   training-digest         → GET  /api/training-digest  (sandbox only)
+ *   cancel-bookings         → POST /api/cancel-bookings
  *
  * Vercel rewrites in vercel.json forward the legacy endpoint paths here,
  * so all existing Zendesk custom action URLs continue to work unchanged.
@@ -34,6 +38,8 @@ import { handler as largeGroupQuote } from './_large-group-quote.js';
 import { handler as resendVoucher } from './_resend-voucher.js';
 import { handler as knowledge } from './_knowledge.js';
 import { handler as review } from './_review.js';
+import { handler as training } from './_training.js';
+import { handler as cancelBookings } from './_cancel-bookings.js';
 
 const HANDLERS = {
   'check-date-change': checkDateChange,
@@ -48,6 +54,13 @@ const HANDLERS = {
   // the two URLs stay separate for the caller while the code stays single.
   'review-run': review,
   'review-digest': review,
+  'review-report': review,
+  // The sandbox trainer. Same shape, different account and a different standard:
+  // it reads what people in training wrote, and it never writes to a customer.
+  'training-run': training,
+  'training-digest': training,
+  // One or several bookings, checked together, cancelled together.
+  'cancel-bookings': cancelBookings,
 };
 
 export default async function handler(req, res) {
