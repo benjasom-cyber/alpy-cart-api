@@ -1,31 +1,104 @@
 {
   "functions": {
-    "api/cart.js": { "memory": 128, "maxDuration": 5 },
-    "api/get-booking.js": { "memory": 128, "maxDuration": 10 },
-    "api/cancel-booking.js": { "memory": 128, "maxDuration": 10 },
-    "api/generate-quote.js": { "memory": 128, "maxDuration": 10 },
-    "api/search-bookings.js": { "memory": 128, "maxDuration": 15 },
-    "api/get-cheapest-shop.js": { "memory": 128, "maxDuration": 15 },
-    "api/execute-date-change.js":{ "memory": 128, "maxDuration": 15 },
-    "api/odin-auth.js": { "memory": 128, "maxDuration": 10 },
-    "api/support.js": { "memory": 256, "maxDuration": 60 }
+    "api/cart.js": {
+      "memory": 128,
+      "maxDuration": 5
+    },
+    "api/get-booking.js": {
+      "memory": 128,
+      "maxDuration": 10
+    },
+    "api/cancel-booking.js": {
+      "memory": 128,
+      "maxDuration": 10
+    },
+    "api/generate-quote.js": {
+      "memory": 128,
+      "maxDuration": 10
+    },
+    "api/search-bookings.js": {
+      "memory": 128,
+      "maxDuration": 15
+    },
+    "api/get-cheapest-shop.js": {
+      "memory": 128,
+      "maxDuration": 15
+    },
+    "api/execute-date-change.js": {
+      "memory": 128,
+      "maxDuration": 15
+    },
+    "api/odin-auth.js": {
+      "memory": 128,
+      "maxDuration": 10
+    },
+    "api/support.js": {
+      "memory": 256,
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/api/check-date-change", "destination": "/api/support?action=check-date-change" },
-    { "source": "/api/check-shop-change", "destination": "/api/support?action=check-shop-change" },
-    { "source": "/api/find-nearest-shop", "destination": "/api/support?action=find-nearest-shop" },
-    { "source": "/api/update-personal-info", "destination": "/api/support?action=update-personal-info" },
-    { "source": "/api/unsubscribe-newsletter", "destination": "/api/support?action=unsubscribe-newsletter" },
-    { "source": "/api/large-group-quote", "destination": "/api/support?action=large-group-quote" },
-    { "source": "/api/resend-voucher", "destination": "/api/support?action=resend-voucher" },
-    { "source": "/api/knowledge", "destination": "/api/support?action=knowledge" },
-    { "source": "/api/review-run", "destination": "/api/support?action=review-run" },
-    { "source": "/api/review-digest", "destination": "/api/support?action=review-digest" },
-    { "source": "/api/review-report", "destination": "/api/support?action=review-report" },
-    { "source": "/api/training-run", "destination": "/api/support?action=training-run" },
-    { "source": "/api/training-digest", "destination": "/api/support?action=training-digest" }
+    {
+      "source": "/api/check-date-change",
+      "destination": "/api/support?action=check-date-change"
+    },
+    {
+      "source": "/api/check-shop-change",
+      "destination": "/api/support?action=check-shop-change"
+    },
+    {
+      "source": "/api/find-nearest-shop",
+      "destination": "/api/support?action=find-nearest-shop"
+    },
+    {
+      "source": "/api/update-personal-info",
+      "destination": "/api/support?action=update-personal-info"
+    },
+    {
+      "source": "/api/unsubscribe-newsletter",
+      "destination": "/api/support?action=unsubscribe-newsletter"
+    },
+    {
+      "source": "/api/large-group-quote",
+      "destination": "/api/support?action=large-group-quote"
+    },
+    {
+      "source": "/api/resend-voucher",
+      "destination": "/api/support?action=resend-voucher"
+    },
+    {
+      "source": "/api/knowledge",
+      "destination": "/api/support?action=knowledge"
+    },
+    {
+      "source": "/api/review-run",
+      "destination": "/api/support?action=review-run"
+    },
+    {
+      "source": "/api/review-digest",
+      "destination": "/api/support?action=review-digest"
+    },
+    {
+      "source": "/api/review-report",
+      "destination": "/api/support?action=review-report"
+    },
+    {
+      "source": "/api/training-run",
+      "destination": "/api/support?action=training-run"
+    },
+    {
+      "source": "/api/training-digest",
+      "destination": "/api/support?action=training-digest"
+    },
+    {
+      "source": "/api/protection-upgrade",
+      "destination": "/api/support?action=protection-upgrade"
+    }
   ],
   "crons": [
-    { "path": "/api/review-run", "schedule": "0 5 * * *" }
+    {
+      "path": "/api/review-run",
+      "schedule": "0 5 * * *"
+    }
   ]
 }
