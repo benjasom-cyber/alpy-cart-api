@@ -385,7 +385,20 @@ export default async function handler(req, res) {
   // query parameters are plain key/value rows - so a new optional parameter can
   // arrive either way and this endpoint does not care which.
   const params = Object.assign({}, req.query || {}, body);
-  const ref = String(params.bookingReference || '').trim().toUpperCase();
+  // The reference, or the sentence that contains it.
+  //
+  // The general-questions flow has no step that parses the customer's email, so
+  // it hands us the message itself. Rather than add a parsing step to that flow
+  // - and a second place where the reference format lives - we accept prose and
+  // find the code in it. A caller that already holds a clean reference (the
+  // Requote flow does) is unaffected: the shape test matches and nothing else
+  // runs.
+  const REF_SHAPE_ONE = /^B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}$/;
+  const REF_IN_TEXT = /\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/;
+  const refRaw = String(params.bookingReference || params.bookingreference || '').trim().toUpperCase();
+  const refFound = REF_SHAPE_ONE.test(refRaw) ? refRaw
+                 : (refRaw.match(REF_IN_TEXT) || [''])[0];
+  const ref = refFound;
   const lang = String(params.lang || 'en').slice(0, 2).toLowerCase();
 
   // Rebuild the cart WITH the damage & theft protection.
