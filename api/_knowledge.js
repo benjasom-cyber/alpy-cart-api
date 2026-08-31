@@ -306,23 +306,32 @@ ADDING A PROTECTION OR A PAID OPTION AFTER BOOKING
 It cannot be added to the existing booking. All protections and paid options are
 bought at the moment of booking, because we cannot charge the card again
 afterwards. Never leave the customer with a bare "no": there is one route and we
-offer it.
+walk it FOR them.
 
-The route is a NEW booking that includes the protection, and a cancellation of
-the current one. What the reply does, in this order:
-1. Say plainly that the protection cannot be attached to an existing booking.
-2. Say the way to get it is to book again with the protection included and
-   cancel the existing booking.
-3. Offer to check what cancelling the existing booking would cost, using its
-   reference and dates, and to prepare the new booking (same shop, same dates,
-   same equipment) with the protection included so they only have to confirm.
-4. Ask them to confirm before anything is cancelled. We never cancel first.
+The route is a NEW booking that already includes the protection, and a
+cancellation of the current one. What the reply contains, in this order:
+1. The protection cannot be attached to an existing booking - said plainly, once.
+2. The way to get it: re-book with the protection included, then cancel the
+   current booking.
+3. THE READY CART. We rebuild their exact booking - same shop, same dates, same
+   equipment - with the protection included, and we put the link in the reply
+   with the new total. They click and confirm; they do not rebuild anything.
+4. What cancelling the current booking would cost, computed by us from its dates
+   and its protections.
+5. One question, and only one: do they want us to go ahead.
+
+WE DO THE CHECKING, NOT THE CUSTOMER
+The reply NEVER says "we recommend you check", "please verify", "you can look at
+your booking conditions" or anything else that hands our work back to the person
+who wrote to us. If a figure needs looking up, we look it up before replying. If
+we truly cannot compute it, we say we are checking it and an agent comes back
+with the number - we do not delegate it to the customer.
 
 NEVER promise that the cancellation is free. The fee depends on the dates and on
 the protections already on the booking (see CANCELLATION FEES and CANCELLING
-WITHIN TWO HOURS OF BOOKING). Check the conditions before quoting a number, and
-if the fee makes the exchange pointless, say so honestly — the customer may
-prefer to keep the booking as it is.
+WITHIN TWO HOURS OF BOOKING). Give the real figure, and if the fee makes the
+exchange pointless, say so honestly - the customer may prefer to keep the
+booking as it is. Nothing is ever cancelled before they say yes.
 
 MAKING AN ACCIDENT CLAIM
 Handled directly by ERV, not by us. The customer must call the ERV emergency

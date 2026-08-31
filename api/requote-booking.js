@@ -257,6 +257,17 @@ export default async function handler(req, res) {
   const ref = String(params.bookingReference || '').trim().toUpperCase();
   const lang = String(params.lang || 'en').slice(0, 2).toLowerCase();
 
+  // Rebuild the cart WITH the damage & theft protection.
+  //
+  // 581843: the customer had forgotten AlpinGuaranty and asked to add it. A
+  // protection cannot be attached to a paid booking, so the only answer is a
+  // new booking that already contains it - and that answer is worth nothing
+  // without the cart. Passing insurance:true here is what turns "you would have
+  // to re-book" into a link the customer can click.
+  const withInsurance = params.insurance === true || params.with_insurance === true ||
+                        String(params.insurance || params.with_insurance || '')
+                          .toLowerCase() === 'true';
+
   if (!ref) {
     return res.status(400).json({
       error: 'Missing required param: bookingReference',
@@ -369,6 +380,11 @@ export default async function handler(req, res) {
     if ((booking.services || []).length || (booking.insurance || []).length) {
       approximations.push('The booking carries services or insurance, which the quote does not rebuild.');
     }
+    if (withInsurance) {
+      approximations.push('The rebuilt cart INCLUDES the damage & theft protection (AlpinGuaranty), ' +
+                          'which the original booking does not carry. The two totals are therefore ' +
+                          'not comparable line for line - the difference is the protection.');
+    }
     if ((booking.coupons || []).length) {
       approximations.push('The original booking used a coupon. Any new coupon is sized by the quote itself and may differ.');
     }
@@ -386,6 +402,7 @@ export default async function handler(req, res) {
       persons: persons.map(p => ({ age: p.age, skill: p.skill, equipment: p.equipment })),
       with_boots: anyBoots,
       with_helmets: anyHelmet,
+      with_insurance: withInsurance,
     });
 
     // Pricing is a pure read, so retrying once is safe. Worth it: a cold start on
@@ -476,6 +493,7 @@ export default async function handler(req, res) {
         },
         quotedPeriod: { startDate, endDate, days },
         datesSource: (isDay(params.startDate) && isDay(params.endDate)) ? 'caller' : 'booking',
+        insuranceIncluded: withInsurance,
         persons,
         addons: { boots: anyBoots, helmets: anyHelmet, bootsUniform, helmetUniform },
         rebuiltFromCancelled,
