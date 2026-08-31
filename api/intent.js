@@ -98,7 +98,21 @@ const KEYWORDS = [
       // So: allow up to two words between the article and the noun, and accept
       // "cancel <REFERENCE>" on its own - which is how customers write it once
       // they have quoted the reference earlier in the message.
-      { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|this|that)?\s*(?:\w+\s+){0,2}(booking|reservation|order|rental)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation)\s+(?:de\s+)?(?:ma|la|notre|cette)?\s*(?:\w+\s+){0,2}r[eé]servation|storno)\b/i },
+      // ASKING WHAT A CANCELLATION WOULD COST IS NOT ASKING FOR ONE.
+      //
+      // "Quelles sont les conditions d'annulation de ma reservation BRXV5Z ?"
+      // matched the cancellation rule - the noun "annulation", an article and
+      // "reservation" are all there - and came out RUN, on a message that asks a
+      // question and requests nothing. The answer is written down in the book
+      // (CANCELLATION DEADLINE, CANCELLATION FEES), so it is a general question.
+      //
+      // The guard is the verb. If the customer anywhere writes "annuler",
+      // "cancel", "stornieren", this rule steps aside and the cancellation rule
+      // below takes it - because "I want to cancel, what would it cost?" IS a
+      // cancellation request.
+      { topic: 'GENERAL_QUESTION',
+        re: /^(?=[\s\S]*(?:\b(?:conditions?|frais|politique|d[eé]lai|co[uû]t)\s+d.annulation|\bcancellation\s+(?:polic\w+|conditions?|fees?|charges?|deadline|terms|costs?)|\bstornobedingungen|\bstornogeb[uü]hr\w*))(?![\s\S]*\b(?:annuler|annulez|annulons|annule|cancel|cancelling|canceled|cancelled|stornieren|storniere)\b)/i },
+      { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|these|those|this|that|both|all)?\s*(?:\w+\s+){0,2}(bookings?|reservations?|orders?|rentals?)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation|ations|[eé]e?s?)\s+(?:de\s+)?(?:ma|mes|la|les|notre|nos|cette|ces|deux)?\s*(?:\w+\s+){0,2}r[eé]servations?|storno\w*|stornier\w*)\b/i },
       // A double booking IS a cancellation request, and it is one of the most
       // common ones: the payment page errored, the customer tried again, and now
       // they hold two. Nothing about that sentence says "cancel my booking" in
