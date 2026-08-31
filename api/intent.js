@@ -659,6 +659,14 @@ const ACTION_CUE = new RegExp(
       '|delete|supprim|loschen|loeschen|revoke|withdraw|retir',
       'i');
 
+// A sentence that announces a list: it ends on a colon, or it says "the
+// following" in one of the languages we read. Required before we will look
+// below the verb - see designatedRefs.
+const LIST_INTRO = new RegExp(
+      ':(?:\\s|&nbsp;?)*$' +
+      '|following|suivant|folgend|seguent|siguient|volgend',
+      'i');
+
 function designatedRefs(text, refs) {
       if (!Array.isArray(refs) || !refs.length) return [];
       const raw = String(text || '');
@@ -667,9 +675,52 @@ function designatedRefs(text, refs) {
       // they do not.
       const parts = raw.split(/[\n\r]+|(?<=[.!?])\s+/);
       const hits = new Set();
-      for (const part of parts) {
+
+      // What is left of a line once the references, the mail client's padding
+      // and any bullet or numbering are removed. Empty means the line was
+      // nothing but references: "BRXV5Z", "- BGG114", "2. BRXV5Z&nbsp;".
+      // "Merci de faire le necessaire" is not empty, and stops a list.
+      const residue = (part) => {
+              let t = String(part);
+              for (const r of refs) t = t.split(r).join(' ');
+              return t.replace(/&nbsp;?/gi, ' ')
+                      .replace(/[\s\u00a0.,;:()\[\]{}<>|*#\/\-\u2013\u2014\u2022\u00b70-9]+/g, '')
+                      .trim();
+      };
+      const holdsRef = (part) => refs.some(r => String(part).indexOf(r) > -1);
+      const take = (part) => { for (const r of refs) if (String(part).indexOf(r) > -1) hits.add(r); };
+
+      for (let i = 0; i < parts.length; i++) {
+              const part = parts[i];
               if (!ACTION_CUE.test(part)) continue;
-              for (const r of refs) if (part.indexOf(r) > -1) hits.add(r);
+              take(part);
+
+              // "Please cancel the two bookings below:" and then the references,
+              // one per line. 581840 was written exactly like that and every
+              // reference was thrown away, because the verb and the codes were
+              // never in the same breath - a mail client had put them in
+              // separate table cells.
+              //
+              // So we keep reading downwards - but only from a sentence that
+              // opens a list, either by announcing one ("the following:") or by
+              // already naming a reference the codes underneath carry on from. A
+              // verb with neither marker nor reference is left alone: that stays
+              // a handover, on purpose.
+              //
+              // The walk stops at the first line that is not purely references.
+              // Prose ends a list, and a sentence that merely quotes a reference
+              // is left to the per-sentence rule above - which is what still
+              // protects the booking someone wanted to KEEP (581832).
+              if (!LIST_INTRO.test(part) && !holdsRef(part)) continue;
+              for (let j = i + 1; j < parts.length; j++) {
+                        const next = parts[j];
+                        const hasRef = holdsRef(next);
+                        const rest = residue(next);
+                        if (!hasRef && !rest) continue;   // blank line or padding
+                        if (!hasRef) break;               // prose: the list is over
+                        if (rest) break;                  // a sentence, not a list item
+                        take(next);
+              }
       }
       return [...hits];
 }
@@ -1401,22 +1452,39 @@ export default async function handler(req, res) {
               check = checkSlots(topic, slots);
               action = check.ready ? 'RUN' : 'ASK';
               escalation = null;
+      } else if (targets.length > 1 && topic === 'CANCELLATION') {
+              // Several bookings genuinely to cancel - and as of 31/08/2026 the
+              // Cancellation Handler loops. Its `For each booking to cancel` step
+              // iterates the references, and inside the loop each booking is read,
+              // cancelled through Odin, verified, and refunded on its own payment.
+              // One reply goes out at the end listing what was cancelled.
+              //
+              // "Our flows act on one booking at a time" was a statement about the
+              // plumbing, and the plumbing changed. Handing this to a human now
+              // costs an agent a job the flow does correctly.
+              //
+              // booking_ref carries the first target so checkSlots() sees a
+              // complete request; the whole list travels in targetRefs /
+              // targetRefsText, and the flow re-derives it from the customer's own
+              // words with the same rule this file uses.
+              slots.booking_ref = targets[0];
+              check = checkSlots(topic, slots);
+              action = check.ready ? 'RUN' : 'ASK';
+              escalation = null;
       } else if (targets.length > 1) {
-              // Several bookings genuinely to act on, and the capability flow
-              // handles ONE booking per run - it cancels through the Odin MCP
-              // steps and computes the refund itself, in a chain that has no loop
-              // in it. Passing it the first of two would cancel one booking, tell
-              // the customer it was done, and silently leave the second standing.
+              // Every other capability still acts on ONE booking per run - Date
+              // Change rewrites a rental period, Partial cancellation drops items
+              // from a single booking, and neither has a loop. Passing the first
+              // of two would change one, tell the customer it was done, and
+              // silently leave the second standing.
               //
               // That is worse than handing over, so we hand over, and we say
-              // exactly what has to happen. Wiring the multi-booking path
-              // (api/_cancel-bookings.js) means giving it the same refund
-              // behaviour as the flow, and that is not something to guess at.
+              // exactly what has to happen.
               action = 'HANDOVER';
-              escalation = 'The customer asked us to cancel ' + targets.length +
+              escalation = 'The customer asked us to act on ' + targets.length +
                            ' bookings (' + targets.join(', ') + '). Each one is clearly ' +
-                           'designated - do not ask them which. Our cancellation flow ' +
-                           'handles one booking per run, so cancel them by hand, together, ' +
+                           'designated - do not ask them which. Only cancellation runs on ' +
+                           'several bookings at once, so handle these by hand, together, ' +
                            'and reply once.';
       } else if (multipleRefs.length > 1 && topic !== 'OTHER') {
               action = 'HANDOVER';
