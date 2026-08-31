@@ -36,6 +36,7 @@ import { handler as unsubscribeNewsletter } from './_unsubscribe-newsletter.js';
 import { handler as largeGroupQuote } from './_large-group-quote.js';
 import { handler as resendVoucher } from './_resend-voucher.js';
 import { handler as knowledge } from './_knowledge.js';
+import { handler as protectionUpgrade } from './_protection.js';
 import { handler as review } from './_review.js';
 import { handler as training } from './_training.js';
 
@@ -48,6 +49,10 @@ const HANDLERS = {
   'large-group-quote': largeGroupQuote,
   'resend-voucher': resendVoucher,
   'knowledge': knowledge,
+  // "I forgot the protection": the ready cart WITH it, and what leaving the
+  // current booking costs - both computed before we reply, never asked of the
+  // customer.
+  'protection-upgrade': protectionUpgrade,
   // Both review actions share one handler: it reads req.query.action itself, so
   // the two URLs stay separate for the caller while the code stays single.
   'review-run': review,
