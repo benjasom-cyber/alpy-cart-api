@@ -329,10 +329,19 @@ function cancellationCost(booking, ref, startDay) {
   // number is a negative fee, and a reply quoting it would promise the customer
   // money. No figure at all is the honest answer.
   if (paid == null || paid <= 0 || !band) {
-    out.cancellation_fee_percent = band ? band.percent : null;
-    out.cancellation_fee_text = 'The amount actually paid on ' + ref + ' could not be established, ' +
-      'so no cancellation fee can be quoted. An agent has to confirm the figure before it is ' +
-      'given to the customer.';
+    // NOTHING, deliberately.
+    //
+    // 581858 said "the exact amount is being checked by a colleague, who will
+    // confirm it before any action". That sentence is worse than silence: it
+    // announces a human who is not coming, and it turns a clean answer into a
+    // wait. When we cannot compute the fee we simply do not raise the subject -
+    // the customer asked how to get the protection, not what cancelling costs.
+    // The reason stays here for the agent, with an explicit ban on echoing it.
+    out.cancellation_fee_percent = null;
+    out.cancellation_fee_text = '';
+    out.cancellation_fee_internal = 'Cancellation fee NOT computable for ' + ref +
+      ' (the booking total is not a positive amount). Do not quote any figure to the ' +
+      'customer, and do not announce a check or a colleague: say nothing about the fee.';
     return out;
   }
   const fee = Math.round(paid * band.percent) / 100;
@@ -614,7 +623,10 @@ export default async function handler(req, res) {
       cartUrl: quote.cartUrl,
       approximations,
       addedOnRequest,
-      cancellationFeeText: cancellationCost(booking, ref, originalFrom).cancellation_fee_text,
+      cancellationFeeText: (function () {
+        const c = cancellationCost(booking, ref, originalFrom);
+        return c.cancellation_fee_text || c.cancellation_fee_internal || '';
+      })(),
     });
 
     return res.status(200).json({
@@ -655,6 +667,7 @@ export default async function handler(req, res) {
         cancellationfeeamount: c.cancellation_fee_amount,
         cancellationrefundamount: c.cancellation_refund_amount,
         cancellationdeadline: c.cancellation_deadline,
+        cancellationfeeinternal: c.cancellation_fee_internal || '',
         hascancellationcover: c.has_cancellation_cover,
       }; })(),
       // Same reason: the online price of the rebuilt cart, flat and lowercase.
