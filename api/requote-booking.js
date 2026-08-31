@@ -348,6 +348,27 @@ function cancellationCost(booking, ref, startDay) {
   return out;
 }
 
+/**
+ * A REFUSAL IS AN ANSWER, NOT A CRASH.
+ *
+ * This endpoint is now called from a flow that answers ordinary customer
+ * questions, and a Zendesk step that receives a 4xx stops its flow: one dead
+ * booking reference in a message would mean the customer gets no reply at all.
+ * So every refusal comes back 200, with an empty cart URL and an internal note
+ * that says why. Callers test `found` / `carturl`, never the HTTP status.
+ */
+function refuse(res, ref, why) {
+  return res.status(200).json({
+    found: false,
+    error: why,
+    reason: why,
+    cartUrl: '', carturl: '',
+    cartOnlinePrice: null, cartonlineprice: null,
+    internalNote: 'REQUOTE NOT POSSIBLE' + (ref ? ' for ' + ref : '') + ': ' + why,
+    internalnote: 'REQUOTE NOT POSSIBLE' + (ref ? ' for ' + ref : '') + ': ' + why,
+  });
+}
+
 export default async function handler(req, res) {
   Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -397,10 +418,7 @@ export default async function handler(req, res) {
                           .toLowerCase() === 'true';
 
   if (!ref) {
-    return res.status(400).json({
-      error: 'Missing required param: bookingReference',
-      example: { bookingReference: 'B1AF9J', startDate: '2027-03-15', endDate: '2027-03-20' },
-    });
+    return refuse(res, '', 'no booking reference was supplied, so there is nothing to rebuild');
   }
 
   try {
@@ -409,17 +427,17 @@ export default async function handler(req, res) {
       headers: { Accept: 'application/json' },
     });
     if (r.status === 404) {
-      return res.status(404).json({ found: false, error: 'No booking found for reference ' + ref });
+      return refuse(res, ref, 'no booking exists with this reference');
     }
     if (!r.ok) {
       const body = await r.text().catch(() => '');
-      return res.status(502).json({ error: 'Odin booking lookup failed (' + r.status + ')', details: body.slice(0, 300) });
+      return refuse(res, ref, 'Odin could not be read (' + r.status + ')');
     }
     const booking = await r.json();
 
     const shopId = (booking.shop && (booking.shop.coreId != null ? booking.shop.coreId : booking.shop.id)) || null;
     if (!shopId) {
-      return res.status(422).json({ error: 'Booking ' + ref + ' has no shop id; cannot build a cart.' });
+      return refuse(res, ref, 'the booking carries no shop id, so no cart can be built');
     }
 
     const originalFrom = toDay(booking.rentalPeriod && booking.rentalPeriod.from);
@@ -428,10 +446,10 @@ export default async function handler(req, res) {
     const startDate = isDay(params.startDate) ? params.startDate : originalFrom;
     const endDate = isDay(params.endDate) ? params.endDate : originalTo;
     if (!isDay(startDate) || !isDay(endDate)) {
-      return res.status(422).json({ error: 'Could not determine a rental period. Pass startDate and endDate explicitly.' });
+      return refuse(res, ref, 'the rental period could not be determined');
     }
     if (new Date(startDate) > new Date(endDate)) {
-      return res.status(400).json({ error: 'startDate must not be after endDate.' });
+      return refuse(res, ref, 'the start date is after the end date');
     }
 
     // A finished stay must not produce a quote. The price grid is not
@@ -441,15 +459,8 @@ export default async function handler(req, res) {
     // and let the caller pass explicit future dates when a re-quote is wanted.
     const todayUTC = new Date().toISOString().slice(0, 10);
     if (endDate < todayUTC) {
-      return res.status(422).json({
-        found: true,
-        error: 'Quoted period has already ended; no quote produced.',
-        bookingReference: booking.bookingReference || ref,
-        quotedStartDate: startDate,
-        quotedEndDate: endDate,
-        today: todayUTC,
-        hint: 'Pass startDate and endDate in the future to re-quote this basket for a new period.',
-      });
+      return refuse(res, ref, 'the rental period has already ended (' + startDate + ' to ' +
+                    endDate + '), so no cart can be built for it. Pass future dates to re-quote.');
     }
 
     // ── 2. Rebuild the group from what was actually sold. ────────────────────
@@ -464,12 +475,7 @@ export default async function handler(req, res) {
     }
 
     if (!persons.length) {
-      return res.status(422).json({
-        error: 'Booking ' + ref + ' holds no equipment at all - not even cancelled.',
-        hint: 'This booking is services or insurance only, so there is no basket to rebuild.',
-        bookingReference: booking.bookingReference || ref,
-        bookingStatus: booking.bookingStatus || null,
-      });
+      return refuse(res, ref, 'this booking is services or insurance only, so there is no basket to rebuild');
     }
 
     const anyBoots = wantBoots.some(Boolean);
@@ -556,7 +562,7 @@ export default async function handler(req, res) {
       else if (attempt === 0) console.warn('[requote-booking] generate-quote attempt 1 unusable, retrying', quoteRes.status);
     }
     if (!quote) {
-      return res.status(502).json({ error: 'generate-quote failed (' + (quoteRes && quoteRes.status) + ') after 2 attempts' });
+      return refuse(res, ref, 'the pricing chain did not answer after two attempts');
     }
 
     const days = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
@@ -660,6 +666,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('[requote-booking] Error:', err);
-    return res.status(500).json({ error: 'Internal server error.', details: err.message });
+    return refuse(res, '', String(err && err.message || err).slice(0, 200));
   }
 }
