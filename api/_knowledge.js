@@ -302,9 +302,27 @@ unused rental days, unused ski school days and lift pass costs in case of
 illness, accident, insufficient snow or lift closure. Claims need a medical
 certificate, or confirmation from the lift operator for snow.
 
-ADDING A PROTECTION AFTER BOOKING
-Not possible. All protections are bought at the moment of booking, because we
-cannot charge the card again afterwards. Recommend it for their next booking.
+ADDING A PROTECTION OR A PAID OPTION AFTER BOOKING
+It cannot be added to the existing booking. All protections and paid options are
+bought at the moment of booking, because we cannot charge the card again
+afterwards. Never leave the customer with a bare "no": there is one route and we
+offer it.
+
+The route is a NEW booking that includes the protection, and a cancellation of
+the current one. What the reply does, in this order:
+1. Say plainly that the protection cannot be attached to an existing booking.
+2. Say the way to get it is to book again with the protection included and
+   cancel the existing booking.
+3. Offer to check what cancelling the existing booking would cost, using its
+   reference and dates, and to prepare the new booking (same shop, same dates,
+   same equipment) with the protection included so they only have to confirm.
+4. Ask them to confirm before anything is cancelled. We never cancel first.
+
+NEVER promise that the cancellation is free. The fee depends on the dates and on
+the protections already on the booking (see CANCELLATION FEES and CANCELLING
+WITHIN TWO HOURS OF BOOKING). Check the conditions before quoting a number, and
+if the fee makes the exchange pointless, say so honestly — the customer may
+prefer to keep the booking as it is.
 
 MAKING AN ACCIDENT CLAIM
 Handled directly by ERV, not by us. The customer must call the ERV emergency

@@ -136,7 +136,7 @@ const KEYWORDS = [
       // matters. When none of them matches, the topic stays OTHER and a human
       // gets the ticket, exactly as today.
       { topic: 'GENERAL_QUESTION',
-        re: /\b(invoice|facture|rechnung|receipt\s+for\s+(?:my|the)\s+(?:booking|rental)|ski\s+poles?|b[aâ]tons?\s+de\s+ski|poles?\s+(?:are\s+)?included|american\s+express|amex|payment\s+methods?|moyens?\s+de\s+paiement|zahlungsarten|child(?:ren)?\s+for\s+free|enfant\s+gratuit|kind\s+gratis|opening\s+hours|horaires?\s+d.ouverture|[oö]ffnungszeiten|what\s+is\s+included|qu.est[- ]ce\s+qui\s+est\s+inclus|own\s+(?:ski\s+)?boots|mes\s+propres\s+chaussures|specific\s+model|mod[eè]le\s+(?:pr[eé]cis|particulier)|add\s+(?:the\s+)?(?:insurance|protection|alpinflexi|snowflexi|alpinguaranty|alpinsafety)|ajouter\s+(?:l.)?(?:assurance|protection)|ski\s+(?:lessons?|school)|cours\s+de\s+ski|skikurs|rent\s+(?:ski\s+)?clothing|location\s+de\s+v[eê]tements|lift\s+pass|forfait\s+de\s+ski|skipass|priority\s+check.?in|modelchange\s+option)\b/i },
+        re: /\b(invoice|facture|rechnung|receipt\s+for\s+(?:my|the)\s+(?:booking|rental)|ski\s+poles?|b[aâ]tons?\s+de\s+ski|poles?\s+(?:are\s+)?included|american\s+express|amex|payment\s+methods?|moyens?\s+de\s+paiement|zahlungsarten|child(?:ren)?\s+for\s+free|enfant\s+gratuit|kind\s+gratis|opening\s+hours|horaires?\s+d.ouverture|[oö]ffnungszeiten|what\s+is\s+included|qu.est[- ]ce\s+qui\s+est\s+inclus|own\s+(?:ski\s+)?boots|mes\s+propres\s+chaussures|specific\s+model|mod[eè]le\s+(?:pr[eé]cis|particulier)|add\s+(?:the\s+|a\s+|an\s+)?(?:insurance|protection|cover(?:age)?|alpin\s*flexi|snow\s*flexi|alpin\s*guaranty|snow\s*guaranty|ski\s*guaranty|ski\s*flexi|alpin\s*safety|slope\s*flex|slope\s*guaranty)|(?:ajouter|rajouter|souscrire|prendre)\s+(?:(?:l.|la\s+|le\s+|une\s+|un\s+)?)(?:assurance|protection|garantie|alpin\s*flexi|snow\s*flexi|alpin\s*guaranty|snow\s*guaranty|ski\s*guaranty|ski\s*flexi|alpin\s*safety|slope\s*flex|slope\s*guaranty)|(?:versicherung|schutz|alpin\s*flexi|snow\s*flexi|alpin\s*guaranty|alpin\s*safety)[\s\S]{0,40}(?:hinzuf[uü]gen|nachbuchen|dazubuchen)|(?:hinzuf[uü]gen|nachbuchen|dazubuchen)[\s\S]{0,40}(?:versicherung|schutz|alpin\s*guaranty)|aggiungere\s+(?:l.|la\s+|una\s+|un\s+)?(?:assicurazione|protezione|alpin\s*guaranty|alpin\s*flexi)|a[nñ]adir\s+(?:el\s+|la\s+|un\s+|una\s+)?(?:seguro|protecci[oó]n|alpin\s*guaranty|alpin\s*flexi)|ski\s+(?:lessons?|school)|cours\s+de\s+ski|skikurs|rent\s+(?:ski\s+)?clothing|location\s+de\s+v[eê]tements|lift\s+pass|forfait\s+de\s+ski|skipass|priority\s+check.?in|modelchange\s+option)\b/i },
       { topic: 'GENERAL_QUESTION',
         re: /\b(pick\s*.?up|collect|r[eé]cup[eé]rer|abhol\w*)\b[\s\S]{0,40}\b(day\s+before|evening\s+before|la\s+veille|vortag|tag\s+davor)\b/i },
       { topic: 'GENERAL_QUESTION',
@@ -639,8 +639,8 @@ async function resolvePlaceFromShops(text) {
  * So we count the bookings the customer asks us to ACT ON, not the ones they
  * name - and if they ask for three cancellations, that is three cancellations,
  * not a reason to fetch a human. "Our flows act on one booking at a time" was a
- * statement about our plumbing, never about their request; the plumbing now
- * loops (see api/_cancel-bookings.js).
+ * statement about our plumbing, never about their request; the Cancellation
+ * Handler flow now loops over refs_to_cancel with a for_each step.
  *
  * The test is per sentence, and deliberately narrow, because the cost of being
  * wrong is cancelling the booking someone wanted to keep:
@@ -1635,8 +1635,8 @@ export default async function handler(req, res) {
                   ? 'Customer, message 1 of 1:\n' + String(message).trim()
                   : ''),
               bookingRefs: multipleRefs.length > 1 ? multipleRefs : null,
-      // Every booking the customer asked us to act on. The caller passes this
-      // whole list to /api/cancel-bookings; it is not a fallback for booking_ref.
+      // Every booking the customer asked us to act on. The flow feeds this list
+      // to its for_each loop; it is not a fallback for booking_ref.
       targetRefs: targets,
       targetrefs: targets,
       // The same list as plain text. An action flow passes text between steps far
