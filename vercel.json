@@ -89,10 +89,6 @@
     {
       "source": "/api/training-digest",
       "destination": "/api/support?action=training-digest"
-    },
-    {
-      "source": "/api/protection-upgrade",
-      "destination": "/api/support?action=protection-upgrade"
     }
   ],
   "crons": [
