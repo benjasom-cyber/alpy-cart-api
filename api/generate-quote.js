@@ -1046,7 +1046,19 @@ export default async function handler(req, res) {
                               const wanted = addonsForPerson(p, cartAddons);
                               const avail  = defs.addonsFor(p.age, p.skill, p.equipment);
                               if (!avail) return wanted;
-                              const kept = wanted.filter(a => avail.includes(a));
+                              // The protection is never dropped by this filter.
+                              //
+                              // Measured on BQTZCJ, shop 4350: the PRICE GRID carries
+                              // addon 3 on both products (cartPriceComplete true, the
+                              // 15% applied), while products-information lists only
+                              // [1,2] for them. The cart builder trusted the second
+                              // list, so the link came out with boots+helmet and
+                              // "insurances":[] - a quote that charged for a protection
+                              // the basket did not contain. A price and a cart link that
+                              // disagree is the worst of the three possible outcomes:
+                              // the customer clicks, sees a smaller total, and books
+                              // without the cover they asked for.
+                              const kept = wanted.filter(a => a === ADDON_INSURANCE || avail.includes(a));
                               // An empty list is a legitimate answer here - the
                               // person brings their own boots. Only fall back to
                               // the group when this shop stocks none of what was

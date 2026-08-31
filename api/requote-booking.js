@@ -36,13 +36,13 @@
  *    live on shop 1867. The booking already carries the definitionId that was
  *    sold; we read the skill back OUT of it instead of guessing it.
  *
- * 2. Addons are per-cart in generate-quote, per-item in Odin.
- *    generate-quote applies the same addon list to every person. A booking can
- *    have boots on person 1 only. Rebuilding B1AF9J therefore gives 366,00 EUR
- *    (boots x2) where the booking holds 321,00 EUR (boots x1). We take the
- *    UNION of addons — never under-quoting, which is the safe direction — and
- *    say so explicitly in requote.approximations so nobody announces the figure
- *    as if it were exact.
+ * 2. Addons are per-item in Odin, and per PERSON in the cart.
+ *    A booking can have boots on person 1 only. The first version of this file
+ *    sent the UNION - boots for everyone - to avoid under-quoting, and on BQTZCJ
+ *    that added boots to someone who had never had any: the "identical" cart was
+ *    not identical, and the customer would have paid for equipment they never
+ *    asked for. So each person now carries their own boots / helmet / protection
+ *    flags, which generate-quote reads per person.
  */
 
 const ODIN_BASE = 'https://odin.alpy.com';
@@ -505,16 +505,15 @@ export default async function handler(req, res) {
         'and the original booking stays cancelled.'
       );
     }
-    if (!bootsUniform) {
+    // The boots/helmet spread used to be an approximation to warn about, because
+    // the quote put them on everyone. It is now reproduced person by person, so
+    // there is nothing to warn about - only something to state, so an agent can
+    // check the basket against the booking at a glance.
+    if (!bootsUniform || !helmetUniform) {
       approximations.push(
-        'The booking has boots on ' + wantBoots.filter(Boolean).length + ' of ' + persons.length +
-        ' person(s). The quote puts boots on everyone, so the simulated price is HIGHER than a like-for-like rebuild.'
-      );
-    }
-    if (!helmetUniform) {
-      approximations.push(
-        'The booking has helmets on ' + wantHelmet.filter(Boolean).length + ' of ' + persons.length +
-        ' person(s). The quote puts helmets on everyone, so the simulated price is HIGHER than a like-for-like rebuild.'
+        'Rebuilt person by person: boots on ' + wantBoots.filter(Boolean).length + ' of ' +
+        persons.length + ', helmets on ' + wantHelmet.filter(Boolean).length + ' of ' +
+        persons.length + ' - the same spread as the booking, not the same for everyone.'
       );
     }
     const unknownDefs = persons.filter(p => p.skillResolvedFrom !== 'definitionId');
@@ -551,10 +550,24 @@ export default async function handler(req, res) {
       lang,
       // persons ONLY: adults / children_ages would take precedence over it and
       // flatten a mixed ski + snowboard group into one single equipment type.
-      persons: persons.map(p => ({ age: p.age, skill: p.skill, equipment: p.equipment })),
-      // The union again, for the same reason as the per-item addons: never quote
-      // less than the customer will actually pay. An extra the customer asked
-      // for is added on top of whatever the booking already carried.
+      // PER PERSON, not the union.
+      //
+      // The union was a deliberate under-quoting guard, and on BQTZCJ it added
+      // boots to a person who had never had any: the rebuilt cart no longer
+      // matched the booking it claims to reproduce, and the customer would have
+      // paid for equipment they had not asked for. generate-quote reads
+      // boots / helmet / insurance per person and falls back to the group flags
+      // only when a person carries none of them, so the exact basket travels.
+      persons: persons.map((p, i) => ({
+        age: p.age,
+        skill: p.skill,
+        equipment: p.equipment,
+        boots: !!wantBoots[i] || wantAddon.boots,
+        helmet: !!wantHelmet[i] || wantAddon.helmets,
+        insurance: withInsurance,
+      })),
+      // The group flags stay as the fallback for anything the per-person map
+      // cannot answer.
       with_boots: anyBoots || wantAddon.boots,
       with_helmets: anyHelmet || wantAddon.helmets,
       with_insurance: withInsurance,
