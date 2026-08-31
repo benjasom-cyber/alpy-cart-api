@@ -237,8 +237,115 @@ function buildInternalNote(o) {
     for (const a of o.approximations) lines.push('- ' + a);
     lines.push('');
   }
+  if (o.addedOnRequest && o.addedOnRequest.length) {
+    lines.push('ADDED AT THE CUSTOMER\'S REQUEST, and NOT on the original booking: ' +
+               o.addedOnRequest.join(', ') + '.');
+    lines.push('');
+  }
+  if (o.cancellationFeeText) {
+    // The customer's first question when they have to re-book is what leaving
+    // the old booking costs. It is computed here, so nobody has to ask them to
+    // look it up - see cancellationCost().
+    lines.push('COST OF CANCELLING THE CURRENT BOOKING:');
+    lines.push(o.cancellationFeeText);
+    lines.push('');
+  }
   lines.push('Open the link, correct the dates if needed, then send it to the customer.');
   return lines.join('\n');
+}
+
+/**
+ * WHAT LEAVING THE CURRENT BOOKING COSTS
+ *
+ * A requote exists because the customer has to re-book: to change dates, or -
+ * since 581843 - to get an extra the booking cannot receive. Either way the old
+ * booking has to go, and the first question the customer asks is what that
+ * costs. We already have the booking in hand here, so answering it needs no
+ * second endpoint and no second custom action: the fee table below is the one
+ * printed on the voucher.
+ *
+ * Public holidays are NOT deducted from the working-day count - they differ by
+ * country and by shop. Where the count lands within a day of a band edge the
+ * text says the figure needs confirming rather than quietly under-quoting.
+ */
+function workingDaysUntil(startDay, todayDay) {
+  const start = new Date(startDay + 'T00:00:00Z');
+  const now = new Date(todayDay + 'T00:00:00Z');
+  if (isNaN(start) || isNaN(now) || start <= now) return 0;
+  let n = 0;
+  const cur = new Date(now);
+  while (cur < start) {
+    const wd = cur.getUTCDay();
+    if (wd !== 0 && wd !== 6) n++;
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return n;
+}
+
+function feeBand(startDay, todayDay) {
+  if (!startDay || !todayDay) return null;
+  if (todayDay >= startDay) return { percent: 100, band: 'on or after the first rental day', workingDays: 0 };
+  const wd = workingDaysUntil(startDay, todayDay);
+  if (wd > 10) return { percent: 25, band: 'more than 10 working days before the start', workingDays: wd };
+  if (wd >= 3)  return { percent: 30, band: '9 to 3 working days before the start', workingDays: wd };
+  return { percent: 35, band: '2 working days until 08:00 the day before', workingDays: wd };
+}
+
+function hasCancellationCover(booking) {
+  const items = [].concat(booking.insurance || [], booking.services || []);
+  return items.some(x => /flexi|annul|cancel/i.test(String((x && (x.name || x.type)) || '')));
+}
+
+function cancellationCost(booking, ref, startDay) {
+  const today = new Date().toISOString().slice(0, 10);
+  const paid = money(booking.total && booking.total.amount);
+  const currency = (booking.total && booking.total.currency) || 'EUR';
+  const cover = hasCancellationCover(booking);
+  const band = feeBand(startDay, today);
+  const out = {
+    has_cancellation_cover: cover,
+    cancellation_fee_percent: band ? band.percent : null,
+    cancellation_fee_amount: null,
+    cancellation_refund_amount: null,
+    cancellation_deadline: startDay ? '08:00 on the day before ' + startDay : '',
+    cancellation_fee_text: '',
+  };
+
+  if (/CANCEL/i.test(String(booking.bookingStatus || booking.status || ''))) {
+    out.cancellation_fee_text = 'Booking ' + ref + ' is already cancelled.';
+    out.cancellation_fee_percent = null;
+    return out;
+  }
+  if (cover) {
+    out.cancellation_fee_percent = 0;
+    out.cancellation_fee_amount = 0;
+    out.cancellation_refund_amount = paid;
+    out.cancellation_fee_text = 'This booking carries the cancellation protection, so it can be ' +
+      'cancelled free of charge until 08:00 on the day before the first rental day' +
+      (startDay ? ' (' + startDay + ')' : '') + '.';
+    return out;
+  }
+  // Measured on BQTZCJ, whose coupon left a NEGATIVE total: 25% of a negative
+  // number is a negative fee, and a reply quoting it would promise the customer
+  // money. No figure at all is the honest answer.
+  if (paid == null || paid <= 0 || !band) {
+    out.cancellation_fee_percent = band ? band.percent : null;
+    out.cancellation_fee_text = 'The amount actually paid on ' + ref + ' could not be established, ' +
+      'so no cancellation fee can be quoted. An agent has to confirm the figure before it is ' +
+      'given to the customer.';
+    return out;
+  }
+  const fee = Math.round(paid * band.percent) / 100;
+  out.cancellation_fee_amount = fee;
+  out.cancellation_refund_amount = Math.round((paid - fee) * 100) / 100;
+  out.cancellation_fee_text = 'Cancelling ' + ref + ' today falls in the "' + band.band + '" band: ' +
+    band.percent + '% of ' + paid.toFixed(2) + ' ' + currency + ', i.e. ' + fee.toFixed(2) + ' ' +
+    currency + ' kept and ' + out.cancellation_refund_amount.toFixed(2) + ' ' + currency + ' refunded.';
+  if (Math.abs(band.workingDays - 10) <= 1 || Math.abs(band.workingDays - 3) <= 1) {
+    out.cancellation_fee_text += ' The count sits close to a band edge and public holidays are not ' +
+      'deducted here, so confirm the exact figure before quoting it as final.';
+  }
+  return out;
 }
 
 export default async function handler(req, res) {
@@ -249,11 +356,14 @@ export default async function handler(req, res) {
   // Content-Type: application/json. A Zendesk custom action cannot declare that
   // header by hand — the Name field rejects hyphens — so accept a raw string too
   // rather than depend on a header we do not control.
-  let params = req.method === 'POST' ? (req.body || {}) : (req.query || {});
-  if (typeof params === 'string') {
-    try { params = JSON.parse(params); } catch { params = {}; }
-  }
-  if (!params || typeof params !== 'object' || Array.isArray(params)) params = {};
+  let body = req.method === 'POST' ? (req.body || {}) : {};
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) body = {};
+  // Query string AND body, always, with the body winning. The Zendesk custom
+  // action's JSON body is a chip field that is awkward to extend, while its
+  // query parameters are plain key/value rows - so a new optional parameter can
+  // arrive either way and this endpoint does not care which.
+  const params = Object.assign({}, req.query || {}, body);
   const ref = String(params.bookingReference || '').trim().toUpperCase();
   const lang = String(params.lang || 'en').slice(0, 2).toLowerCase();
 
@@ -264,7 +374,25 @@ export default async function handler(req, res) {
   // new booking that already contains it - and that answer is worth nothing
   // without the cart. Passing insurance:true here is what turns "you would have
   // to re-book" into a link the customer can click.
-  const withInsurance = params.insurance === true || params.with_insurance === true ||
+  // Generalised on Benjamin's instruction: not "insurance", but "whatever extra
+  // the customer wants that the booking does not have". One text parameter, so
+  // the Zendesk custom action needs ONE new field and never a second action:
+  //   addons = "alpinguaranty"  |  "helmet, boots"  |  "protection"
+  const ADDON_WORDS = {
+    insurance: /alpin\s*guaranty|snow\s*guaranty|ski\s*guaranty|slope\s*guaranty|guaranty|alpin\s*flexi|snow\s*flexi|ski\s*flexi|slope\s*flex|flexi|insurance|protection|assurance|versicherung|assicurazione|seguro/i,
+    helmets:   /helmets?|casques?|helm\w*|casco|kask/i,
+    boots:     /boots?|chaussures?|schuhe|scarponi|botas/i,
+  };
+  const addonsRaw = [].concat(params.addons || params.addon || params.extras || [])
+                      .concat(params.addonsText || params.addonstext || [])
+                      .map(x => String(x || '')).join(' ');
+  const wantAddon = {
+    insurance: ADDON_WORDS.insurance.test(addonsRaw),
+    helmets:   ADDON_WORDS.helmets.test(addonsRaw),
+    boots:     ADDON_WORDS.boots.test(addonsRaw),
+  };
+  const withInsurance = wantAddon.insurance ||
+                        params.insurance === true || params.with_insurance === true ||
                         String(params.insurance || params.with_insurance || '')
                           .toLowerCase() === 'true';
 
@@ -380,10 +508,15 @@ export default async function handler(req, res) {
     if ((booking.services || []).length || (booking.insurance || []).length) {
       approximations.push('The booking carries services or insurance, which the quote does not rebuild.');
     }
-    if (withInsurance) {
-      approximations.push('The rebuilt cart INCLUDES the damage & theft protection (AlpinGuaranty), ' +
-                          'which the original booking does not carry. The two totals are therefore ' +
-                          'not comparable line for line - the difference is the protection.');
+    const addedOnRequest = [
+      withInsurance ? 'the damage & theft protection' : '',
+      (wantAddon.helmets && !anyHelmet) ? 'helmets' : '',
+      (wantAddon.boots && !anyBoots) ? 'boots' : '',
+    ].filter(Boolean);
+    if (addedOnRequest.length) {
+      approximations.push('The rebuilt cart INCLUDES ' + addedOnRequest.join(' and ') +
+                          ', which the original booking does not carry. The two totals are ' +
+                          'therefore not comparable line for line - the difference is what was added.');
     }
     if ((booking.coupons || []).length) {
       approximations.push('The original booking used a coupon. Any new coupon is sized by the quote itself and may differ.');
@@ -400,8 +533,11 @@ export default async function handler(req, res) {
       // persons ONLY: adults / children_ages would take precedence over it and
       // flatten a mixed ski + snowboard group into one single equipment type.
       persons: persons.map(p => ({ age: p.age, skill: p.skill, equipment: p.equipment })),
-      with_boots: anyBoots,
-      with_helmets: anyHelmet,
+      // The union again, for the same reason as the per-item addons: never quote
+      // less than the customer will actually pay. An extra the customer asked
+      // for is added on top of whatever the booking already carried.
+      with_boots: anyBoots || wantAddon.boots,
+      with_helmets: anyHelmet || wantAddon.helmets,
       with_insurance: withInsurance,
     });
 
@@ -445,6 +581,8 @@ export default async function handler(req, res) {
       originalTotalDue: money(booking.total && booking.total.amount),
       cartUrl: quote.cartUrl,
       approximations,
+      addedOnRequest,
+      cancellationFeeText: cancellationCost(booking, ref, originalFrom).cancellation_fee_text,
     });
 
     return res.status(200).json({
@@ -473,6 +611,24 @@ export default async function handler(req, res) {
       sourcebookingreference: booking.bookingReference || ref,
       sourceBalanceDue: money(booking.total && booking.total.amount),
       sourcebalancedue: money(booking.total && booking.total.amount),
+      // What cancelling the source booking costs today. Flat and lowercase so a
+      // Zendesk custom action binds them in one click - see cancellationCost().
+      ...cancellationCost(booking, ref, originalFrom),
+      // Underscore-free aliases. Zendesk custom-action output names are
+      // lowercase and the existing ones on this action (carturl, internalnote)
+      // carry no separator, so these are the spellings the flow can bind.
+      ...(() => { const c = cancellationCost(booking, ref, originalFrom); return {
+        cancellationfeetext: c.cancellation_fee_text,
+        cancellationfeepercent: c.cancellation_fee_percent,
+        cancellationfeeamount: c.cancellation_fee_amount,
+        cancellationrefundamount: c.cancellation_refund_amount,
+        cancellationdeadline: c.cancellation_deadline,
+        hascancellationcover: c.has_cancellation_cover,
+      }; })(),
+      // Same reason: the online price of the rebuilt cart, flat and lowercase.
+      cartonlineprice: quote.cartOnlinePrice,
+      cartinstoreprice: quote.cartInStorePrice,
+      addedonrequest: addedOnRequest.join(', '),
       carturl: quote.cartUrl,
       shopname: quote.shopName,
       requote: {
@@ -494,6 +650,7 @@ export default async function handler(req, res) {
         quotedPeriod: { startDate, endDate, days },
         datesSource: (isDay(params.startDate) && isDay(params.endDate)) ? 'caller' : 'booking',
         insuranceIncluded: withInsurance,
+        addedOnRequest,
         persons,
         addons: { boots: anyBoots, helmets: anyHelmet, bootsUniform, helmetUniform },
         rebuiltFromCancelled,
