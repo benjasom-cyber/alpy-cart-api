@@ -275,6 +275,28 @@ function buildAddons({ withBoots, withHelmets, withInsurance }) {
  * `boots` / `helmet` / `helmets` / `insurance` / `protection`. Anything absent
  * falls back to what the group said.
  */
+/**
+ * THE PRODUCT THE CUSTOMER ACTUALLY HAD, when the caller knows it.
+ *
+ * Measured on BDKLQJ (shop 1819, four people): the booking held definitionId
+ * 110 "Diamant (7*)", 90 "Sort/guld (5*) Lady", 5 "Platinum (6*)" and 16
+ * "Champion (5*)". The rebuilt cart held definitionId 4 four times. The round
+ * trip is lossy by construction - definitionId is mapped to a (skill, equipment)
+ * pair, and that pair is mapped back to a definitionId - so every product
+ * outside the small ski/snowboard x beginner/intermediate/expert grid collapses
+ * onto the nearest generic one. Seven-star skis, Lady models, Champion and
+ * Platinum tiers all disappear, and the customer is quoted equipment they never
+ * had, at a price that is not theirs.
+ *
+ * So when a caller states the definitionId, it wins. Nothing is inferred, and
+ * the price and the cart both use the same id.
+ */
+function statedDefinitionId(person) {
+      const raw = person && (person.definitionId != null ? person.definitionId : person.definitionid);
+      const n = parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function addonsForPerson(person, groupAddons) {
       if (!person || typeof person !== 'object') return groupAddons;
 
@@ -503,7 +525,8 @@ function computeCartPrice({ grid, persons, addons, days, resolveDefId }) {
       const missing = [];
 
       for (const person of persons) {
-              const defId = defIdOf(person.age, person.skill, person.equipment);
+              const defId = statedDefinitionId(person) ||
+                            defIdOf(person.age, person.skill, person.equipment);
               const node  = products.get(defId);
               if (!node) { missing.push('product:' + defId); continue; }
 
@@ -1039,7 +1062,7 @@ export default async function handler(req, res) {
           age: parseInt(p.age) || 35,
           skill: p.skill === 'intermediate' ? 'advanced' : (p.skill || 'advanced'),
           products: [{
-                    definitionId: defs.resolve(p.age, p.skill, p.equipment),
+                    definitionId: statedDefinitionId(p) || defs.resolve(p.age, p.skill, p.equipment),
                     // Keep the agent's boots/helmet choice, but only ask for
                     // addons this particular product actually offers.
                     addons: (function () {

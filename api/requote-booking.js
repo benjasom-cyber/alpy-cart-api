@@ -525,11 +525,14 @@ export default async function handler(req, res) {
         persons.length + ' - the same spread as the booking, not the same for everyone.'
       );
     }
-    const unknownDefs = persons.filter(p => p.skillResolvedFrom !== 'definitionId');
+    // Only the items whose definitionId we could NOT carry over are approximate
+    // now: everything else is rebuilt with the exact product that was sold.
+    const unknownDefs = persons.filter(p => !p.sourceDefinitionId);
     if (unknownDefs.length) {
       approximations.push(
-        unknownDefs.length + ' item(s) had a definitionId absent from the catalogue table; their level was' +
-        ' assumed intermediate from the product name. Check the cart before quoting.'
+        unknownDefs.length + ' item(s) carry no definitionId in Odin, so their product was guessed ' +
+        'from the product name. Every other line is the exact product that was sold. ' +
+        'Check those lines in the cart before quoting.'
       );
     }
     if ((booking.services || []).length || (booking.insurance || []).length) {
@@ -571,6 +574,15 @@ export default async function handler(req, res) {
         age: p.age,
         skill: p.skill,
         equipment: p.equipment,
+        // The product that was actually sold, stated outright.
+        //
+        // skill and equipment stay as a fallback for the rare item whose
+        // definitionId the catalogue does not know, but they must never be the
+        // primary route: on BDKLQJ four distinct products (110, 90, 5, 16)
+        // came back as definitionId 4 four times, because the pair
+        // (skill, equipment) cannot express a 7-star ski, a Lady model or a
+        // Champion tier. See statedDefinitionId() in generate-quote.js.
+        definitionId: p.sourceDefinitionId || undefined,
         boots: !!wantBoots[i] || wantAddon.boots,
         helmet: !!wantHelmet[i] || wantAddon.helmets,
         insurance: withInsurance,
