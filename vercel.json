@@ -13,8 +13,8 @@
       "maxDuration": 10
     },
     "api/generate-quote.js": {
-      "memory": 128,
-      "maxDuration": 10
+      "memory": 512,
+      "maxDuration": 60
     },
     "api/search-bookings.js": {
       "memory": 128,
@@ -89,6 +89,14 @@
     {
       "source": "/api/training-digest",
       "destination": "/api/support?action=training-digest"
+    },
+    {
+      "source": "/api/metrics",
+      "destination": "/api/support?action=metrics"
+    },
+    {
+      "source": "/api/metrics-phone",
+      "destination": "/api/support?action=metrics-phone"
     }
   ],
   "crons": [
