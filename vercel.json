@@ -97,6 +97,10 @@
     {
       "source": "/api/metrics-phone",
       "destination": "/api/support?action=metrics-phone"
+    },
+    {
+      "source": "/api/metrics-conversion",
+      "destination": "/api/support?action=metrics-conversion"
     }
   ],
   "crons": [
