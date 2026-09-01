@@ -36,6 +36,9 @@ import { handler as unsubscribeNewsletter } from './_unsubscribe-newsletter.js';
 import { handler as largeGroupQuote } from './_large-group-quote.js';
 import { handler as resendVoucher } from './_resend-voucher.js';
 import { handler as knowledge } from './_knowledge.js';
+import { handler as metrics } from './_metrics.js';
+import { handler as phone } from './_phone.js';
+import { handler as conversion } from './_conversion.js';
 import { handler as review } from './_review.js';
 import { handler as training } from './_training.js';
 
@@ -48,6 +51,16 @@ const HANDLERS = {
   'large-group-quote': largeGroupQuote,
   'resend-voucher': resendVoucher,
   'knowledge': knowledge,
+  // The support dashboard's numbers: what the bot finished, what it handed
+  // over, and what it dropped without writing a line.
+  'metrics': metrics,
+  // The phone, month by month, from the Talk incremental export. Its own action
+  // because one peak month is ~14 pages of 1000 calls and eight months in one
+  // request would not fit the function budget.
+  'metrics-phone': phone,
+  // Le taux de conversion du support : tickets Zendesk hachés d'un cote, table
+  // BI (BigQuery via Metabase) de l'autre, jointure sur md5(email).
+  'metrics-conversion': conversion,
   // Both review actions share one handler: it reads req.query.action itself, so
   // the two URLs stay separate for the caller while the code stays single.
   'review-run': review,
