@@ -122,6 +122,15 @@ const KEYWORDS = [
       { topic: 'CANCELLATION',
         re: /\b(duplicate|duplicated|double|twice|two\s+(?:identical|same)\s+bookings?|en\s+double|deux\s+fois|doppelt|doppelte)\b[\s\S]{0,300}\b(cancel\w*|annul\w*|storn\w*|refund\w*|rembours\w*|erstatt\w*)/i },
       { topic: 'DATE_CHANGE',   re: /\b(change\s+(my|the)\s+dates?|move\s+(my|the)\s+booking|postpone|d[eé]caler|changer\s+(mes|les)\s+dates?|different\s+dates?)\b/i },
+      // "Pouvez-vous modifier la reservation svp ? je me suis trompee de date"
+      //
+      // 581870, and it came out OTHER: the rule above wants the word "dates"
+      // next to the verb, and this customer put the verb on the booking and the
+      // date on the mistake. Two halves are required so that "modifier ma
+      // reservation" (a name, an email, a shoe size) is not swept in: a change
+      // verb AND something that says the change is about the period.
+      { topic: 'DATE_CHANGE',
+        re: /(?=[\s\S]*\b(modifier|changer|d[eé]caler|reporter|repousser|avancer|change|move|amend|umbuchen|[aä]ndern|cambiare|cambiar)\b)(?=[\s\S]*(\b(dates?|p[eé]riode|jours?|semaine|s[eé]jour|datum|termin|periodo|fechas?)\b|\b(?:tromp[eé]e?|erreur|mauvaise?|wrong|falsch|sbagliat\w+|equivocad\w+)\s+(?:de\s+)?(?:dates?|datum|fechas?)\b|\bme\s+suis\s+tromp[eé]e?\s+de\s+date))/i },
       // REQUOTE is re-pricing a booking that already exists, so it sits AFTER
       // DATE_CHANGE: a customer moving their dates wants the date-change flow,
       // not a new price. What lands here is adding days, adding people or
@@ -272,7 +281,13 @@ function detectFromTags(tags) {
 }
 
 function detectFromKeywords(message) {
-      const m = String(message || '');
+      // The TOPIC is decided on what the customer wrote, never on what they
+      // forwarded. 581870: our own confirmation email, quoted underneath a
+      // date-change request, carries the word "annuler" - and that word alone
+      // turned the request into a cancellation. The reference extraction still
+      // reads the whole text; only the verb that decides the route is taken from
+      // the customer's own words.
+      const m = stripQuotedAndSignature(String(message || ''));
       if (m.trim().length < 3) return null;
       for (const k of KEYWORDS) {
               if (k.re.test(m)) return { topic: k.topic, source: 'keyword', blocked: false };
@@ -925,6 +940,22 @@ function stripQuotedAndSignature(body) {
               /^\s*>/m,                               // quoted block
               /^\s*(On|Le|Am|El)\b.{0,80}\b(wrote|a [eé]crit|schrieb|escribi[oó])\s*:/mi,
               /^\s*(De|From|Von|Da)\s*:/mi,
+              // The same header, but NOT at the start of a line.
+              //
+              // 581870: the customer forwarded our own confirmation email, and her
+              // mail client flattened it onto one line - "... Nadine Le Goupil. De :
+              // Alpy.com <web@alpy.com> Envoye : lundi 31 aout". The anchored rule
+              // above never matched, so the quoted confirmation stayed in the text,
+              // and the word "annuler" IN OUR OWN EMAIL turned a date-change request
+              // into a cancellation. Measured: the same message without the quote is
+              // not a cancellation; with it, it is.
+              //
+              // The signal has to be strong enough to never cut a customer's own
+              // sentence, so the header must be followed by an address or by the
+              // next header of a forwarded block.
+              /\b(De|From|Von|Da)\s*:\s*[^\n]{0,80}?[<(]?[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/i,
+              /\b(Envoy[eé]|Sent|Gesendet|Inviato|Enviado)\s*:\s*\w/i,
+              /\b(Objet|Subject|Betreff|Oggetto|Asunto)\s*:\s*[^\n]{0,80}\b(confirmation|booking|r[eé]servation|voucher)\b/i,
               /The information transmitted in this e-?mail/i,
               /Powered\s*by\s*2beGROUP/i,
               /Head of Support/i,
