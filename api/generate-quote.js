@@ -1067,6 +1067,13 @@ export default async function handler(req, res) {
                     // addons this particular product actually offers.
                     addons: (function () {
                               const wanted = addonsForPerson(p, cartAddons);
+                              // A caller that states the list has counted the
+                              // lines on the booking itself - Modelchange, an
+                              // existing protection, boots on one person only.
+                              // Filtering that against a catalogue view would
+                              // silently drop what the customer already owns, so
+                              // an explicit list is taken as it is.
+                              if (Array.isArray(p.addons)) return wanted;
                               const avail  = defs.addonsFor(p.age, p.skill, p.equipment);
                               if (!avail) return wanted;
                               // The protection is never dropped by this filter.

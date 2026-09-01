@@ -169,6 +169,7 @@ function buildPersons(equipment, includeCancelled) {
   const persons = [];
   const wantBoots = [];
   const wantHelmet = [];
+  const itemServices = [];
 
   for (const item of equipment || []) {
     if (!includeCancelled && isCancelled(item && item.status)) continue;
@@ -190,9 +191,23 @@ function buildPersons(equipment, includeCancelled) {
       .filter(a => includeCancelled || !isCancelled(a && a.status));
     wantBoots.push(accessories.some(a => a.definitionId === 1 || /boot/i.test(String(a.name || ''))));
     wantHelmet.push(accessories.some(a => a.definitionId === 2 || /helmet|casque/i.test(String(a.name || ''))));
+
+    // SERVICES ARE ADDONS TOO.
+    //
+    // Odin hangs Modelchange and the damage & theft protection off the item as
+    // `services`, with the same definitionId the cart uses as an addon id -
+    // measured: protection is 3 on both sides, Modelchange is 5. Reading only
+    // `accessories` therefore rebuilt BDKLQJ without the Modelchange the four
+    // skiers had paid for, and previous rebuilds dropped an existing protection
+    // while an approximation politely mentioned it. Both belong in the cart.
+    const serviceIds = (item.services || [])
+      .filter(x => includeCancelled || !isCancelled(x && x.status))
+      .map(x => parseInt(x && x.definitionId, 10))
+      .filter(n => Number.isFinite(n) && n > 0);
+    itemServices.push(serviceIds);
   }
 
-  return { persons, wantBoots, wantHelmet };
+  return { persons, wantBoots, wantHelmet, itemServices };
 }
 
 function buildInternalNote(o) {
@@ -486,13 +501,13 @@ export default async function handler(req, res) {
     }
 
     // ── 2. Rebuild the group from what was actually sold. ────────────────────
-    let { persons, wantBoots, wantHelmet } = buildPersons(booking.equipment, false);
+    let { persons, wantBoots, wantHelmet, itemServices } = buildPersons(booking.equipment, false);
 
     // Nothing live left - so rebuild from everything, cancelled included.
     // See buildPersons: this is the case an agent hits most often, not an edge.
     let rebuiltFromCancelled = false;
     if (!persons.length) {
-      ({ persons, wantBoots, wantHelmet } = buildPersons(booking.equipment, true));
+      ({ persons, wantBoots, wantHelmet, itemServices } = buildPersons(booking.equipment, true));
       rebuiltFromCancelled = persons.length > 0;
     }
 
@@ -583,9 +598,16 @@ export default async function handler(req, res) {
         // (skill, equipment) cannot express a 7-star ski, a Lady model or a
         // Champion tier. See statedDefinitionId() in generate-quote.js.
         definitionId: p.sourceDefinitionId || undefined,
-        boots: !!wantBoots[i] || wantAddon.boots,
-        helmet: !!wantHelmet[i] || wantAddon.helmets,
-        insurance: withInsurance,
+        // The exact addon list for THIS person: what they had (boots, helmet,
+        // Modelchange, an existing protection) plus what they are asking for.
+        // An explicit list is taken verbatim by generate-quote, so nothing is
+        // inferred and nothing is silently dropped.
+        addons: [...new Set([].concat(
+          wantBoots[i] || wantAddon.boots ? [1] : [],
+          wantHelmet[i] || wantAddon.helmets ? [2] : [],
+          (itemServices && itemServices[i]) || [],
+          withInsurance ? [3] : []
+        ))],
       })),
       // The group flags stay as the fallback for anything the per-person map
       // cannot answer.
