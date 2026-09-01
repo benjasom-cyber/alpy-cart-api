@@ -150,6 +150,23 @@ const KEYWORDS = [
       { topic: 'GENERAL_QUESTION',
         re: /\b(alpinflexi|snowflexi|alpinguaranty|alpinsafety(\s+plus)?)\b[\s\S]{0,60}\b(cover\w*|include\w*|couvre|comprend|inclut|what\s+is|c.est\s+quoi|price|prix|co[uû]te|cost)\b|\b(cover\w*|couvre|price|prix|co[uû]te|cost|what\s+is)\b[\s\S]{0,60}\b(alpinflexi|snowflexi|alpinguaranty|alpinsafety(\s+plus)?)\b/i },
       { topic: 'QUOTE',         re: /\b(quote|devis|how\s+much\s+would|combien\s+co[uû]te|price\s+for\s+\d|offre\s+de\s+prix)\b/i },
+      // TICKET 581888. "We are a group of 7 skiing in Bad Hofgastein from 10th
+      // to 15th January 2027 - do you have a discount code?" matched NOTHING,
+      // and the ticket died with "No capability matches this message". Yet it is
+      // the purest form of prospect we get: a resort, a week in January, seven
+      // pairs of skis, and not one occurrence of the word "quote".
+      //
+      // Customers describe their trip; they do not ask for a "quote". These two
+      // rules read the description instead of waiting for the magic word.
+      //
+      // They sit BELOW every rule that acts on an existing booking - cancel,
+      // date change, requote - so "we are a group of 7 and we need to cancel"
+      // is still a cancellation. That ordering is what makes them safe to write
+      // this broadly.
+      { topic: 'QUOTE',
+        re: /\b(?:we\s+are|we.re|nous\s+sommes|on\s+est|wir\s+sind|siamo|somos)\s+(?:a\s+|un\s+|une\s+|eine\s+)?(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie|party)?\s*(?:of\s+|de\s+|von\s+|di\s+)?\d{1,3}\b[\s\S]{0,200}\b(ski\w*|snowboard\w*|surf|louer|location|mieten|noleggi\w*|alquil\w*)\b|\b(?:group|groupe|gruppe|gruppo|grupo|party)\s+(?:of|de|von|di)\s+\d{1,3}\b[\s\S]{0,200}\b(ski\w*|snowboard\w*|surf|louer|location|mieten)\b/i },
+      { topic: 'QUOTE',
+        re: /\b(?:need|needing|looking\s+for|would\s+like|want\s+to|wish\s+to|interested\s+in|cherch\w*|souhait\w*|voudrai\w*|aimerai\w*|besoin\s+de|m[oö]chte\w*|brauche\w*|suche\w*|interessiert)\b[\s\S]{0,80}\b(?:rent(?:al|ing)?|hire|hiring|louer|location\s+de|mieten|verleih|noleggi\w*|alquil\w*)\b[\s\S]{0,80}\b(?:skis?|snowboards?|equipment|mat[eé]riel|ausr[uü]stung|attrezzatura|equipo)\b|\b(?:rent|hire|louer|mieten|noleggiare|alquilar)\b[\s\S]{0,60}\b(?:skis?|snowboards?|equipment|mat[eé]riel)\b[\s\S]{0,120}\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:to|-|au|bis|al)\s+\d{1,2}|from\s+\d{1,2}|du\s+\d{1,2}|vom\s+\d{1,2})\b/i },
       // LAST, always. Everything above is a request that changes something; what
       // is left is a question, and a question has an answer written down.
       //
@@ -166,6 +183,11 @@ const KEYWORDS = [
         re: /\b(helmets?|casques?|helm\w*)\b[\s\S]{0,40}\b(compulsory|mandatory|obligatoire|obligatorisch|pflicht|required\s+by\s+law)\b|\bhelmpflicht\b/i },
       { topic: 'GENERAL_QUESTION',
         re: /\b(promo(?:tion)?\s+code|code\s+promo|gutschein\s?code|discount\s+code)\b[\s\S]{0,40}\b(does\s+not|doesn.t|not\s+work\w*|invalid|refus\w*|ne\s+(?:fonctionne|marche)\s+pas|funktioniert\s+nicht)\b/i },
+      // "Do you have a code for next year?" - asking FOR a code, not reporting a
+      // broken one. The rule above only knew the broken case, so 581888 fell
+      // through here too. We do have a code, and it is already in the quote.
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(promo(?:tion)?\s*code|code\s+promo|discount\s+code|voucher\s+code|rabatt\s?code|gutschein\s?code|codice\s+sconto|c[oó]digo\s+(?:de\s+)?descuento)\b|\b(?:discount|r[eé]duction|remise|rabatt|sconto|descuento)\b[\s\S]{0,30}\b(?:code|coupon)\b/i },
       // Delivery, and how the shop types differ.
       //
       // Added once the answer book learned to answer them. Before that these
