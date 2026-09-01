@@ -997,7 +997,25 @@ function stripQuotedAndSignature(body) {
  * remembered. When a customer asks something outside this list we say nothing
  * rather than improvise: a wrong answer about cover is worse than a slow one.
  */
+// Le meme code que celui applique par generate-quote.js, lu de la meme variable
+// pour qu'un changement ne soit a faire qu'une fois. Annoncer un code perime est
+// pire que ne pas en annoncer.
+const ACTIVE_PROMO_CODE = process.env.ALPY_PROMO_CODE || 'SKI26';
+
 const PRODUCT_ANSWERS = [
+      // TICKET 581889. A un client qui demandait "avez-vous un code pour l'an
+      // prochain ?", la reponse composee a ete : "I'm afraid that isn't
+      // something we are able to advise on here". C'est faux - nous avons un
+      // code, il est deja applique a chaque panier - et c'est une phrase
+      // negative posee au moment precis ou le client est pret a reserver.
+      //
+      // Le modele n'avait aucun fait sur le sujet : sans fait, il se replie sur
+      // une formule d'evitement. Le fait ci-dessous supprime la cause.
+      {
+              key: 'promo_code',
+              re: /\b(promo(?:tion)?\s*code|code\s+promo|discount\s+code|voucher\s+code|rabatt\s?code|gutschein\s?code|codice\s+sconto|c[oó]digo\s+(?:de\s+)?descuento)\b|\b(discount|r[eé]duction|remise|rabatt|sconto|descuento)\b[\s\S]{0,30}\b(code|coupon)\b/i,
+              fact: 'Yes, we have a promotion code running: ' + ACTIVE_PROMO_CODE + '. It is applied automatically to every quote we build, so the price shown in the cart link is already the discounted price. Say the code is included in the quote being prepared - never say that discounts cannot be advised on. From eight people a group voucher applies on top, calculated in the quote itself: state that it applies, never a figure.',
+      },
       {
               key: 'insurance',
               re: /\b(alpin\s*guaranty|alpinguaranty|guaranty|assurance|insurance|protection|casse\s*(et|&)?\s*vol|dommages?\s*(et|&)?\s*(le\s*)?vol|damage\s*(and|&)?\s*theft|versicherung|seguro|assicurazione)\b/i,

@@ -135,6 +135,12 @@ const VOCABULARY = `HOW WE SPEAK (these are rules, not preferences)
 - Reply in the customer's language. Never mix two languages in one message.
 - Do not quote a discount percentage. This flow does not price anything.`;
 
+// Le code promo vit dans generate-quote.js (ALPY_PROMO_CODE, SKI26 par defaut).
+// Il est lu de la meme variable ici pour qu'un changement de code n'ait pas a
+// etre repercute a deux endroits - une reponse client qui annonce un code perime
+// est pire qu'une reponse qui n'en annonce aucun.
+const ACTIVE_PROMO_CODE = process.env.ALPY_PROMO_CODE || 'SKI26';
+
 const FACTS = `
 === BILLING AND PAPERWORK ===
 
@@ -171,6 +177,30 @@ CHEQUES VACANCES / ANCV
 Depends on the shop. Where accepted, the usual arrangement is a deposit online
 and the remainder on site. Most French shops accept them: pay the deposit part
 online, and the cheques vacances can generally be used on the spot.
+
+THE CUSTOMER ASKS IF WE HAVE A DISCOUNT CODE
+Yes, and the answer is never "we cannot advise on that". There is a current
+promotion code, ${ACTIVE_PROMO_CODE}, and every quote this system builds already has it
+applied — the price in the cart link is the discounted price, not one to negotiate
+down afterwards. So the useful sentence is: we have a code running, it is already
+included in the quote we are preparing for you, and the total you will see is the
+one you pay.
+
+Never answer a request for a code with a refusal or a deflection. A customer
+asking for a discount is a customer about to book. If a quote is being built,
+say the code is in it. If no quote is being built yet, give the code and offer
+to build one.
+
+From EIGHT people the group discount applies on top of the code: a voucher whose
+value follows the size of the basket, from 20 EUR on a small group up to 160 EUR
+on a large one. It is calculated automatically in the quote, so do not compute
+it by hand and do not promise a figure — say that a group of this size gets a
+voucher on top, and let the quote state the amount. Below eight people there is
+no group voucher; if the group is close to eight, it is fair and useful to
+mention that one more person tips it over.
+
+Never invent a percentage, and never offer a discount that does not exist in
+this section.
 
 A PROMOTION CODE IS REFUSED
 By far the commonest cause is a space copied into the field along with the code.
