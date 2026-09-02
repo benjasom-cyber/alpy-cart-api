@@ -112,6 +112,16 @@ const KEYWORDS = [
       // cancellation request.
       { topic: 'GENERAL_QUESTION',
         re: /^(?=[\s\S]*(?:\b(?:conditions?|frais|politique|d[eé]lai|co[uû]t)\s+d.annulation|\bcancellation\s+(?:polic\w+|conditions?|fees?|charges?|deadline|terms|costs?)|\bstornobedingungen|\bstornogeb[uü]hr\w*))(?![\s\S]*\b(?:annuler|annulez|annulons|annule|cancel|cancelling|canceled|cancelled|stornieren|storniere)\b)/i },
+      // ONE ITEM, NOT THE BOOKING. "Die Versicherung stornieren", "remove the
+      // helmet", "annuler les skis de Paul" carry the cancel verb, so the rule
+      // below read them as a FULL cancellation (581867: the handler then asked
+      // the customer to confirm cancelling a booking she wanted to keep). A
+      // cancel or remove verb next to an item word - a protection, an accessory,
+      // one named person's equipment - is a partial cancellation, and it must be
+      // decided before the whole-booking rule gets a look. A message that says
+      // "whole", "entire", "toute la", "ganze" steps aside and stays full.
+      { topic: 'PARTIAL_CANCELLATION',
+        re: /^(?![\s\S]*\b(?:cover\w*|couvre|couvert|include\w*|inclu\w*|what\s+is|what\s+does|c.est\s+quoi|was\s+deckt|abgedeckt|kostet|co[uû]te|cost\w*)\b)(?![\s\S]*\b(?:whole|entire|complete|toute\s+la|toute\s+ma|enti[eè]re|ganze|gesamte|komplette|intera|completa|toda\s+la)\s+(?:booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b)(?![\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*)\s+(?:of\s+)?(?:my|the|our|this|ma|la|notre|cette|meine|die|unsere|la\s+mia|mi)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b[\s\S]{0,60}\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b|\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b[\s\S]{0,40}\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b))/i },
       { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|these|those|this|that|both|all)?\s*(?:\w+\s+){0,2}(bookings?|reservations?|orders?|rentals?)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation|ations|[eé]e?s?)\s+(?:de\s+)?(?:ma|mes|la|les|notre|nos|cette|ces|deux)?\s*(?:\w+\s+){0,2}r[eé]servations?|storno\w*|stornier\w*)\b/i },
       // A double booking IS a cancellation request, and it is one of the most
       // common ones: the payment page errored, the customer tried again, and now
@@ -140,7 +150,12 @@ const KEYWORDS = [
       // No reference is required to match. ROUTES.REQUOTE demands booking_ref
       // before the flow may run, so a customer who asks without one is asked
       // for it instead of being handed over - which is the behaviour we want.
-      { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|add\s+(?:a\s+|an\s+|the\s+|another\s+|\d+\s+)?(?:helmets?|boots?|skis?|snowboards?|person|people|adults?|child(?:ren)?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
+      { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|add\s+(?:a\s+|an\s+|the\s+|another\s+|one\s+|\d+\s+)?(?:more\s+)?(?:skis?|snowboards?|persons?|people|adults?|child(?:ren)?|skiers?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
+      // Helmets, boots and protections added to an EXISTING booking: the General
+      // questions flow rebuilds the cart with the addon and answers the customer
+      // with the link (ticket 581843). REQUOTE would only leave an internal note.
+      { topic: 'GENERAL_QUESTION',
+        re: /\b(add|ajouter|rajouter|hinzuf[uü]gen|dazubuchen|nachbuchen|aggiungere|a[nñ]adir)\b[\s\S]{0,40}\b(helmets?|casques?|helm\w*|boots?|chaussures?|schuhe|scarponi|botas)\b[\s\S]{0,60}\b(booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b/i },
       // ABOVE 'QUOTE' deliberately: "combien coute Alpinguaranty ?" contains
       // the quote trigger word, but naming a protection makes it a question
       // about a product, not a request for a price on a rental.
@@ -1398,11 +1413,50 @@ export default async function handler(req, res) {
       // that ignores `action` still gets everything it had before.
 
       // Layer 2 - Alpy vocabulary. Layer 3 - whatever the caller's model said.
-      const decision = fromTags || detectFromKeywords(message) ||
-                       (pendingTopic ? { topic: pendingTopic, source: 'pending_topic', blocked: false } : null) ||
-                       (offeredTopic ? { topic: offeredTopic, source: 'offered_topic', blocked: false } : null) ||
-                       (llmTopic ? { topic: llmTopic, source: 'llm', blocked: false } : null) ||
-                       { topic: 'OTHER', source: 'none', blocked: false };
+      // THE ORDER OF THE LAYERS, REVISED (2 September 2026).
+      //
+      // The first version put the native Zendesk intent tag above everything.
+      // That tag is written ONCE, on the first message, and it stays on the
+      // ticket for life - so a ticket opened with "cancel my booking" carried
+      // intent__travel__booking_cancellation__cancel into every later message,
+      // and "can you add a helmet?" three days later was routed to the
+      // Cancellation Handler, which said "not a cancellation" and handed over.
+      // Measured on 15 Aug - 2 Sep: 7 of the 8 tickets carrying that tag ended
+      // exactly there. A flow chain cannot survive a layer that never changes.
+      //
+      // So the native tag now speaks only on the FIRST customer message, and
+      // only when the keyword layer and the model are both silent. NEVER_ANSWER
+      // is unchanged: unsolicited mail is unsolicited on every turn.
+      //
+      // The pending topic (awaiting__<topic>) keeps its place above the model
+      // for the answer to a question we asked - "B1AF9J" alone must still land
+      // on the topic that asked for it. But a customer who CHANGES SUBJECT is
+      // not answering us: when the model, reading the whole thread, sees a
+      // different action topic - a cancellation while we were waiting on a
+      // quote, a date change while we were waiting on a cancellation consent -
+      // the model wins. The list below is deliberately the action topics only:
+      // QUOTE, REQUOTE and GENERAL_QUESTION are what a model tends to say about
+      // any follow-up, and they must not break a slot-collection in progress.
+      const kw = detectFromKeywords(message);
+      const llm = llmTopic ? { topic: llmTopic, source: 'llm', blocked: false } : null;
+      const pend = pendingTopic ? { topic: pendingTopic, source: 'pending_topic', blocked: false } : null;
+      const off = offeredTopic ? { topic: offeredTopic, source: 'offered_topic', blocked: false } : null;
+      const nativeTopic = (fromTags && !fromTags.blocked) ? fromTags : null;
+      const firstTurn = !thread.turns || thread.turns.length <= 1;
+      const SWITCHES_SUBJECT = ['CANCELLATION', 'PARTIAL_CANCELLATION', 'DATE_CHANGE',
+                                'VOUCHER_RESEND', 'DEPOT_SWITCH', 'CANCELLATION_AFTER'];
+      const modelSwitches = (base) => llm && llm.topic !== base.topic && SWITCHES_SUBJECT.includes(llm.topic);
+
+      let decision;
+      if (kw) decision = kw;
+      else if (pend && modelSwitches(pend)) decision = { topic: llm.topic, source: 'llm_over_pending', blocked: false };
+      else if (pend) decision = pend;
+      else if (off && modelSwitches(off)) decision = { topic: llm.topic, source: 'llm_over_offered', blocked: false };
+      else if (off) decision = off;
+      else if (llm && llm.topic !== 'OTHER') decision = llm;
+      else if (nativeTopic && firstTurn) decision = nativeTopic;
+      else if (llm) decision = llm;
+      else decision = { topic: 'OTHER', source: 'none', blocked: false };
 
       const topic = decision.topic;
 
