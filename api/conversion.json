@@ -1,0 +1,197 @@
+{
+ "generated_at": "2026-09-02T09:35:00Z",
+ "title": "Conversion du support — instantané mai→août 2026",
+ "method": {
+  "population": "1 573 demandeurs Zendesk distincts (skisupport), premier contact entre le 2026-05-01 et le 2026-08-31, horodatage à la seconde",
+  "join": "md5(email en minuscules) tronqué à 12 hex = SUBSTR(customer_email_hash,4,12) sur dbt_prod_bi.base_bookings_agg_booking (BigQuery via Metabase, db 2). Recette vérifiée le 2026-09-02 sur B45WTZ, BPAWF5, B476WZ : les 3 hashs correspondent.",
+  "before": "réservations créées avant l'instant du contact (table BI depuis mai 2024)",
+  "after": "réservations créées entre le contact et +30 j (aussi +90 j et 'à ce jour')",
+  "caveats": [
+   "Seuls 8,1 % des demandeurs (128/1573) existent dans la table réservations : la colonne 'avant-vente' contient donc surtout des inconnus (spam, partenaires, candidats, clients écrivant d'une autre adresse). Le taux est à lire comme 'ventes / contacts joignables', pas comme un taux de clôture.",
+   "Août 2026 n'a pas encore ses 30 jours d'attribution complets pour les contacts après le 3 août.",
+   "Mesure de contrôle manuelle du 1er-15 août (README-REPRISE) : 166 demandeurs, 11 connus, 2 conversions — cohérente avec cet instantané."
+  ]
+ },
+ "months": [
+  {
+   "month": "2026-05",
+   "ok": true,
+   "source": "snapshot_bigquery_metabase_mcp",
+   "precision": "seconde",
+   "attribution_days": 30,
+   "generated_at": "2026-09-02T09:35:00Z",
+   "contacts": {
+    "requesters": 336,
+    "hashed": 336,
+    "matched_in_bookings": 31,
+    "matched_pct": 9.23
+   },
+   "presale": {
+    "contacts": 306,
+    "converted": 0,
+    "conversion_rate_pct": 0.0,
+    "revenue_eur": 0,
+    "revenue_per_contact_eur": 0,
+    "note": "converted = réservation dans les 30 jours suivant le contact"
+   },
+   "presale_90d": {
+    "converted": 1,
+    "conversion_rate_pct": 0.33,
+    "revenue_eur": 2850,
+    "revenue_per_contact_eur": 9.31
+   },
+   "presale_any": {
+    "converted": 1,
+    "revenue_eur": 2850
+   },
+   "repeat": {
+    "contacts": 29,
+    "rebooked": 0,
+    "rebooking_rate_pct": 0.0,
+    "revenue_eur": 0,
+    "window": "90 jours"
+   },
+   "partner_like": {
+    "contacts": 1,
+    "revenue_eur": 0,
+    "rule": ">= 5 réservations antérieures : compte pro/partenaire, exclu de l'avant-vente et du réachat"
+   },
+   "phone_coverage": null
+  },
+  {
+   "month": "2026-06",
+   "ok": true,
+   "source": "snapshot_bigquery_metabase_mcp",
+   "precision": "seconde",
+   "attribution_days": 30,
+   "generated_at": "2026-09-02T09:35:00Z",
+   "contacts": {
+    "requesters": 380,
+    "hashed": 380,
+    "matched_in_bookings": 15,
+    "matched_pct": 3.95
+   },
+   "presale": {
+    "contacts": 365,
+    "converted": 0,
+    "conversion_rate_pct": 0.0,
+    "revenue_eur": 0,
+    "revenue_per_contact_eur": 0.0,
+    "note": "converted = réservation dans les 30 jours suivant le contact"
+   },
+   "presale_90d": {
+    "converted": 0,
+    "conversion_rate_pct": 0.0,
+    "revenue_eur": 0,
+    "revenue_per_contact_eur": 0.0
+   },
+   "presale_any": {
+    "converted": 0,
+    "revenue_eur": 0
+   },
+   "repeat": {
+    "contacts": 15,
+    "rebooked": 1,
+    "rebooking_rate_pct": 6.67,
+    "revenue_eur": 1280.21,
+    "window": "90 jours"
+   },
+   "partner_like": {
+    "contacts": 0,
+    "revenue_eur": 0,
+    "rule": ">= 5 réservations antérieures : compte pro/partenaire, exclu de l'avant-vente et du réachat"
+   },
+   "phone_coverage": null
+  },
+  {
+   "month": "2026-07",
+   "ok": true,
+   "source": "snapshot_bigquery_metabase_mcp",
+   "precision": "seconde",
+   "attribution_days": 30,
+   "generated_at": "2026-09-02T09:35:00Z",
+   "contacts": {
+    "requesters": 419,
+    "hashed": 419,
+    "matched_in_bookings": 21,
+    "matched_pct": 5.01
+   },
+   "presale": {
+    "contacts": 399,
+    "converted": 1,
+    "conversion_rate_pct": 0.25,
+    "revenue_eur": 536.02,
+    "revenue_per_contact_eur": 1.34,
+    "note": "converted = réservation dans les 30 jours suivant le contact"
+   },
+   "presale_90d": {
+    "converted": 1,
+    "conversion_rate_pct": 0.25,
+    "revenue_eur": 536.02,
+    "revenue_per_contact_eur": 1.34
+   },
+   "presale_any": {
+    "converted": 1,
+    "revenue_eur": 536.02
+   },
+   "repeat": {
+    "contacts": 17,
+    "rebooked": 5,
+    "rebooking_rate_pct": 29.41,
+    "revenue_eur": 3021.45,
+    "window": "90 jours"
+   },
+   "partner_like": {
+    "contacts": 3,
+    "revenue_eur": 0,
+    "rule": ">= 5 réservations antérieures : compte pro/partenaire, exclu de l'avant-vente et du réachat"
+   },
+   "phone_coverage": null
+  },
+  {
+   "month": "2026-08",
+   "ok": true,
+   "source": "snapshot_bigquery_metabase_mcp",
+   "precision": "seconde",
+   "attribution_days": 30,
+   "generated_at": "2026-09-02T09:35:00Z",
+   "contacts": {
+    "requesters": 438,
+    "hashed": 438,
+    "matched_in_bookings": 61,
+    "matched_pct": 13.93
+   },
+   "presale": {
+    "contacts": 379,
+    "converted": 2,
+    "conversion_rate_pct": 0.53,
+    "revenue_eur": 508.4,
+    "revenue_per_contact_eur": 1.34,
+    "note": "converted = réservation dans les 30 jours suivant le contact"
+   },
+   "presale_90d": {
+    "converted": 2,
+    "conversion_rate_pct": 0.53,
+    "revenue_eur": 508.4,
+    "revenue_per_contact_eur": 1.34
+   },
+   "presale_any": {
+    "converted": 2,
+    "revenue_eur": 508.4
+   },
+   "repeat": {
+    "contacts": 53,
+    "rebooked": 7,
+    "rebooking_rate_pct": 13.21,
+    "revenue_eur": 2463.14,
+    "window": "90 jours"
+   },
+   "partner_like": {
+    "contacts": 6,
+    "revenue_eur": 1198.28,
+    "rule": ">= 5 réservations antérieures : compte pro/partenaire, exclu de l'avant-vente et du réachat"
+   },
+   "phone_coverage": null
+  }
+ ]
+}
