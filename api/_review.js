@@ -109,6 +109,21 @@ const STATUS_OPEN = 'open';
 // skips it. A timeout is not.
 const BUDGET_MS = 48000;
 
+// THE WINDOW IS THE REPLY DATE, NOT THE TICKET DATE.
+//
+// The first version selected tickets by `updated_at` and then graded the last
+// outbound reply on each of them, whatever its age. A ticket is updated by
+// anything - a customer answering three days later, an agent adding a tag, a
+// Zendesk automation closing it, this reader leaving its own note - so the
+// daily run drifted: on 2 September it re-read replies from 25-30 August and,
+// having spent its budget on them, never reached the ones sent on 1 September.
+// A reader that reviews last week is not a daily reader.
+//
+// So the window now applies to the reply itself: only a public message written
+// by the flows (never by the requester, never by a human agent) and CREATED
+// inside the window is graded. Everything else is skipped before any model call.
+
+
 // Three at a time. The wall-clock cost of a ticket is almost entirely one
 // Claude call spent waiting, so a little concurrency multiplies throughput
 // without multiplying load; more than three and the Zendesk rate limiter starts
@@ -259,6 +274,11 @@ const RUBRIC = [
 '  the message itself.',
 '- It replies to a complaint, an injury, an illness or a legal threat. Those are',
 '  never ours to answer.',
+'- It replies to a PARTNER, SHOP or SUPPLIER rather than to a customer: a price',
+'  list, season or opening dates, a stop-sale, a shop-data or product update, an',
+'  invoice or settlement, an attachment to process. The flow has no access to the',
+'  partner systems or to attachments, so any confirmation it gives ("updated",',
+'  "noted", "applied") is invented. Category SHOULD_HAVE_BEEN_HUMAN, severity HIGH.',
 '',
 '=== NOT PART OF THE MESSAGE ===',
 'Ignore the signature block at the end - the name, the company, the phone number,',
@@ -411,16 +431,33 @@ function strip(html) {
 /**
  * The reply under review, and everything the customer said before it.
  *
- * "The flow's reply" is the last PUBLIC comment that is not the requester's, on
- * a ticket the flow tagged. That is an approximation and it has one known hole:
- * a human agent who answers a flow-tagged ticket has their message read too. It
- * fails safe - a human message almost always passes, and when it does not, the
- * note it earns is a fair one.
+ * "The flow's reply" is the newest PUBLIC comment posted by the system user on a
+ * ticket the flow tagged, provided it was created inside the review window.
+ * Three things end the search early, each reported so the caller can count them:
+ * the newest outbound message is a human agent's (they have the ticket), the
+ * newest flow reply predates the window (an earlier run's business), or there is
+ * no outbound message at all.
  */
-function pickReply(comments, requesterId) {
+// Zendesk gives the system user - the author of every reply an action flow
+// posts - the id -1. A human agent has a positive id. Anything the requester
+// wrote is theirs.
+const SYSTEM_AUTHOR_ID = -1;
+
+function pickReply(comments, requesterId, start) {
+  const from = start ? start.getTime() : 0;
   for (let i = comments.length - 1; i >= 0; i--) {
     const c = comments[i];
-    if (c.public && c.author_id !== requesterId) return { comment: c, index: i };
+    if (!c.public || c.author_id === requesterId) continue;
+    // Only the flows' own words are graded. A human agent who answered after
+    // the flow has taken the ticket over - their message is usually the
+    // correction - so there is nothing left for a second reader to add.
+    if (c.author_id !== SYSTEM_AUTHOR_ID) return { human: true, comment: c, index: i };
+    if (new Date(c.created_at).getTime() < from) {
+      // Newest flow reply is older than the window: reviewed by an earlier run,
+      // or never ours to review. Stop - there is nothing newer below.
+      return { stale: true, comment: c, index: i };
+    }
+    return { comment: c, index: i };
   }
   return null;
 }
@@ -469,11 +506,18 @@ async function reviewTicket(ticket, opts) {
   const comments = cj.comments || [];
   if (!comments.length) { out.skipped = 'no comments'; return out; }
 
-  const picked = pickReply(comments, ticket.requester_id);
+  const picked = pickReply(comments, ticket.requester_id, opts.start);
   if (!picked) { out.skipped = 'no outbound public reply'; return out; }
+  if (picked.human) { out.skipped = 'last outbound reply is from a human agent'; return out; }
+  if (picked.stale) {
+    out.skipped = 'newest flow reply is older than the window';
+    out.replyAt = picked.comment.created_at;
+    return out;
+  }
 
   const commentId = picked.comment.id;
   out.comment = commentId;
+  out.replyAt = picked.comment.created_at;
 
   const profile = flowProfile(ticket.tags);
   out.profile = profile;
@@ -566,20 +610,35 @@ async function reviewTicket(ticket, opts) {
 async function runReview(req, res) {
   const q = { ...(req.query || {}), ...(req.method === 'POST' ? (req.body || {}) : {}) };
   const start = windowStart(q.since);
-  const limit = Math.min(Math.max(parseInt(q.limit, 10) || 25, 1), 60);
+  // A skipped ticket costs one comment read and no model call, so the limit can
+  // be generous: it bounds Zendesk reads, the clock bounds Claude calls.
+  const limit = Math.min(Math.max(parseInt(q.limit, 10) || 60, 1), 120);
   const dry = String(q.dry || '') === '1' || q.dry === true;
 
   // Zendesk search granularity is a day, so we over-fetch and filter on the real
-  // timestamp. Cheaper than being clever, and never misses a ticket.
+  // timestamp. A reply sent inside the window always updated its ticket inside
+  // the window, so `updated` is a safe superset - the reply date is checked per
+  // ticket in pickReply. Three pages of 100, newest first: in season one day of
+  // AI-touched tickets does not fit in one page.
   const query = 'type:ticket updated>' + ymd(new Date(start.getTime() - 86400e3));
-  const sj = await zd('/api/v2/search.json?sort_by=updated_at&sort_order=desc&query=' +
-                      encodeURIComponent(query));
-
-  const candidates = (sj.results || [])
-    .filter(t => t && t.result_type === 'ticket')
-    .filter(t => new Date(t.updated_at).getTime() >= start.getTime())
-    .filter(t => isAiTouched(t.tags))
-    .slice(0, limit);
+  const seen = new Set();
+  const found = [];
+  let scanned = 0;
+  for (let page = 1; page <= 3; page++) {
+    const sj = await zd('/api/v2/search.json?sort_by=updated_at&sort_order=desc&per_page=100&page=' +
+                        page + '&query=' + encodeURIComponent(query));
+    const rows = (sj.results || []).filter(t => t && t.result_type === 'ticket');
+    scanned += rows.length;
+    for (const t of rows) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      if (new Date(t.updated_at).getTime() < start.getTime()) continue;
+      if (!isAiTouched(t.tags)) continue;
+      found.push(t);
+    }
+    if (rows.length < 100 || !sj.next_page) break;
+  }
+  const candidates = found.slice(0, limit);
 
   const began = Date.now();
   const results = [];
@@ -588,7 +647,7 @@ async function runReview(req, res) {
     if (Date.now() - began > BUDGET_MS) { cut = candidates.length - i; break; }
     const slice = candidates.slice(i, i + CONCURRENCY);
     const done = await Promise.all(slice.map(async t => {
-      try { return await reviewTicket(t, { dry }); }
+      try { return await reviewTicket(t, { dry, start }); }
       catch (e) { return { ticket: t.id, error: String(e && e.message || e).slice(0, 300) }; }
     }));
     for (const r of done) results.push(r);
@@ -600,8 +659,13 @@ async function runReview(req, res) {
     window: { from: start.toISOString(), to: new Date().toISOString() },
     dry,
     model: MODEL,
-    scanned: (sj.results || []).length,
-    aiTouched: candidates.length,
+    scanned,
+    aiTouched: found.length,
+    considered: candidates.length,
+    // Tickets whose newest flow reply predates the window - the drift the old
+    // version graded by mistake. They cost one read each and no model call.
+    staleSkipped: results.filter(r => r.skipped === 'newest flow reply is older than the window').length,
+    humanSkipped: results.filter(r => r.skipped === 'last outbound reply is from a human agent').length,
     // Not an error. Call again with the same parameters: everything already
     // judged is skipped by its comment id, so a second call resumes here.
     remaining: cut,
