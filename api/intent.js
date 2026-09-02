@@ -808,6 +808,51 @@ function designatedRefs(text, refs) {
 
 const ODIN_BASE = 'https://odin.alpy.com';
 
+/**
+ * IS THIS BOOKING STILL ALIVE?
+ *
+ * 581920. The customer asked to move booking BAEGZF from 4 to 6 March. We asked
+ * them, publicly, for their last day of rental. They answered. Only THEN did the
+ * flow read Odin and discover the booking had been cancelled all along - and
+ * ended on "an agent must handle this request". A wasted round trip, on a
+ * customer who had told us everything the first time.
+ *
+ * The state of a booking is one HTTP read, it is authoritative, and it costs
+ * nothing to do before we open our mouth. So a topic that acts on a booking now
+ * checks it BEFORE the question goes out, and the question carries the news.
+ *
+ * Deliberately fail-soft: any error returns an empty verdict and the flow
+ * behaves exactly as it did before. A slow Odin must never silence a reply.
+ */
+const BOOKING_STATE_CACHE = new Map();
+
+async function fetchBookingState(ref) {
+      const code = String(ref || '').trim().toUpperCase();
+      if (!/^[A-Z0-9]{4,12}$/.test(code)) return null;
+      if (BOOKING_STATE_CACHE.has(code)) return BOOKING_STATE_CACHE.get(code);
+      let out = null;
+      try {
+              const ctrl = new AbortController();
+              const t = setTimeout(() => ctrl.abort(), 4000);
+              const r = await fetch(ODIN_BASE + '/api/v2/booking/' + encodeURIComponent(code),
+                                    { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+              clearTimeout(t);
+              if (r.status === 404) out = { found: false, status: '', cancelled: false, expired: false };
+              else if (r.ok) {
+                        const b = await r.json();
+                        const st = String((b && (b.bookingStatus || b.status)) || '').toUpperCase();
+                        out = {
+                          found: true,
+                          status: st,
+                          cancelled: st.indexOf('CANCEL') > -1,
+                          expired: st.indexOf('EXPIR') > -1,
+                        };
+              }
+      } catch { out = null; }
+      BOOKING_STATE_CACHE.set(code, out);
+      return out;
+}
+
 async function fetchBookingHistory(ref) {
       const code = String(ref || '').trim().toUpperCase();
       if (!/^[A-Z0-9]{4,12}$/.test(code)) return '';
@@ -1574,7 +1619,35 @@ export default async function handler(req, res) {
       const unstatedExtras = topic === 'QUOTE'
         ? factsForMissing(['boots', 'helmets', 'insurance'].filter(n => !hasSlot(slots, n)))
         : [];
-      const productQuestions = mergeFacts(askedQuestions, mergeFacts(factsForMissing(check.missing), unstatedExtras));
+      // THE STATE OF THE BOOKING, SAID BEFORE WE ASK ANYTHING (581920).
+      //
+      // Only for the topics that act on an existing booking, and only when the
+      // customer named the reference themselves. The fact goes into `answers`,
+      // which the composing prompt is required to state before its question - so
+      // a customer whose booking is cancelled learns it in the same message that
+      // asks them for the dates, instead of two messages later.
+      //
+      // The topic is NOT changed here. Date Change reads Odin itself and now
+      // turns a cancelled booking into a re-booking offer with a priced basket;
+      // this only stops us asking as though nothing were wrong.
+      const ACTS_ON_A_BOOKING = ['DATE_CHANGE', 'CANCELLATION', 'PARTIAL_CANCELLATION'];
+      const bookingFacts = [];
+      if (ACTS_ON_A_BOOKING.includes(topic) && slots.booking_ref && !usedRefFromHistory) {
+              const state = await fetchBookingState(slots.booking_ref);
+              if (state && state.found && (state.cancelled || state.expired)) {
+                        bookingFacts.push({ slot: '_booking_state', fact:
+                          'Booking ' + String(slots.booking_ref).toUpperCase() + ' shows as ' +
+                          (state.cancelled ? 'CANCELLED' : 'EXPIRED') + ' in our system, so it carries no ' +
+                          'dates or items we can change. Say this plainly, do not guess why it happened, ' +
+                          'and offer to prepare a new booking for the dates they want instead.' });
+              } else if (state && !state.found) {
+                        bookingFacts.push({ slot: '_booking_state', fact:
+                          'No booking exists under the reference ' + String(slots.booking_ref).toUpperCase() +
+                          '. Ask them to check it against their confirmation email - do not act on it.' });
+              }
+      }
+
+      const productQuestions = mergeFacts(bookingFacts, mergeFacts(askedQuestions, mergeFacts(factsForMissing(check.missing), unstatedExtras)));
       const missingLabelsOf = c => c.missing.map(req => {
               const first = req.split('|')[0];
               return SLOTS[first] ? SLOTS[first].label : first;
