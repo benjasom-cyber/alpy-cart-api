@@ -662,7 +662,33 @@ function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price
 
       const savingBit = price != null ? buildSavingBit(price, inStorePrice, currency) : '';
 
-      return head + priceBit + savingBit + couponBit + ' Book directly here: ' + cartUrl;
+      const body = head + priceBit + savingBit + couponBit;
+
+      // LE LIEN SUR SA PROPRE LIGNE, ET PAS AU MILIEU DE LA PHRASE.
+      //
+      // L'URL de panier fait 400 caracteres. Collee derriere un ":" dans un
+      // paragraphe, elle noie la phrase qui la precede et le message arrive
+      // chez l'agent comme un pave. Deux sauts de ligne suffisent a le rendre
+      // lisible, et une URL seule sur sa ligne est aussi la seule forme que
+      // l'editeur de Zendesk transforme encore en lien tout seul.
+      return {
+              text: body + '\n\nBook directly here:\n' + cartUrl,
+
+              // La meme chose en HTML, avec un vrai lien porte par un libelle
+              // court. C'est cette sortie qu'un flow doit inserer dans une
+              // reponse client : personne n'a envie de lire quatre cents
+              // caracteres d'URL encodee, et le lien reste cliquable meme si
+              // Zendesk cesse de linkifier les URL nues.
+              html: escapeHtml(body) +
+                    '<br><br><a href="' + cartUrl + '">Book your equipment here</a>',
+      };
+}
+
+/** Le strict necessaire : ce texte est du notre, mais il porte des noms de boutique. */
+function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // Source of truth: "calculation-coupon-code-size-for-groups.xlsx".
@@ -1216,8 +1242,13 @@ export default async function handler(req, res) {
       });
 
   const topLevelPricing = {
-          quoteLine,
-          quoteline: quoteLine,
+          // `quoteline` reste du texte, comme avant, pour ne casser aucun flow
+          // qui l'utilise deja - simplement avec l'URL sur sa propre ligne.
+          // `quotelinehtml` est la version a inserer dans une reponse client.
+          quoteLine: quoteLine.text,
+          quoteline: quoteLine.text,
+          quoteLineHtml: quoteLine.html,
+          quotelinehtml: quoteLine.html,
           quoteHasPrice,
           quotehasprice: quoteHasPrice,
           detectedLanguage: lang,          
