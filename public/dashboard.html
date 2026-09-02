@@ -597,10 +597,14 @@
         ['Appels rattachables', ph.coverage_pct == null ? '—' : pct(ph.coverage_pct),
          fmt(ph.unjoinable) + ' appels sans ticket', ph.coverage_pct != null && ph.coverage_pct < 70]
       ];
-      $('#convSource').textContent = last.precision === 'jour'
-        ? ' Lecture par lien public Metabase : le « avant / après » est à la journée, '
-          + 'donc une réservation faite le jour même du contact compte comme une conversion.'
-        : '';
+      if (last.precision === 'jour') {
+        $('#convSource').textContent = ' Lecture par lien public Metabase : le « avant / après » est à la journée, '
+          + 'donc une réservation faite le jour même du contact compte comme une conversion.';
+      } else if (last.source && last.source.indexOf('snapshot') === 0) {
+        $('#convSource').textContent = ' Instantané ' + esc(last.generated_at ? new Date(last.generated_at).toLocaleDateString('fr-FR') : '')
+          + ' — ' + fmt(last.contacts && last.contacts.matched_in_bookings) + ' demandeurs sur '
+          + fmt(last.contacts && last.contacts.requesters) + ' retrouvés dans la base réservations.';
+      }
       $('#convTiles').innerHTML = tiles.map(function (t) {
         return '<div class="tile' + (t[3] ? ' alert' : '') + '">' +
           '<div class="label">' + esc(t[0]) + '</div>' +
@@ -618,6 +622,31 @@
       list.push({ month: d.toISOString().slice(0, 7) });
     }
     state.conv = list; renderConv();
+
+    // L'INSTANTANÉ D'ABORD, LE DIRECT ENSUITE.
+    // /conversion.json est un fichier statique posé dans public/ par une session
+    // Cowork (jointure empreintes Zendesk ↔ BigQuery faite hors Vercel, à la
+    // seconde). Il s'affiche tout de suite, sans clé Metabase. Si l'endpoint
+    // live répond ensuite pour un mois, sa valeur remplace celle du fichier.
+    fetch('/conversion.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (snap) {
+        if (!snap || !snap.months) return;
+        snap.months.forEach(function (sm) {
+          for (var k = 0; k < list.length; k++) {
+            if (list[k].month === sm.month && !list[k].presale) list[k] = sm;
+          }
+        });
+        state.conv = list; renderConv();
+        var when = snap.generated_at ? new Date(snap.generated_at).toLocaleDateString('fr-FR') : '';
+        var note = $('#convSource');
+        if (note && !note.textContent) {
+          note.textContent = ' Instantané du ' + when + ' (jointure faite hors ligne, à la seconde) ; '
+            + 'le direct Metabase, s\'il répond, remplace ces valeurs mois par mois.';
+        }
+      })
+      .catch(function () {});
+
     var idx = 0;
     $('#convStatus').textContent = 'Rapprochement tickets ↔ réservations…';
     (function next() {
