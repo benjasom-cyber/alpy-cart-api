@@ -82,6 +82,21 @@ const KEYWORDS = [
       // ordinary cancellation. Only the two together mean what this route means.
       { topic: 'CANCELLATION_AFTER',
         re: /(?=[\s\S]*\b(injur\w*|blessur\w*|bless[ée]\w*|accident\w*|malad\w*|sick|illness|ill\b|krank\w*|verletz\w*|unfall\w*|broke\s+(?:my|his|her)\s+\w+|cass[ée]\s+(?:ma|mon|sa)\s+\w+|medical\s+certificate|certificat\s+m[eé]dical|arztlich\w*))(?=[\s\S]*\b(cancel\w*|annul\w*|refund\w*|rembours\w*|storno\w*|stornier\w*|r[uü]ckerstattung\w*|remaining\s+days?|jours?\s+restants?|returned?\s+(?:it\s+|them\s+|the\s+equipment\s+)?early|rendu\s+(?:le\s+)?mat[eé]riel|rentr[ée]s?\s+plus\s+t[oô]t|unused\s+days?|jours?\s+(?:non\s+)?utilis[eé]s?))/i },
+      // AN EARLY RETURN IS A CANCEL-AFTER, EVEN WITHOUT AN INJURY.
+      //
+      // 581919: "the Ski Republic store in Chamonix told us we would be
+      // reimbursed for the unused days since we returned the equipment 3 days
+      // before the end of the rental period. It has been 4 weeks." Every word of
+      // that is a cancel-after - the rental had started, the equipment came back
+      // early, money is owed - and it matched NOTHING, because the rule above
+      // demands an injury word. The customer got "No capability matches this
+      // message" on a request that names its booking and its amount of days.
+      //
+      // Illness is the common cause of an early return, not the only one. This
+      // rule pairs the two halves that actually define the case: a refund asked
+      // for, and days that were paid but not used.
+      { topic: 'CANCELLATION_AFTER',
+        re: /(?=[\s\S]*\b(?:refund\w*|reimburs\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|money\s+back|rimbors\w*|reembols\w*))(?=[\s\S]*(?:\bunused\s+days?\b|\bdays?\s+(?:we|they|i)\s+(?:did\s+not|didn.t|could\s+not|couldn.t|never)\s+use\b|\bjours?\s+(?:non\s+)?utilis[eé]s?\b|\bnicht\s+genutzte\w*\s+tage\b|\breturn\w*[\s\S]{0,40}(?:early|earlier|\d+\s+days?\s+(?:before|early))\b|\brendu[\s\S]{0,30}(?:mat[eé]riel|skis?|plus\s+t[oô]t)\b|\brentr[eé]\w*\s+plus\s+t[oô]t\b|\b(?:vorzeitig|fr[uü]her)\s+zur[uü]ck\w*|\bremaining\s+days?\b|\bjours?\s+restants?\b))/i },
       // The article is optional on purpose. "Cancel booking BT4WSA" is the way
       // customers actually write it, and requiring "my" or "the" meant the
       // keyword layer missed it and the whole decision fell to the model.
