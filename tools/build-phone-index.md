@@ -1,4 +1,4 @@
-# Rebuilding `public/phone-index.json`
+# Rebuilding the phone index (`api/_phone-index-data.js`)
 
 The phone index maps a caller's number to the email fingerprint the BI booking
 table joins on. It is a **build-time artefact**, not something the API fetches.
@@ -53,18 +53,24 @@ The mechanics that make this work, and the traps:
   of pairs, and matched nothing. **If you change `phoneKeys()`, rebuild the
   index** — a mismatch fails silently.
 
-Then write `public/phone-index.json`:
+Then write `api/_phone-index-data.js`:
 
-```json
-{
-  "version": 1,
-  "built_at": "…Z",
-  "source": "…",
-  "bookings_walked": 4920,
-  "pairs": 7279,
-  "map": { "<phoneKeyHash>": "<md5(email).slice(0,12)>" }
-}
+```js
+export const META = { version: 1, built_at: "…Z", source: "…", bookings_walked: 4920, pairs: 7279 };
+export const MAP  = { "<phoneKeyHash>": "<md5(email).slice(0,12)>" };
 ```
+
+It is a **module**, not a JSON file under `public/`, and that is not a style
+choice. `public/` is served by the CDN and is never bundled into the serverless
+function, so reading it at runtime always fails. Worse, the natural way to find
+a sibling file — `new URL(..., import.meta.url)` — is a **syntax error** here:
+this project has no `"type": "module"`, so Vercel compiles `api/*.js` to
+CommonJS. That crash is not local to one endpoint; a syntax error in any
+imported file takes down the entire `/api/support` function, and with it every
+action the dashboard calls. It happened on 2026-09-03.
+
+`node --check` does not catch it — it parses the file as an ES module quite
+happily. Run `tools/check-cjs-safe.sh` before pushing anything under `api/`.
 
 ## Verifying a rebuild
 

@@ -45,6 +45,7 @@
  */
 
 import crypto from 'node:crypto';
+import { MAP, META } from './_phone-index-data.js';
 
 const md5 = (s) => crypto.createHash('md5').update(String(s).trim().toLowerCase(), 'utf8').digest('hex');
 
@@ -80,28 +81,18 @@ export function phoneKeys(input) {
 
 /* ------------------------------------------------------------------ loading */
 
-let CACHE = null;
-
 /**
- * The index, ready to look up. Reads the committed JSON once per lambda and
- * keeps it — 7k keys is a couple of hundred kilobytes, so this is cheap and
- * there is nothing to refresh within the life of an instance.
+ * The index is a bundled module, not a file read at runtime.
  *
- * A missing file is not an error: it means nobody has built the index yet, and
- * the caller degrades to email-only matching. `pairs: 0` says so honestly
- * rather than pretending the join worked.
+ * The obvious version of this — reading public/phone-index.json with
+ * import.meta.url — is wrong twice over on Vercel: public/ is served by the CDN
+ * and never lands in the function's filesystem, and this project has no
+ * "type": "module", so the files are compiled to CommonJS where import.meta is
+ * a syntax error. That crash took the whole /api/support function down, every
+ * action with it, until it was replaced by this import.
  */
 export async function loadIndex() {
-  if (CACHE) return CACHE;
-  try {
-    const { readFile } = await import('node:fs/promises');
-    const path = new URL('../public/phone-index.json', import.meta.url);
-    const j = JSON.parse(await readFile(path, 'utf8'));
-    CACHE = { map: j.map || {}, meta: { built_at: j.built_at, pairs: j.pairs, bookings_walked: j.bookings_walked, source: j.source } };
-  } catch {
-    CACHE = { map: {}, meta: null };
-  }
-  return CACHE;
+  return { map: MAP, meta: META };
 }
 
 /** phone (E.164 string or Odin's {countryCode, nationalNumber}) -> md5(email).slice(0,12) */
