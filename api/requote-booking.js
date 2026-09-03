@@ -173,8 +173,42 @@ function buildPersons(equipment, includeCancelled) {
   const wantHelmet = [];
   const itemServices = [];
 
-  for (const item of equipment || []) {
-    if (!includeCancelled && isCancelled(item && item.status)) continue;
+  const live = (equipment || []).filter(item => includeCancelled || !isCancelled(item && item.status));
+
+  // BOOTS OR A HELMET SOLD AS A PRODUCT, ON A PERSON WHO ALREADY HAS SKIS.
+  //
+  // BTFBV6 (581957): Till, personIndex 1, holds two items - "Rookie (4*) Ski"
+  // (definitionId 15) and "Rookie (4*) Skischuh" (definitionId 26). The boots
+  // are not an accessory of the ski item; Odin sells them as a product of their
+  // own, with the same personIndex. Rebuilding one person per item turned the
+  // boots into a second 12-year-old skier: four skis for three people, and a
+  // wrong price presented as the customer's own basket. An accessory-shaped
+  // item (boots / helmet by name, unknown to DEF_TO_SPEC) whose personIndex
+  // already carries a real ski or snowboard product is that person's addon.
+  // The accessory-ONLY person (581942, a helmet and nothing else) keeps its own
+  // line, and is handled further down.
+  const isAccessoryProduct = item => !DEF_TO_SPEC[item.definitionId] &&
+    /boots?\b|skischuh|schuh|chaussure|scarpon|botas|helmet|casque|helm\b|casco|kask/i.test(String(item.name || ''));
+  const personIdx = item => (item.personalInfo && item.personalInfo.personIndex != null)
+    ? String(item.personalInfo.personIndex) : null;
+  const realProductIdx = new Set(live.filter(i => !isAccessoryProduct(i)).map(personIdx).filter(x => x != null));
+  const foldedInto = new Map(); // personIndex -> index in persons[]
+
+  for (const item of live) {
+    const idx = personIdx(item);
+    if (isAccessoryProduct(item) && idx != null && realProductIdx.has(idx)) {
+      // Folded onto the same person's real product, once that line exists.
+      const target = foldedInto.get(idx);
+      const isBoots = /boots?\b|skischuh|schuh|chaussure|scarpon|botas/i.test(String(item.name || ''));
+      if (target != null) {
+        if (isBoots) wantBoots[target] = true; else wantHelmet[target] = true;
+        persons[target].foldedAccessories = (persons[target].foldedAccessories || []).concat(item.name || (isBoots ? 'boots' : 'helmet'));
+      } else {
+        // The accessory item came before the ski item in Odin's list: park it.
+        foldedInto.set(idx + ':pending', (foldedInto.get(idx + ':pending') || []).concat(isBoots ? 'boots' : 'helmet'));
+      }
+      continue;
+    }
 
     const known = DEF_TO_SPEC[item.definitionId];
     const spec = known || specFromName(item.name);
@@ -188,11 +222,22 @@ function buildPersons(equipment, includeCancelled) {
       sourceDefinitionId: item.definitionId != null ? item.definitionId : null,
       skillResolvedFrom: known ? 'definitionId' : 'product name (definitionId unknown)',
     });
+    const me = persons.length - 1;
 
     const accessories = (item.accessories || [])
       .filter(a => includeCancelled || !isCancelled(a && a.status));
-    wantBoots.push(accessories.some(a => a.definitionId === 1 || /boot/i.test(String(a.name || ''))));
-    wantHelmet.push(accessories.some(a => a.definitionId === 2 || /helmet|casque/i.test(String(a.name || ''))));
+    let boots = accessories.some(a => a.definitionId === 1 || /boot/i.test(String(a.name || '')));
+    let helmet = accessories.some(a => a.definitionId === 2 || /helmet|casque/i.test(String(a.name || '')));
+    if (idx != null && !isAccessoryProduct(item)) {
+      const pending = foldedInto.get(idx + ':pending') || [];
+      if (pending.includes('boots')) boots = true;
+      if (pending.includes('helmet')) helmet = true;
+      if (pending.length) persons[me].foldedAccessories = pending.slice();
+      foldedInto.delete(idx + ':pending');
+      foldedInto.set(idx, me);
+    }
+    wantBoots.push(boots);
+    wantHelmet.push(helmet);
 
     // SERVICES ARE ADDONS TOO.
     //
@@ -664,6 +709,14 @@ export default async function handler(req, res) {
         equipmentAddedFor.join(', ') + ': the original booking held only a helmet or boots for ' +
         (equipmentAddedFor.length > 1 ? 'these persons' : 'this person') + ', with no ' + wantsEquipment +
         ' at all. The level is ASSUMED intermediate - confirm it with the customer or adjust it in the cart.'
+      );
+    }
+    const folded = persons.filter(p => p.foldedAccessories && p.foldedAccessories.length);
+    if (folded.length) {
+      approximations.push(
+        folded.map(p => p.age + 'yr: ' + p.foldedAccessories.join(' + ')).join('; ') +
+        ' were booked as separate product lines on the same person and are rebuilt as that ' +
+        'person\'s addon (boots / helmet), not as an extra skier.'
       );
     }
     if (unknownDefs.length) {
