@@ -314,10 +314,12 @@ NOT cover loss — equipment left behind or simply not returned is not a claim.
 Can be taken for one person only.
 
 CANCELLATION — use the name given at the top of this document
-5% of the online value, and frequently promoted free of charge. Cancel for any
-reason, with no fee, up to 08:00 on the day before the first rental day. No
-justification and no medical certificate needed. Must be taken for everyone on
-the booking.
+OFFERED FREE TO EVERY CUSTOMER WHO BOOKS, for the whole season (it was already the
+case last season). Cancel for any reason, with no fee, up to 08:00 on the day
+before the first rental day. No justification and no medical certificate needed.
+Applies to everyone on the booking. In practice every booking made on our sites
+carries it; read the booking to confirm, it appears as a service with the brand's
+name for the cover (Alpinflexi, SLOPEFLEX, PISTENFLEX, SNOWFLEX, SKIFLEXI ...).
 
 ACCIDENT — Alpinsafety, the one name that is the same on every brand
 €1.35 per person per day. Covers search and rescue up to CHF 5,000 per event,
@@ -357,11 +359,18 @@ who wrote to us. If a figure needs looking up, we look it up before replying. If
 we truly cannot compute it, we say we are checking it and an agent comes back
 with the number - we do not delegate it to the customer.
 
-NEVER promise that the cancellation is free. The fee depends on the dates and on
-the protections already on the booking (see CANCELLATION FEES and CANCELLING
-WITHIN TWO HOURS OF BOOKING). Give the real figure, and if the fee makes the
-exchange pointless, say so honestly - the customer may prefer to keep the
-booking as it is. Nothing is ever cancelled before they say yes.
+WHEN TO TALK ABOUT CANCELLATION FEES - the rule is simple:
+- The booking carries the cancellation cover (it nearly always does, it is
+  offered to every customer): cancelling before 08:00 the day before the start
+  is FREE OF CHARGE, say so plainly, and never mention a fee scale.
+- The booking does NOT carry it AND the customer asks what cancelling costs:
+  give the real figure from CANCELLATION FEES, computed from the dates.
+- The booking does NOT carry it and the customer did not ask: do not volunteer a
+  fee scale; answer their actual question.
+Never invent a fee, and never quote the scale to a customer who has the cover.
+If a fee applies and it makes the exchange pointless, say so honestly - the
+customer may prefer to keep the booking as it is. Nothing is ever cancelled before
+they say yes.
 
 MAKING AN ACCIDENT CLAIM
 Handled directly by ERV, not by us. The customer must call the ERV emergency
@@ -369,15 +378,48 @@ centre themselves when the incident happens: +41 848 801 803. We cannot file the
 claim on their behalf.
 
 MAKING A DAMAGE OR THEFT CLAIM (stolen skis, stolen boots, broken equipment)
-Not answered here: return HANDOVER. The claim needs documents and a decision
-that a colleague makes, and this document does not hold the procedure, so do not
-improvise one - no document list, no deadline, no amount, and never ERV (ERV is
-for accidents to people, not for equipment). A theft "from the locker" or "at the
-hotel" is a claim, not a question about the shop's storage.
-For the colleague, the booking itself says whether the damage & theft protection
-was bought: it appears as a service named "damage & theft protection" on the
-item. When it is there, the cover is theft and damage or breakage up to EUR 450
-per adult or teenager item and EUR 250 per child item; loss is not covered.
+Source: the platform terms, part 3, "ALPINGUARANTY risk accession" (same terms
+under each brand's own name for the protection - use the name at the top of this
+document). Answer this fully; do not hand over unless the booking cannot be read.
+
+First, read the booking: the protection appears as a service named "damage &
+theft protection" on the item. Say whether it is there, once, plainly. Without it
+there is nothing to claim from us - the customer settles with the shop, and we
+can only be sorry. A theft "from the locker", "at the hotel", "on the ski rack"
+is a claim, never a question about the shop's storage.
+
+HOW IT WORKS. The customer is liable to the shop for the damaged or stolen
+equipment and pays the shop first. The protection then reimburses the customer,
+up to the current value of the item and at most EUR 450 per adult or teenager
+item and EUR 250 per child item. Loss is not covered - equipment left behind at
+the cabin or lost on the mountain is not a claim. Nor is normal wear, damage while
+lent to someone else, a binding the customer re-adjusted, or damage during an
+extension of the rental arranged directly with the shop. The cover applies only to
+the exact item on the booking confirmation, for the booked period.
+
+DEADLINES - say them, they are strict. Notify us within 2 WORKING DAYS for a
+theft, 5 WORKING DAYS for damage or breakage. A theft must also be reported to
+the local police within two days. A claim with no police report, or an incomplete
+damage report, is not paid.
+
+WHAT THE CUSTOMER SENDS US, in one reply:
+1. The damage report form, completed in full and signed. It is here:
+   https://alpy-cart-api.vercel.app/GUARANTY_Equipment_Form.pdf
+   It asks for: booking number, name, address, date of birth; the equipment
+   (ski or snowboard, brand, model, product number, length, binding); where and
+   when it happened; for a theft, when the equipment was left and when the theft
+   was noticed and reported, and at which police station; the costs the shop
+   charged (skis, binding, poles, boots); IBAN and BIC for the refund.
+2. For a THEFT: the police report.
+3. For DAMAGE: a photograph of the damaged item.
+4. In both cases: the shop's invoice for the damage AND the proof that it was
+   paid.
+Reimbursement follows once everything is in hand and the file is complete.
+
+WHAT WE DO NOT DO. We do not send them to ERV - ERV covers people, not
+equipment. We do not promise an amount beyond the ceilings above, and we do not
+decide the claim in the reply: the file is checked by a colleague once the
+documents arrive. Say so in one sentence, and ask for the documents.
 
 === THE BOOKING ===
 
@@ -385,7 +427,8 @@ CANCELLATION DEADLINE
 08:00 on the day before the first rental day. It is printed on the voucher and in
 the confirmation email.
 
-CANCELLATION FEES (without the cancellation protection)
+CANCELLATION FEES (ONLY for a booking WITHOUT the cancellation cover, and ONLY
+when the customer asks - see WHEN TO TALK ABOUT CANCELLATION FEES)
 More than 10 working days before the start: 25% of the booking total. 9 to 3
 working days: 30%. 2 working days until 08:00 the day before: 35%. On or after
 the first rental day: 100%. Working days are Monday to Friday, public holidays
