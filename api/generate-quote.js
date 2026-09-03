@@ -71,6 +71,7 @@
  */
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
+import { resolveDomain, brandLabel } from './_platform.js';
 
 // Localised "ski rental" URL segment, taken from the hreflang alternates that
 // alpy.com publishes on every shop page. Verified 2026-08-01.
@@ -1134,7 +1135,16 @@ export default async function handler(req, res) {
       // which server-redirects to the correct localised path. Use that instead.
       // Only emit a locale the site actually serves - anything else 404s.
       const urlLang = RENTAL_SEGMENT[String(lang).slice(0, 2).toLowerCase()] ? String(lang).slice(0, 2).toLowerCase() : 'en';
-      const shopUrl = 'https://www.alpy.com/' + urlLang + '/' + RENTAL_SEGMENT[urlLang] + '/products?shopId=' + shop.id;
+      // THE CUSTOMER'S OWN BRAND, not ours (581942).
+      //
+      // Every brand on the platform - slopefox.co.uk, pistenfuchs.de, skidiscount.fr
+      // ... - serves this exact URL shape and redirects it to its own localised
+      // shop page. Minting every link on alpy.com sent a Slopefox customer to a
+      // site she did not know, under a logo she had never seen, to pay. The
+      // caller says which brand (`platform`: a Zendesk brand id, a domain or a
+      // brand word); without it the default stays alpy.com. See _platform.js.
+      const siteDomain = resolveDomain(params.platform || params.brand_id || params.brandId || params.domain, null);
+      const shopUrl = 'https://' + siteDomain + '/' + urlLang + '/' + RENTAL_SEGMENT[urlLang] + '/products?shopId=' + shop.id;
       const cartUrl = shopUrl + '&cart=' + encodeURIComponent(JSON.stringify(cart)) + '&startDate=' + startDate + '&endDate=' + endDate;
 
   const personsDesc = persons.map(p =>
@@ -1294,6 +1304,12 @@ export default async function handler(req, res) {
   return res.status(200).json({
           cartUrl,
           shopUrl,
+          // The brand the links were built on - flat and lowercase too, so a
+          // Zendesk custom action can bind it and a reply can name the site.
+          platformDomain: siteDomain,
+          platformdomain: siteDomain,
+          platformLabel: brandLabel(siteDomain),
+          platformlabel: brandLabel(siteDomain),
           shopName: shop.name,
           shopId: shop.id,
           resort: shop.town,
