@@ -229,6 +229,10 @@ function buildInternalNote(o) {
   lines.push('Original period: ' + o.originalFrom + ' to ' + o.originalTo);
   lines.push('Quoted period:   ' + o.startDate + ' to ' + o.endDate + ' (' + o.days + ' day(s))');
   lines.push('Group: ' + o.personsCount + ' person(s), ' + o.equipmentSummary);
+  // Read off Odin, not off the customer's message: a theft claim depends on it.
+  if (o.hadDamageCover != null) {
+    lines.push('Damage & theft protection on the original booking: ' + (o.hadDamageCover ? 'YES' : 'NO'));
+  }
   lines.push('');
   if (o.cartOnlinePrice != null) {
     lines.push('Simulated online price: ' + o.cartOnlinePrice.toFixed(2) + ' ' + o.currency);
@@ -672,10 +676,18 @@ export default async function handler(req, res) {
     if ((booking.services || []).length || (booking.insurance || []).length) {
       approximations.push('The booking carries services or insurance, which the quote does not rebuild.');
     }
+    // THE PROTECTION THE BOOKING ALREADY HAS IS NOT "ADDED AT THE CUSTOMER'S
+    // REQUEST". On 581954 (theft claim, "I purchased the Alpinguaranty") the
+    // word matched the addon regex, and the note told the agent the original
+    // booking did NOT carry the protection - while Odin showed it on the item
+    // (services definitionId 3). Read it off the booking before deciding.
+    const hadDamageCover = (itemServices || []).some(ids => (ids || []).includes(3)) ||
+      [].concat(booking.insurance || [], booking.services || [])
+        .some(s => /damage|theft|guaranty|garantie|casse|vol\b/i.test(String((s && (s.name || s.type)) || '')));
     const addedOnRequest = [
       equipmentAddedFor.length ? (wantsEquipment === 'snowboard' ? 'a snowboard' : 'skis') +
         ' (intermediate level assumed)' : '',
-      withInsurance ? 'the damage & theft protection' : '',
+      (withInsurance && !hadDamageCover) ? 'the damage & theft protection' : '',
       (wantAddon.helmets && !anyHelmet) ? 'helmets' : '',
       (wantAddon.boots && !anyBoots) ? 'boots' : '',
     ].filter(Boolean);
@@ -780,6 +792,7 @@ export default async function handler(req, res) {
       cartUrl: quote.cartUrl,
       approximations,
       addedOnRequest,
+      hadDamageCover,
       cancellationFeeText: (function () {
         const c = cancellationCost(booking, ref, originalFrom);
         return c.cancellation_fee_text || c.cancellation_fee_internal || '';
@@ -832,6 +845,11 @@ export default async function handler(req, res) {
       cartonlineprice: quote.cartOnlinePrice,
       cartinstoreprice: quote.cartInStorePrice,
       addedonrequest: addedOnRequest.join(', '),
+      // Whether the ORIGINAL booking carries the damage & theft protection, read
+      // off Odin. General questions uses it for a claim; the customer's own claim
+      // to have bought it is not evidence.
+      hasDamageCover: hadDamageCover,
+      hasdamagecover: hadDamageCover,
       carturl: quote.cartUrl,
       shopname: quote.shopName,
       platformDomain: siteDomain,
