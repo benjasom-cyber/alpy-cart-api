@@ -368,6 +368,17 @@ Handled directly by ERV, not by us. The customer must call the ERV emergency
 centre themselves when the incident happens: +41 848 801 803. We cannot file the
 claim on their behalf.
 
+MAKING A DAMAGE OR THEFT CLAIM (stolen skis, stolen boots, broken equipment)
+Not answered here: return HANDOVER. The claim needs documents and a decision
+that a colleague makes, and this document does not hold the procedure, so do not
+improvise one - no document list, no deadline, no amount, and never ERV (ERV is
+for accidents to people, not for equipment). A theft "from the locker" or "at the
+hotel" is a claim, not a question about the shop's storage.
+For the colleague, the booking itself says whether the damage & theft protection
+was bought: it appears as a service named "damage & theft protection" on the
+item. When it is there, the cover is theft and damage or breakage up to EUR 450
+per adult or teenager item and EUR 250 per child item; loss is not covered.
+
 === THE BOOKING ===
 
 CANCELLATION DEADLINE

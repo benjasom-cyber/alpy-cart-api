@@ -66,7 +66,22 @@ const NEVER_ANSWER = [
 // Alpy's own vocabulary. Order matters: the first match wins, so the most
 // specific patterns come first.
 const KEYWORDS = [
-      { topic: 'DEPOT_SWITCH', re: /\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
+      // STOLEN OR DAMAGED EQUIPMENT IS A CLAIM, NOT A LOCKER QUESTION.
+      //
+      // 581954: "the ski boots I rented at Le Bourg were stolen from our hotel
+      // locker. I purchased the Alpinguaranty protection. What do I need to do
+      // to file a claim?" The word "locker" matched the depot rule below and the
+      // customer was routed to the shop-services flow, which talks about
+      // overnight storage. Every other word of that message is an insurance
+      // claim. This rule sits first so that a theft or damage word next to an
+      // equipment or protection word decides before "locker" is even read.
+      // It routes to GENERAL_QUESTION, whose knowledge base holds the
+      // protections and knows to hand a claim over rather than improvise.
+      { topic: 'GENERAL_QUESTION',
+        re: /(?=[\s\S]*\b(?:stolen|theft|thie(?:f|ves)|robbed|vol[eé]e?s?\b|d[eé]rob[eé]\w*|gestohlen|diebstahl|entwendet|rubat[oi]|furto|robad[oa]s?|robo\b|damaged|broken\s+(?:ski|boot|board|helmet|binding|pole)|snapped|cass[eé]e?s?\b|endommag[eé]\w*|besch[aä]digt|kaputt|danneggiat\w*|da[nñ]ad[oa]s?|rot[oa]s?\b|sinistre|claim\b|r[eé]clamation|schaden(?:s?fall|meldung)?))(?=[\s\S]*\b(?:skis?|boots?|snowboard|board|helmet|casque|chaussures?|mat[eé]riel|equipment|Ski|Schuhe|Helm|Brett|attrezzatura|scarponi|equipo|botas|guaranty|guarantee|protection|assurance|insurance|versicherung|assicurazione|seguro|garantie))/i },
+      // The depot rule must never fire on a theft that merely happened in a
+      // locker: the rule above already took those.
+      { topic: 'DEPOT_SWITCH', re: /^(?![\s\S]*\b(?:stolen|theft|thie(?:f|ves)|vol[eé]e?s?\b|gestohlen|diebstahl|damaged|cass[eé]e?s?\b|besch[aä]digt|claim\b|sinistre)\b)[\s\S]*\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
       { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|changement\s+d.?[eé]quipement|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard))\b/i },
       { topic: 'VOUCHER_RESEND', re: /\b(voucher|bon\s+de\s+r[eé]servation|renvoyer\s+le\s+voucher|resend\s+(the\s+)?voucher|confirmation\s+email\s+again)\b/i },
       // The rental has started and something went wrong with the person, not
