@@ -41,6 +41,7 @@ import { handler as phone } from './_phone.js';
 import { handler as conversion } from './_conversion.js';
 import { handler as service } from './_service.js';
 import { handler as phoneIndex } from './_phone-index.js';
+import { handler as scoreboard } from './_scoreboard.js';
 import { handler as review } from './_review.js';
 import { handler as training } from './_training.js';
 
@@ -69,6 +70,7 @@ const HANDLERS = {
   // Le pont telephone : l'index numero -> empreinte d'email construit depuis
   // Odin, que la conversion interroge pour rattraper les appelants sans adresse.
   'phone-index': phoneIndex,
+  'agent-scoreboard': scoreboard,
   // Both review actions share one handler: it reads req.query.action itself, so
   // the two URLs stay separate for the caller while the code stays single.
   'review-run': review,

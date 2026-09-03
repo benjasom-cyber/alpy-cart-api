@@ -213,6 +213,24 @@
     </section>
 
     <section>
+      <h2>Scoreboard · this month and season to date</h2>
+      <div class="tiles" id="sbTiles"></div>
+      <div class="card">
+        <div id="tableScoreboard" class="scroll"></div>
+        <p id="sbStatus" class="note"></p>
+        <p class="note">Each agent's <b>contribution</b> is the value of the bookings that followed
+          their contacts &mdash; <b>GMV</b>, what the customer paid, not Alpy's commission. A booking
+          counts when it lands within 30 days of a contact, and it is credited to whoever took the
+          <b>first</b> contact of that month with that customer, not to whoever closed it.<br>
+          Read it as a floor, not a ledger. A contact nobody could identify carries no revenue at all,
+          a customer who would have booked anyway still counts, and agents are handed very different
+          volumes of work &mdash; so the ranking reads <b>volume at least as much as skill</b>. It is a
+          fair comparison only between agents handed comparable work.
+          <span id="sbCoverage"></span></p>
+      </div>
+    </section>
+
+    <section>
       <h2>By agent · month in review</h2>
       <div class="card scroll"><div id="tableAgentMonth"></div></div>
       <p class="note"><b>Revenue contribution</b> is the booking value that followed a contact this
@@ -897,6 +915,65 @@
     })();
   }
 
+
+  /* ---------------------------------------------------------- scoreboard */
+  function loadScoreboard() {
+    var key = $('#secret').value.trim();
+    $('#sbStatus').textContent = 'Reading the scoreboard…';
+    fetch('/api/agent-scoreboard' + (key ? '?secret=' + encodeURIComponent(key) : ''))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || d.ok === false) {
+          $('#sbStatus').textContent = (d && d.detail) || 'The scoreboard is unavailable.';
+          return;
+        }
+        if (d.empty) {
+          $('#sbStatus').textContent = d.detail || 'No month has been computed yet.';
+          return;
+        }
+        var t = d.totals || {};
+        var tiles = [
+          ['This month', eur(t.month_gmv_eur), fmt(t.month_contacts) + ' contacts', false],
+          ['Season ' + d.season, eur(t.season_gmv_eur), fmt(t.season_contacts) + ' contacts', !d.complete],
+          ['Agents ranked', fmt((d.season_board || []).length), 'season to date', false]
+        ];
+        $('#sbTiles').innerHTML = tiles.map(function (x) {
+          return '<div class="tile' + (x[3] ? ' alert' : '') + '">' +
+            '<div class="label">' + esc(x[0]) + '</div>' +
+            '<div class="value">' + x[1] + '</div>' +
+            '<div class="foot">' + (x[3] ? '\u26a0 ' : '') + esc(x[2]) + '</div></div>';
+        }).join('');
+
+        // One row per agent: the season is the headline, the month is the news.
+        var byId = {};
+        (d.month_board || []).forEach(function (r) { byId[r.agent_id] = r; });
+        var rows = (d.season_board || []).map(function (r) {
+          var m = byId[r.agent_id] || {};
+          return [
+            String(r.rank), r.name,
+            eur(r.gmv_eur), fmt(r.contacts), eur(r.gmv_per_contact_eur),
+            eur(m.gmv_eur || 0), fmt(m.contacts || 0)
+          ];
+        });
+        $('#tableScoreboard').innerHTML = table(
+          ['#', 'Agent', 'Season GMV', 'Season contacts', 'Per contact', 'This month', 'Contacts'],
+          rows);
+
+        // Never let a partial season read as a full one.
+        var cov = '';
+        if (!d.complete && (d.months_missing || []).length) {
+          cov = ' Season figures cover ' + (d.months_stored || []).length + ' of '
+              + ((d.months_stored || []).length + d.months_missing.length)
+              + ' months — missing: ' + d.months_missing.join(', ') + '.';
+        }
+        $('#sbCoverage').textContent = cov;
+        $('#sbStatus').textContent = d.month_generated_at
+          ? 'This month last computed ' + new Date(d.month_generated_at).toLocaleString()
+          : '';
+      })
+      .catch(function () { $('#sbStatus').textContent = 'The scoreboard could not be read.'; });
+  }
+
   function table(cols, rows) {
     var h = ['<table><thead><tr>'];
     cols.forEach(function (c) { h.push('<th>' + esc(c) + '</th>'); });
@@ -999,7 +1076,7 @@
         }
         $('#status').textContent = '';
         render(o.j);
-        if (!state.phoneLoaded) { state.phoneLoaded = true; loadService(); loadPhone(); loadConv(); }
+        if (!state.phoneLoaded) { state.phoneLoaded = true; loadService(); loadPhone(); loadConv(); loadScoreboard(); }
       })
       .catch(function (e) {
         $('#status').textContent = 'Network error: ' + e.message;

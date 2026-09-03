@@ -109,12 +109,20 @@
     {
       "source": "/api/phone-index",
       "destination": "/api/support?action=phone-index"
+    },
+    {
+      "source": "/api/agent-scoreboard",
+      "destination": "/api/support?action=agent-scoreboard"
     }
   ],
   "crons": [
     {
       "path": "/api/review-run",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/agent-scoreboard",
+      "schedule": "30 4 * * *"
     }
   ]
 }
