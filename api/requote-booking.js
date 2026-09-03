@@ -45,6 +45,8 @@
  *    flags, which generate-quote reads per person.
  */
 
+import { resolveDomain, brandLabel } from './_platform.js';
+
 const ODIN_BASE = 'https://odin.alpy.com';
 
 const CORS = {
@@ -223,6 +225,7 @@ function buildInternalNote(o) {
   }
   lines.push('');
   lines.push('Shop: ' + o.shopName + ' (' + o.resort + ')');
+  if (o.siteLabel) lines.push('Brand / site the link opens on: ' + o.siteLabel);
   lines.push('Original period: ' + o.originalFrom + ' to ' + o.originalTo);
   lines.push('Quoted period:   ' + o.startDate + ' to ' + o.endDate + ' (' + o.days + ' day(s))');
   lines.push('Group: ' + o.personsCount + ' person(s), ' + o.equipmentSummary);
@@ -306,19 +309,43 @@ function feeBand(startDay, todayDay) {
   return { percent: 35, band: '2 working days until 08:00 the day before', workingDays: wd };
 }
 
+/**
+ * NO CANCELLATION FEES ARE CHARGED AT THE MOMENT.
+ *
+ * 581942 (3 Sept 2026): the reply told a customer that cancelling B6DYZR would
+ * cost "25% of the amount paid online — €7.78 kept". Nothing of the sort is
+ * charged today: the flexi cover is free and applied to every booking, so every
+ * cancellation before the deadline is free of charge. Benjamin, 3 Sept 2026:
+ * "nous n'appliquons aucun fees en ce moment, Alpinflexi est gratuite".
+ *
+ * The fee table below (feeBand) is kept intact for the day fees come back; this
+ * one switch decides whether it is consulted at all. While it is false the
+ * customer is told the cancellation is free, full stop.
+ */
+const CANCELLATION_FEES_ACTIVE = false;
+
 function hasCancellationCover(booking) {
   const items = [].concat(booking.insurance || [], booking.services || []);
-  return items.some(x => /flexi|annul|cancel/i.test(String((x && (x.name || x.type)) || '')));
+  // The cover is sold under one name per brand: ALPINFLEXI on alpy.com,
+  // SLOPEFLEX on slopefox.co.uk, SNOWFLEX elsewhere. The previous test looked for
+  // "flexi" and therefore missed SLOPEFLEX on B6DYZR - a booking that DID carry
+  // the cover was quoted a 25% fee. Match the stem, not one brand's spelling.
+  return items.some(x => /flex|annul|cancel|storno/i.test(String((x && (x.name || x.type)) || '')));
 }
 
 function cancellationCost(booking, ref, startDay) {
   const today = new Date().toISOString().slice(0, 10);
   const paid = money(booking.total && booking.total.amount);
   const currency = (booking.total && booking.total.currency) || 'EUR';
-  const cover = hasCancellationCover(booking);
+  // `realCover` is what the booking actually carries - flows read it, so it must
+  // stay truthful. `cover` decides the fee: while fees are switched off, every
+  // booking is treated as covered.
+  const realCover = hasCancellationCover(booking);
+  const cover = !CANCELLATION_FEES_ACTIVE || realCover;
   const band = feeBand(startDay, today);
   const out = {
-    has_cancellation_cover: cover,
+    has_cancellation_cover: realCover,
+    cancellation_free: cover,
     cancellation_fee_percent: band ? band.percent : null,
     cancellation_fee_amount: null,
     cancellation_refund_amount: null,
@@ -335,9 +362,15 @@ function cancellationCost(booking, ref, startDay) {
     out.cancellation_fee_percent = 0;
     out.cancellation_fee_amount = 0;
     out.cancellation_refund_amount = paid;
-    out.cancellation_fee_text = 'This booking carries the cancellation protection, so it can be ' +
-      'cancelled free of charge until 08:00 on the day before the first rental day' +
-      (startDay ? ' (' + startDay + ')' : '') + '.';
+    // Two wordings for one fact. When fees are switched off account-wide the
+    // customer must not be told they "carry a protection" they may never have
+    // heard of - the plain truth is that cancelling is free.
+    out.cancellation_fee_text = (CANCELLATION_FEES_ACTIVE
+      ? 'This booking carries the cancellation protection, so it can be cancelled free of charge'
+      : 'Booking ' + ref + ' can be cancelled free of charge - no fee is charged') +
+      ' until 08:00 on the day before the first rental day' +
+      (startDay ? ' (' + startDay + ')' : '') +
+      (paid != null && paid > 0 ? '; the ' + paid.toFixed(2) + ' ' + currency + ' paid online would be refunded in full.' : '.');
     return out;
   }
   // Measured on BQTZCJ, whose coupon left a NEGATIVE total: 25% of a negative
@@ -440,14 +473,50 @@ export default async function handler(req, res) {
     insurance: /alpin\s*guaranty|snow\s*guaranty|ski\s*guaranty|slope\s*guaranty|guaranty|alpin\s*flexi|snow\s*flexi|ski\s*flexi|slope\s*flex|flexi|insurance|protection|assurance|versicherung|assicurazione|seguro/i,
     helmets:   /helmets?|casques?|helm\w*|casco|kask/i,
     boots:     /boots?|chaussures?|schuhe|scarponi|botas/i,
+    // Not addons at all - the main product. A customer who booked a helmet only
+    // and asks for "skis" is asking for a different basket, not for an extra.
+    // See the helmet-only handling further down (581942).
+    skis:      /\bskis?\b|\bskies\b|\bskier\b|\bski\s*set|\bschi\b|\bski\b/i,
+    snowboard: /snow\s*boards?|\bboards?\b/i,
   };
-  const addonsRaw = [].concat(params.addons || params.addon || params.extras || [])
+  // THE CUSTOMER'S OWN WORDS, NOT THE EMAIL THEY QUOTED.
+  //
+  // The general-questions flow hands us the whole message. A reply from a phone
+  // drags the entire booking confirmation along underneath it - and every
+  // confirmation mentions "damage & theft protection", "insurance" and
+  // "helmet". On 581942 the customer wrote one line asking for skis; the quoted
+  // confirmation below it matched three addon words she had never typed. Cut
+  // the message at the first quote marker, in the languages our customers write.
+  const QUOTE_MARKERS = [
+    /\bOn\s.{3,80}?\bwrote\s*:/i,            // On Wed, 2 Sept 2026 at 22:59, X wrote:
+    /\bLe\s.{3,80}?a\s+écrit\s*:/i,          // Le mer. 2 sept. 2026 à 15:17, X a écrit :
+    /\bAm\s.{3,80}?schrieb\s.{0,60}?:/i,     // Am 02.09.2026 um 22:59 schrieb X:
+    /\bIl\s.{3,80}?ha\s+scritto\s*:/i,       // Il giorno ... ha scritto:
+    /\bEl\s.{3,80}?escribió\s*:/i,           // El mié., 2 sept. 2026 ... escribió:
+    /\bOp\s.{3,80}?schreef\s.{0,60}?:/i,     // Op wo 2 sep. 2026 ... schreef X:
+    /-{2,}\s*(Original|Forwarded|Ursprüngliche|Message d'origine)/i,
+    /\bFrom\s*:\s.{0,80}\bSent\s*:/is,        // Outlook header block
+  ];
+  const ownWords = (text) => {
+    // Lines quoted with ">" are dropped wherever they sit; the block markers
+    // above cut everything that follows them.
+    let s = String(text || '').split(/\r?\n/).filter(l => !/^\s*>/.test(l)).join('\n');
+    let cut = s.length;
+    for (const rx of QUOTE_MARKERS) {
+      const m = rx.exec(s);
+      if (m && m.index < cut) cut = m.index;
+    }
+    return s.slice(0, cut);
+  };
+  const addonsRaw = ownWords([].concat(params.addons || params.addon || params.extras || [])
                       .concat(params.addonsText || params.addonstext || [])
-                      .map(x => String(x || '')).join(' ');
+                      .map(x => String(x || '')).join(' '));
   const wantAddon = {
     insurance: ADDON_WORDS.insurance.test(addonsRaw),
     helmets:   ADDON_WORDS.helmets.test(addonsRaw),
     boots:     ADDON_WORDS.boots.test(addonsRaw),
+    skis:      ADDON_WORDS.skis.test(addonsRaw),
+    snowboard: ADDON_WORDS.snowboard.test(addonsRaw),
   };
   const withInsurance = wantAddon.insurance ||
                         params.insurance === true || params.with_insurance === true ||
@@ -500,6 +569,13 @@ export default async function handler(req, res) {
                     endDate + '), so no cart can be built for it. Pass future dates to re-quote.');
     }
 
+    // ── 1b. Which brand the customer bought from (581942). ─────────────────
+    // The Zendesk brand of the ticket when the flow passes it (`platform`), else
+    // the brand written into the booking's own service names (SLOPEFLEX ...),
+    // else alpy.com. The cart link and the brand name in the note follow it.
+    const siteDomain = resolveDomain(params.platform || params.brand_id || params.brandId || params.domain, booking);
+    const siteLabel = brandLabel(siteDomain);
+
     // ── 2. Rebuild the group from what was actually sold. ────────────────────
     let { persons, wantBoots, wantHelmet, itemServices } = buildPersons(booking.equipment, false);
 
@@ -515,6 +591,41 @@ export default async function handler(req, res) {
       return refuse(res, ref, 'this booking is services or insurance only, so there is no basket to rebuild');
     }
 
+    // "I DON'T THINK I ADDED SKIS" - the accessory-only booking (581942).
+    //
+    // B6DYZR was one line: definitionId 84, " Helmet", for a 13-year-old. Odin
+    // sells a helmet or a pair of boots as a product in its own right, so a
+    // customer can book the helmet and forget the skis entirely. Rebuilding that
+    // booking "faithfully" produced a helmet-only cart, and the reply then
+    // claimed skis were included - because the cart was called a re-book with
+    // "skis added" while nothing had been added at all.
+    //
+    // Skis are not an addon; they are the product. So when the customer asks for
+    // skis (or a snowboard) and a person on the booking has no ski or snowboard
+    // product - only an accessory sold as a product - that person is rebuilt
+    // around the equipment they asked for, at the entry level for their age
+    // (generate-quote picks the definitionId from age + skill), and the accessory
+    // they already had rides along as the addon it is in the cart. The level is
+    // an assumption and is flagged as one; the cart is adjustable.
+    const wantsEquipment = wantAddon.snowboard ? 'snowboard' : (wantAddon.skis ? 'ski' : '');
+    const equipmentAddedFor = [];
+    if (wantsEquipment) {
+      persons.forEach((p, i) => {
+        const isRealProduct = !!DEF_TO_SPEC[p.sourceDefinitionId];
+        if (isRealProduct) return;
+        const name = String(p.sourceName || '');
+        const helmetOnly = /helmet|casque|helm\b|casco|kask/i.test(name);
+        const bootsOnly = /boots?\b|chaussure|schuh|scarpon|botas/i.test(name);
+        if (!helmetOnly && !bootsOnly) return;
+        p.equipment = wantsEquipment;
+        p.skill = 'intermediate';
+        p.sourceDefinitionId = null;                 // let generate-quote choose by age + skill
+        p.skillResolvedFrom = 'assumed intermediate - the booking had no ' + wantsEquipment;
+        if (helmetOnly) wantHelmet[i] = true;
+        if (bootsOnly) wantBoots[i] = true;
+        equipmentAddedFor.push(p.age + 'yr');
+      });
+    }
     const anyBoots = wantBoots.some(Boolean);
     const anyHelmet = wantHelmet.some(Boolean);
     const bootsUniform = wantBoots.every(v => v === anyBoots);
@@ -542,7 +653,15 @@ export default async function handler(req, res) {
     }
     // Only the items whose definitionId we could NOT carry over are approximate
     // now: everything else is rebuilt with the exact product that was sold.
-    const unknownDefs = persons.filter(p => !p.sourceDefinitionId);
+    const unknownDefs = persons.filter(p => !p.sourceDefinitionId && !/^assumed/.test(String(p.skillResolvedFrom || '')));
+    if (equipmentAddedFor.length) {
+      approximations.push(
+        (wantsEquipment === 'snowboard' ? 'A snowboard' : 'Skis') + ' were ADDED for ' +
+        equipmentAddedFor.join(', ') + ': the original booking held only a helmet or boots for ' +
+        (equipmentAddedFor.length > 1 ? 'these persons' : 'this person') + ', with no ' + wantsEquipment +
+        ' at all. The level is ASSUMED intermediate - confirm it with the customer or adjust it in the cart.'
+      );
+    }
     if (unknownDefs.length) {
       approximations.push(
         unknownDefs.length + ' item(s) carry no definitionId in Odin, so their product was guessed ' +
@@ -554,6 +673,8 @@ export default async function handler(req, res) {
       approximations.push('The booking carries services or insurance, which the quote does not rebuild.');
     }
     const addedOnRequest = [
+      equipmentAddedFor.length ? (wantsEquipment === 'snowboard' ? 'a snowboard' : 'skis') +
+        ' (intermediate level assumed)' : '',
       withInsurance ? 'the damage & theft protection' : '',
       (wantAddon.helmets && !anyHelmet) ? 'helmets' : '',
       (wantAddon.boots && !anyBoots) ? 'boots' : '',
@@ -575,6 +696,7 @@ export default async function handler(req, res) {
       startDate,
       endDate,
       lang,
+      platform: siteDomain,
       // persons ONLY: adults / children_ages would take precedence over it and
       // flatten a mixed ski + snowboard group into one single equipment type.
       // PER PERSON, not the union.
@@ -641,6 +763,7 @@ export default async function handler(req, res) {
     const internalNote = buildInternalNote({
       reference: ref,
       shopName: quote.shopName,
+      siteLabel,
       resort: quote.resort,
       originalFrom,
       originalTo,
@@ -703,6 +826,7 @@ export default async function handler(req, res) {
         cancellationdeadline: c.cancellation_deadline,
         cancellationfeeinternal: c.cancellation_fee_internal || '',
         hascancellationcover: c.has_cancellation_cover,
+        cancellationfree: c.cancellation_free,
       }; })(),
       // Same reason: the online price of the rebuilt cart, flat and lowercase.
       cartonlineprice: quote.cartOnlinePrice,
@@ -710,6 +834,10 @@ export default async function handler(req, res) {
       addedonrequest: addedOnRequest.join(', '),
       carturl: quote.cartUrl,
       shopname: quote.shopName,
+      platformDomain: siteDomain,
+      platformdomain: siteDomain,
+      platformLabel: siteLabel,
+      platformlabel: siteLabel,
       requote: {
         sourceBooking: {
           bookingReference: booking.bookingReference || ref,

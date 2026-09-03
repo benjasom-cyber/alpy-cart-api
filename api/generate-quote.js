@@ -833,7 +833,14 @@ export default async function handler(req, res) {
       Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
       if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const params = req.method === 'POST' ? req.body : req.query;
+  // Query string AND body, body winning. A Zendesk custom action's JSON body is
+  // a chip field that is awkward to extend; its query parameters are plain rows.
+  // `platform` arrives as a query parameter for exactly that reason (581942), so
+  // a POST must read both - it used to read the body alone.
+  let bodyIn = req.method === 'POST' ? (req.body || {}) : {};
+  if (typeof bodyIn === 'string') { try { bodyIn = JSON.parse(bodyIn); } catch { bodyIn = {}; } }
+  if (!bodyIn || typeof bodyIn !== 'object' || Array.isArray(bodyIn)) bodyIn = {};
+  const params = Object.assign({}, req.query || {}, bodyIn);
 
   // ── claude_json: one blob from a Send prompt step ─────────────────────────
       let claudeParsed = null;
