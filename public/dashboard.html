@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Alpy · Support</title>
+<title>Alpy Support Performance</title>
 <style>
   /* Palette: the validated reference instance. Categorical slots 1-3 only -
      the three that clear every all-pairs gate in both modes (CVD dE 9.2 light /
@@ -20,9 +20,9 @@
     --grid:         #e1e0d9;
     --axis:         #c3c2b7;
     --hairline:     rgba(11,11,11,0.10);
-    --s1: #2a78d6;  /* traités sans humain */
-    --s2: #eb6834;  /* passés à un humain  */
-    --s3: #1baf7a;  /* en attente client   */
+    --s1: #2a78d6;  /* handled without a human */
+    --s2: #eb6834;  /* escalated to a human   */
+    --s3: #1baf7a;  /* waiting on customer    */
     --critical: #d03b3b;
     --good:     #0ca30c;
     --warning:  #fab219;
@@ -120,20 +120,20 @@
 <div class="wrap">
 
   <header>
-    <h1>Support Alpy</h1>
+    <h1>Alpy Support</h1>
     <span class="sub" id="stamp">—</span>
   </header>
 
   <div class="controls">
-    <div class="seg" role="group" aria-label="Période">
-      <button data-days="7"  aria-pressed="false">7 jours</button>
-      <button data-days="30" aria-pressed="true">30 jours</button>
-      <button data-days="90" aria-pressed="false">90 jours</button>
+    <div class="seg" role="group" aria-label="Time range">
+      <button data-days="7"  aria-pressed="false">7 days</button>
+      <button data-days="30" aria-pressed="true">30 days</button>
+      <button data-days="90" aria-pressed="false">90 days</button>
     </div>
-    <input id="secret" type="password" placeholder="Clé d'accès" autocomplete="off">
-    <button class="ghost" id="reload">Actualiser</button>
-    <button class="ghost" id="tableToggle" aria-pressed="false">Voir les tableaux</button>
-    <button class="ghost" id="theme">Thème</button>
+    <input id="secret" type="password" placeholder="Access key" autocomplete="off">
+    <button class="ghost" id="reload">Refresh</button>
+    <button class="ghost" id="tableToggle" aria-pressed="false">Show tables</button>
+    <button class="ghost" id="theme">Theme</button>
   </div>
 
   <p id="status" class="note"></p>
@@ -143,79 +143,112 @@
     <div class="tiles" id="tiles"></div>
 
     <section>
-      <h2>Jour par jour</h2>
+      <h2>Day by day</h2>
       <div class="card">
         <div class="legend">
-          <span><i class="sw" style="background:var(--s1)"></i> Traités sans humain</span>
-          <span><i class="sw" style="background:var(--s2)"></i> Passés à un humain</span>
-          <span><i class="sw" style="background:var(--s3)"></i> En attente du client</span>
-          <span><i class="sw" style="background:var(--critical)"></i> Échecs silencieux</span>
+          <span><i class="sw" style="background:var(--s1)"></i> Handled without a human</span>
+          <span><i class="sw" style="background:var(--s2)"></i> Escalated to a human</span>
+          <span><i class="sw" style="background:var(--s3)"></i> Waiting on the customer</span>
+          <span><i class="sw" style="background:var(--critical)"></i> Silent failures</span>
         </div>
-        <div id="chartDaily" role="img" aria-label="Tickets par jour, répartis par issue"></div>
+        <div id="chartDaily" role="img" aria-label="Tickets per day, split by outcome"></div>
         <div id="tableDaily" hidden class="scroll"></div>
-        <p class="note">Un <b>échec silencieux</b> est un ticket que le gatekeeper a routé et
-          qu'aucun flow n'a ni répondu, ni passé à un humain, ni mis en attente. Le client n'est pas
-          abandonné pour autant — en saison, le routage assigne ces tickets à un agent. Ce que ce
-          chiffre mesure, c'est <b>le travail que le bot aurait dû prendre et qui retombe sur l'équipe</b>,
-          sans qu'aucun tag ne dise pourquoi.</p>
+        <p class="note">A <b>silent failure</b> is a ticket the gatekeeper routed and that no flow
+          answered, escalated, or put on hold. The customer is not abandoned — in season, routing
+          assigns these to an agent anyway. What this number measures is <b>work the bot should have
+          taken and that lands back on the team</b>, with no tag saying why.</p>
       </div>
     </section>
 
     <section>
-      <h2>Pourquoi le bot passe la main</h2>
+      <h2>Why the bot hands over</h2>
       <div class="card">
-        <div id="chartReasons" role="img" aria-label="Motifs de passage à un humain"></div>
+        <div id="chartReasons" role="img" aria-label="Reasons for escalating to a human"></div>
         <div id="tableReasons" hidden class="scroll"></div>
       </div>
     </section>
 
     <section>
-      <h2>Par capacité</h2>
+      <h2>By capability</h2>
       <div class="card scroll"><div id="tableCapability"></div></div>
     </section>
 
     <section>
-      <h2>Conversion du support · avant-vente</h2>
+      <h2>Support-attributed revenue</h2>
       <div class="tiles" id="convTiles"></div>
       <div class="card">
-        <div id="chartConv" role="img" aria-label="Taux de conversion avant-vente par mois"></div>
+        <div id="chartConv" role="img" aria-label="Pre-sale conversion rate by month"></div>
         <div id="tableConv" hidden class="scroll"></div>
         <p id="convStatus" class="note"></p>
-        <p class="note"><b>Avant-vente</b> = le client n'avait aucune réservation au moment du contact.
-          S'il réserve dans les 30 jours qui suivent, le support a fait une vente. Le <b>réachat</b>
-          — un client déjà venu qui rebooke après nous avoir écrit — est compté à part et
-          <b>jamais additionné</b> au taux de conversion.<br>
-          La jointure se fait sur l'empreinte <code>md5</code> de l'adresse e-mail : aucune adresse ne
-          circule entre Zendesk et la base BI, seulement des empreintes.
+        <p class="note"><b>Support-attributed revenue</b> is every booking made within 30 days of a
+          contact with us, whoever the customer was. It adds up two things that are deliberately kept
+          apart everywhere else on this page: <b>pre-sale</b> (the customer had no booking when they
+          contacted us — the support desk made the sale) and <b>repeat</b> (a returning customer who
+          books again after writing in). The two <b>rates</b> are never added together, because a
+          pre-sale rate and a repeat rate do not measure the same thing; the <b>money</b> is, because a
+          booking is a booking.<br>
+          Customers are matched on the <code>md5</code> fingerprint of their email address — no address
+          ever travels between Zendesk and the BI warehouse. Callers with no email on file are matched
+          through the Odin phone index, fingerprint to fingerprint, never number to number.
           <span id="convSource"></span></p>
       </div>
     </section>
 
     <section>
-      <h2>Téléphone · taux de disponibilité mensuel</h2>
+      <h2>Service quality · month by month</h2>
+      <div class="tiles" id="svcTiles"></div>
+      <div class="card">
+        <div id="tableService" class="scroll"></div>
+        <p id="svcStatus" class="note"></p>
+        <p class="note"><b>First reply</b> is the time from ticket creation to the first public reply,
+          as Zendesk itself measures it, reported as a <b>median</b> and a 90th percentile — never as an
+          average, because one ticket answered after a week moves an average and tells you nothing.
+          <b>Satisfaction</b> is good ratings ÷ answered ratings, the same definition Explore used, so
+          the two agree. <b>One touch</b> is a ticket solved with a single public reply.
+          <b>Full resolution</b> is wall clock from creation to solve — a service level, not time spent.</p>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div id="tableChannel" class="scroll"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>By agent · month in review</h2>
+      <div class="card scroll"><div id="tableAgentMonth"></div></div>
+      <p class="note"><b>Revenue contribution</b> is the booking value that followed a contact this
+        agent took first — pre-sale and repeat together. It credits whoever <i>answered</i>, not whoever
+        closed the ticket. Read it as influence, not commission: the customer may well have booked
+        anyway, and a contact with no email and no matched phone number carries no revenue at all, so
+        this is a floor, never a ceiling. Agents handling calls also show what their phone actually did:
+        answered, missed and declined come from the Talk legs export, which counts every ring, not just
+        the calls that connected.</p>
+    </section>
+
+    <section>
+      <h2>Phone · monthly availability</h2>
       <div class="tiles" id="phoneTiles"></div>
       <div class="card">
-        <div id="chartPhone" role="img" aria-label="Taux de disponibilité téléphonique par mois"></div>
+        <div id="chartPhone" role="img" aria-label="Phone availability rate by month"></div>
         <div id="tablePhone" hidden class="scroll"></div>
         <p id="phoneStatus" class="note"></p>
-        <p class="note"><b>Disponibilité</b> = appels entrants décrochés ÷ appels entrants présentés
-          <b>pendant les heures d'ouverture</b>. Les appels hors horaires sont comptés à part : ils ne
-          pénalisent personne. Source : l'export incrémental de Zendesk Talk, qui est un véritable
-          historique — contrairement aux compteurs de la section suivante.</p>
+        <p class="note"><b>Availability</b> = inbound calls answered ÷ inbound calls offered
+          <b>during business hours</b>. Calls outside opening hours are counted separately: they
+          penalise nobody. Source: the Zendesk Talk incremental export, which is a real history —
+          unlike the counters in the next section.</p>
       </div>
       <div class="card scroll" style="margin-top:14px"><div id="tablePhoneAgents"></div></div>
     </section>
 
     <section>
-      <h2>Téléphone · en ce moment</h2>
+      <h2>Phone · right now</h2>
       <div class="card"><div id="talk"></div></div>
     </section>
 
     <section>
-      <h2>Agents · tickets résolus sur la période</h2>
+      <h2>Agents · tickets solved in the period</h2>
       <div class="card scroll"><div id="tableAgents"></div></div>
-      <p class="note">Le délai est l'écart entre la création et la résolution du ticket — un niveau de
-        service, pas un temps passé. Zendesk n'expose pas le temps de travail réel sans Explore.</p>
+      <p class="note">The delay is the wall clock from ticket creation to solve — a service level, not
+        time spent. Zendesk does not expose real handling time.</p>
     </section>
 
   </section>
@@ -226,30 +259,57 @@
 <script>
 (function () {
   var $ = function (s) { return document.querySelector(s); };
-  var state = { days: 30, tables: false, data: null, phone: [], conv: [], phoneLoaded: false };
+  var state = { days: 30, tables: false, data: null, phone: [], conv: [], svc: [], phoneLoaded: false };
+
+  /**
+   * The number Benjamin asks for first: everything a contact with support was
+   * followed by, pre-sale and repeat added together. The backend now sends it
+   * ready-made; the fallback recomputes it from the two halves so that the
+   * static snapshot in /conversion.json, written before this field existed,
+   * still lights up the same tile instead of showing a dash.
+   */
+  function supportRevenue(m) {
+    if (m && m.support_revenue) return m.support_revenue;
+    var p = (m && m.presale) || {}, r = (m && m.repeat) || {};
+    var pv = p.revenue_eur || 0, rv = r.revenue_eur || 0;
+    return {
+      total_eur: pv + rv, presale_eur: pv, repeat_eur: rv,
+      bookings: (p.converted || 0) + (r.rebooked || 0),
+      contacts: p.contacts || 0,
+      revenue_per_contact_eur: p.contacts ? Math.round(((pv + rv) / p.contacts) * 100) / 100 : null
+    };
+  }
+
+  /** Minutes into something a human reads without converting in their head. */
+  function mins(v) {
+    if (v == null) return '\u2014';
+    if (v < 60) return Math.round(v) + ' min';
+    if (v < 1440) { var h = Math.floor(v / 60), m = Math.round(v % 60); return h + 'h ' + String(m).padStart(2, '0'); }
+    return Math.round(v / 144) / 10 + ' d';
+  }
 
   try { var k = localStorage.getItem('alpy.metrics.key'); if (k) $('#secret').value = k; } catch (e) {}
   try { var t = localStorage.getItem('alpy.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
 
-  function fmt(n) { return n == null ? '—' : new Intl.NumberFormat('fr-FR').format(n); }
-  function pct(n) { return n == null ? '—' : String(n).replace('.', ',') + ' %'; }
+  function fmt(n) { return n == null ? '—' : new Intl.NumberFormat('en-GB').format(n); }
+  function pct(n) { return n == null ? '\u2014' : String(n) + '%'; }
   function eur(n) {
-    return n == null ? '—' : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR',
+    return n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR',
       maximumFractionDigits: 0 }).format(n);
   }
   function dur(s) {
     if (s == null) return '—';
-    if (s < 60) return Math.round(s) + ' s';
+    if (s < 60) return Math.round(s) + 's';
     if (s < 3600) {
       // Average talk time lives in the 2-5 minute range: rounding it to whole
       // minutes turned 169 s and 204 s into the same "3 min", which is the
       // difference between a quick answer and a real conversation.
       var mm = Math.floor(s / 60), ss = Math.round(s % 60);
       if (ss === 60) { mm++; ss = 0; }
-      return mm + ' min ' + String(ss).padStart(2, '0') + ' s';
+      return mm + 'm ' + String(ss).padStart(2, '0') + 's';
     }
     var h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
-    return h + ' h ' + String(m).padStart(2, '0');
+    return h + 'h ' + String(m).padStart(2, '0') + 'm';
   }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -272,7 +332,7 @@
   /* ------------------------------------------------------- stacked day chart */
   function drawDaily(daily) {
     var host = $('#chartDaily');
-    if (!daily.length) { host.innerHTML = '<p class="note">Aucun ticket sur la période.</p>'; return; }
+    if (!daily.length) { host.innerHTML = '<p class="note">No tickets in this period.</p>'; return; }
 
     var W = Math.max(host.clientWidth || 860, 320), H = 240;
     var padL = 34, padR = 8, padT = 12, padB = 26;
@@ -297,10 +357,10 @@
       var x = padL + (i + 0.5) * (iw / daily.length) - bw / 2;
       var other = Math.max(0, d.tickets - d.finished - d.human - d.silent);
       var segs = [
-        ['var(--s1)', d.finished, 'Traités sans humain'],
-        ['var(--s2)', d.human,    'Passés à un humain'],
-        ['var(--s3)', other,      'En attente du client'],
-        ['var(--critical)', d.silent, 'Échecs silencieux']
+        ['var(--s1)', d.finished, 'Handled without a human'],
+        ['var(--s2)', d.human,    'Escalated to a human'],
+        ['var(--s3)', other,      'Waiting on the customer'],
+        ['var(--critical)', d.silent, 'Silent failures']
       ];
       var yb = padT + ih;
       segs.forEach(function (sg) {
@@ -327,10 +387,10 @@
         var d = daily[+el.dataset.i];
         var other = Math.max(0, d.tickets - d.finished - d.human - d.silent);
         showTip('<b>' + d.day + '</b> · ' + fmt(d.tickets) + ' tickets' +
-          row('var(--s1)', 'Traités sans humain', d.finished) +
-          row('var(--s2)', 'Passés à un humain', d.human) +
-          row('var(--s3)', 'En attente du client', other) +
-          (d.silent ? row('var(--critical)', 'Échecs silencieux', d.silent) : ''), ev);
+          row('var(--s1)', 'Handled without a human', d.finished) +
+          row('var(--s2)', 'Escalated to a human', d.human) +
+          row('var(--s3)', 'Waiting on the customer', other) +
+          (d.silent ? row('var(--critical)', 'Silent failures', d.silent) : ''), ev);
       });
       el.addEventListener('mouseleave', hideTip);
     });
@@ -342,7 +402,7 @@
   /* --------------------------------------------------- handover reasons bars */
   function drawReasons(list) {
     var host = $('#chartReasons');
-    if (!list.length) { host.innerHTML = '<p class="note">Aucun passage à un humain sur la période.</p>'; return; }
+    if (!list.length) { host.innerHTML = '<p class="note">No escalations in this period.</p>'; return; }
     var max = list[0].count || 1;
     var html = ['<div style="display:grid;gap:9px">'];
     list.slice(0, 10).forEach(function (r) {
@@ -369,11 +429,11 @@
   }
 
   /* ------------------------------------------------- monthly phone availability */
-  var MONTHS_FR = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
-                   'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  var MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   function monthLabel(m) {
     var p = m.split('-');
-    return MONTHS_FR[+p[1] - 1] + ' ' + p[0].slice(2);
+    return MONTHS_EN[+p[1] - 1] + ' ' + p[0].slice(2);
   }
 
   /**
@@ -428,7 +488,7 @@
   function drawPhone(months) {
     var host = $('#chartPhone');
     var have = months.filter(function (m) { return m && m.business_hours; });
-    if (!have.length) { host.innerHTML = '<p class="note">Pas encore de données téléphone.</p>'; return; }
+    if (!have.length) { host.innerHTML = '<p class="note">No phone data yet.</p>'; return; }
 
     var W = Math.max(host.clientWidth || 860, 320), H = 220;
     var padL = 44, padR = 10, padT = 14, padB = 30;
@@ -467,14 +527,14 @@
     host.querySelectorAll('.hitp').forEach(function (el) {
       el.addEventListener('mousemove', function (ev) {
         var m = months[+el.dataset.i];
-        if (!m || !m.business_hours) { showTip('<b>' + esc(monthLabel(m.month)) + '</b><div class="row">en cours de lecture…</div>', ev); return; }
+        if (!m || !m.business_hours) { showTip('<b>' + esc(monthLabel(m.month)) + '</b><div class="row">loading\u2026</div>', ev); return; }
         var bh = m.business_hours;
         showTip('<b>' + esc(monthLabel(m.month)) + '</b>' +
-          '<div class="row">Présentés · <b>' + fmt(bh.offered) + '</b></div>' +
-          '<div class="row">Décrochés · <b>' + fmt(bh.answered) + '</b> (' + pct(bh.availability_rate_pct) + ')</div>' +
-          '<div class="row">Abandons file · <b>' + fmt(bh.abandoned_in_queue) + '</b></div>' +
-          '<div class="row">Messagerie · <b>' + fmt(bh.voicemail) + '</b></div>' +
-          '<div class="row">Décroché médian · <b>' + dur(bh.median_answer_seconds) + '</b></div>', ev);
+          '<div class="row">Offered \u00b7 <b>' + fmt(bh.offered) + '</b></div>' +
+          '<div class="row">Answered \u00b7 <b>' + fmt(bh.answered) + '</b> (' + pct(bh.availability_rate_pct) + ')</div>' +
+          '<div class="row">Abandoned in queue \u00b7 <b>' + fmt(bh.abandoned_in_queue) + '</b></div>' +
+          '<div class="row">Voicemail \u00b7 <b>' + fmt(bh.voicemail) + '</b></div>' +
+          '<div class="row">Median answer \u00b7 <b>' + dur(bh.median_answer_seconds) + '</b></div>', ev);
       });
       el.addEventListener('mouseleave', hideTip);
     });
@@ -484,8 +544,8 @@
     var months = state.phone;
     drawPhone(months);
     $('#tablePhone').innerHTML = table(
-      ['Mois', 'Présentés', 'Décrochés', 'Disponibilité', 'Abandons file', 'Messagerie',
-       'Décroché médian', 'p90', 'Hors horaires'],
+      ['Month', 'Offered', 'Answered', 'Availability', 'Abandoned', 'Voicemail',
+       'Median answer', 'p90', 'Outside hours'],
       months.map(function (m) {
         if (!m.business_hours) return [monthLabel(m.month), '—', '—', '—', '—', '—', '—', '—', '—'];
         var b = m.business_hours;
@@ -499,13 +559,13 @@
     if (last) {
       var b = last.business_hours;
       var tiles = [
-        ['Disponibilité · ' + monthLabel(last.month), pct(b.availability_rate_pct),
-         fmt(b.answered) + ' décrochés sur ' + fmt(b.offered), b.availability_rate_pct != null && b.availability_rate_pct < 80],
-        ['Appels perdus', fmt(b.abandoned_in_queue + b.abandoned_on_hold),
-         'raccrochés avant réponse · ' + pct(b.abandon_rate_pct) + ' des appels',
+        ['Availability \u00b7 ' + monthLabel(last.month), pct(b.availability_rate_pct),
+         fmt(b.answered) + ' answered of ' + fmt(b.offered) + ' offered', b.availability_rate_pct != null && b.availability_rate_pct < 80],
+        ['Calls lost', fmt(b.abandoned_in_queue + b.abandoned_on_hold),
+         'hung up before an answer \u00b7 ' + pct(b.abandon_rate_pct) + ' of calls',
          b.abandon_rate_pct != null && b.abandon_rate_pct > 15],
-        ['Messagerie', fmt(b.voicemail), 'pendant les heures d’ouverture', false],
-        ['Décroché médian', dur(b.median_answer_seconds), 'p90 · ' + dur(b.p90_answer_seconds), false]
+        ['Voicemail', fmt(b.voicemail), 'during opening hours', false],
+        ['Median answer', dur(b.median_answer_seconds), 'p90 \u00b7 ' + dur(b.p90_answer_seconds), false]
       ];
       $('#phoneTiles').innerHTML = tiles.map(function (t) {
         return '<div class="tile' + (t[3] ? ' alert' : '') + '">' +
@@ -515,10 +575,15 @@
       }).join('');
 
       $('#tablePhoneAgents').innerHTML =
-        '<p class="note">Appels décrochés par agent · ' + esc(monthLabel(last.month)) + '</p>' +
-        table(['Agent', 'Appels décrochés', 'Temps en ligne', 'Durée moyenne'],
+        '<p class="note">Calls by agent \u00b7 ' + esc(monthLabel(last.month)) +
+        (last.legs_read ? '' : ' \u00b7 missed and declined not read for this month') + '</p>' +
+        table(['Agent', 'Answered', 'Missed', 'Declined', 'Pickup rate', 'Talk time', 'Average call'],
           (last.agents || []).map(function (a) {
-            return [esc(a.name || a.agent_id), fmt(a.calls), dur(a.talk_seconds),
+            return [esc(a.name || a.agent_id), fmt(a.calls),
+                    a.missed_legs == null ? '\u2014' : fmt(a.missed_legs),
+                    a.declined_legs == null ? '\u2014' : fmt(a.declined_legs),
+                    a.pickup_rate_pct == null ? '\u2014' : pct(a.pickup_rate_pct),
+                    dur(a.talk_seconds),
                     dur(a.calls ? Math.round(a.talk_seconds / a.calls) : null)];
           }));
     }
@@ -537,15 +602,178 @@
     renderPhone();
 
     var idx = 0;
-    $('#phoneStatus').textContent = 'Lecture de l’historique des appels…';
+    $('#phoneStatus').textContent = 'Reading call history\u2026';
     (function next() {
       if (idx >= list.length) { $('#phoneStatus').textContent = ''; return; }
       var m = list[idx++];
       fetch('/api/metrics-phone?month=' + m.month + (key ? '&secret=' + encodeURIComponent(key) : ''))
         .then(function (r) { return r.json(); })
         .then(function (j) {
-          if (j && j.ok) { list[list.indexOf(m)] = j; state.phone = list; renderPhone(); }
-          $('#phoneStatus').textContent = 'Lecture de l’historique des appels… ' + idx + '/' + list.length;
+          if (j && j.ok) { list[list.indexOf(m)] = j; state.phone = list; renderPhone(); renderAgentMonth(); }
+          $('#phoneStatus').textContent = 'Reading call history\u2026 ' + idx + '/' + list.length;
+          next();
+        })
+        .catch(function () { next(); });
+    })();
+  }
+
+  /* ------------------------------------------ service quality, month by month */
+  /**
+   * The five widgets that used to live in the Explore board "Board 2025":
+   * ticket volume, % satisfaction, good satisfaction, first reply time and — in
+   * the phone section above — call talk time and missed/declined legs. They are
+   * read here from the Zendesk API directly, so the page owes Explore nothing.
+   */
+  function renderService() {
+    var months = state.svc;
+
+    $('#tableService').innerHTML = table(
+      ['Month', 'Created', 'Solved', 'Solve rate', 'First reply (median)', 'p90',
+       'Full resolution (median)', 'One touch', 'Reopened', 'CSAT', 'Ratings'],
+      months.map(function (m) {
+        if (!m.volume) return [monthLabel(m.month), '—', '—', '—', '—', '—', '—', '—', '—', '—', '—'];
+        var v = m.volume, f = m.first_reply || {}, r = m.resolution || {}, c = m.satisfaction || {};
+        return [monthLabel(m.month), fmt(v.created), fmt(v.solved), pct(v.solve_rate_pct),
+                mins(f.median_minutes), mins(f.p90_minutes), mins(r.median_minutes),
+                pct(v.one_touch_rate_pct), pct(v.reopen_rate_pct),
+                c.score_pct == null ? '—' : pct(c.score_pct),
+                c.answered == null ? '—' : fmt(c.answered)];
+      }));
+
+    // The last month that actually returned numbers. The current month is
+    // deliberately allowed to be it here: unlike conversion, none of these
+    // metrics need an attribution window to close before they mean something.
+    var last = null;
+    for (var i = months.length - 1; i >= 0; i--) { if (months[i].volume) { last = months[i]; break; } }
+    if (!last) return;
+
+    var v = last.volume, f = last.first_reply || {}, c = last.satisfaction || {};
+    var tiles = [
+      ['Tickets · ' + monthLabel(last.month), fmt(v.created),
+       fmt(v.solved) + ' solved · ' + pct(v.solve_rate_pct), false],
+      ['First reply (median)', mins(f.median_minutes),
+       'p90 · ' + mins(f.p90_minutes) + ' · on ' + fmt(f.measured_on) + ' tickets',
+       f.median_minutes != null && f.median_minutes > 240],
+      ['Satisfaction', c.score_pct == null ? '—' : pct(c.score_pct),
+       c.answered ? fmt(c.good) + ' good of ' + fmt(c.answered) + ' rated' : 'no ratings this month',
+       c.score_pct != null && c.score_pct < 90],
+      ['One touch', pct(v.one_touch_rate_pct),
+       fmt(v.one_touch) + ' solved with a single reply', false],
+      ['Reopened', fmt(v.reopened), pct(v.reopen_rate_pct) + ' of solved tickets',
+       v.reopen_rate_pct != null && v.reopen_rate_pct > 10]
+    ];
+    $('#svcTiles').innerHTML = tiles.map(function (t) {
+      return '<div class="tile' + (t[3] ? ' alert' : '') + '">' +
+        '<div class="label">' + esc(t[0]) + '</div>' +
+        '<div class="value">' + t[1] + '</div>' +
+        '<div class="foot">' + (t[3] ? '⚠ ' : '') + esc(t[2]) + '</div></div>';
+    }).join('');
+
+    $('#tableChannel').innerHTML =
+      '<p class="note">Where the tickets came in · ' + esc(monthLabel(last.month)) + '</p>' +
+      table(['Channel', 'Tickets', 'Share'],
+        (v.by_channel || []).map(function (x) {
+          return [esc(x.channel.replace(/_/g, ' ')), fmt(x.count), pct(x.share_pct)];
+        }));
+
+    renderAgentMonth();
+  }
+
+  /**
+   * ONE ROW PER AGENT, THREE SOURCES.
+   *
+   * Ticket quality comes from the service endpoint, the phone columns from the
+   * Talk legs export, and the revenue column from the conversion join. They are
+   * keyed on the same Zendesk user id, so the merge is safe; what is NOT safe is
+   * assuming every agent appears in all three, and a missing cell is shown as a
+   * dash rather than a zero, because "did not handle calls" and "answered no
+   * calls" are different statements.
+   */
+  function renderAgentMonth() {
+    var host = $('#tableAgentMonth');
+    if (!host) return;
+
+    var svc = null, ph = null, conv = null;
+    for (var i = state.svc.length - 1; i >= 0; i--) { if (state.svc[i].volume) { svc = state.svc[i]; break; } }
+    if (!svc) { host.innerHTML = '<p class="note">Loading…</p>'; return; }
+
+    for (var j = state.phone.length - 1; j >= 0; j--) { if (state.phone[j].month === svc.month && state.phone[j].agents) { ph = state.phone[j]; break; } }
+    for (var k = state.conv.length - 1; k >= 0; k--) { if (state.conv[k].month === svc.month && state.conv[k].agents) { conv = state.conv[k]; break; } }
+
+    var rows = {};
+    function bucket(id, name) {
+      var r = rows[id];
+      if (!r) r = rows[id] = { id: id, name: name || id };
+      if (name && (!r.name || r.name === r.id)) r.name = name;
+      return r;
+    }
+    (svc.agents || []).forEach(function (a) {
+      var r = bucket(a.assignee_id, a.name);
+      r.tickets = a.tickets; r.solved = a.solved;
+      r.one_touch_rate_pct = a.one_touch_rate_pct;
+      r.frt = a.median_first_reply_minutes;
+      r.csat = a.csat_score_pct; r.rated = a.csat_good + a.csat_bad;
+    });
+    (ph ? ph.agents || [] : []).forEach(function (a) {
+      var r = bucket(a.agent_id, a.name);
+      r.calls = a.calls; r.missed = a.missed_legs; r.declined = a.declined_legs;
+      r.pickup = a.pickup_rate_pct; r.talk = a.talk_seconds;
+    });
+    (conv ? conv.agents || [] : []).forEach(function (a) {
+      var r = bucket(a.agent_id, a.name);
+      r.contacts = a.contacts; r.revenue = a.revenue_eur;
+      r.presale_rev = a.presale_revenue_eur; r.repeat_rev = a.repeat_revenue_eur;
+      r.sales = a.presale_converted; r.rebookings = a.repeat_rebooked;
+    });
+
+    var list = Object.keys(rows).map(function (k2) { return rows[k2]; })
+      .sort(function (a, b) { return (b.revenue || 0) - (a.revenue || 0) || (b.tickets || 0) - (a.tickets || 0); });
+
+    host.innerHTML =
+      '<p class="note">' + esc(monthLabel(svc.month)) +
+        (conv ? '' : ' · revenue column still loading') + '</p>' +
+      table(['Agent', 'Tickets', 'Solved', 'One touch', 'First reply', 'CSAT',
+             'Calls', 'Missed', 'Declined', 'Pickup', 'Contacts matched', 'Revenue contribution'],
+        list.map(function (r) {
+          return [
+            esc(r.name),
+            r.tickets == null ? '—' : fmt(r.tickets),
+            r.solved == null ? '—' : fmt(r.solved),
+            r.one_touch_rate_pct == null ? '—' : pct(r.one_touch_rate_pct),
+            mins(r.frt),
+            r.csat == null ? '—' : pct(r.csat) + ' <span style="color:var(--muted)">(' + fmt(r.rated) + ')</span>',
+            r.calls == null ? '—' : fmt(r.calls),
+            r.missed == null ? '—' : fmt(r.missed),
+            r.declined == null ? '—' : fmt(r.declined),
+            r.pickup == null ? '—' : pct(r.pickup),
+            r.contacts == null ? '—' : fmt(r.contacts),
+            r.revenue == null ? '—' : '<b>' + eur(r.revenue) + '</b>' +
+              '<span style="color:var(--muted)"> · ' + eur(r.presale_rev) + ' pre-sale</span>'
+          ];
+        }));
+  }
+
+  /** Six months, one request each: the metric-set side-load is a full month walk. */
+  function loadService() {
+    var key = $('#secret').value.trim();
+    var now = new Date(), list = [];
+    for (var i = 5; i >= 0; i--) {
+      var d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+      list.push({ month: d.toISOString().slice(0, 7) });
+    }
+    state.svc = list; renderService();
+
+    var idx = 0;
+    $('#svcStatus').textContent = 'Reading tickets, metrics and ratings…';
+    (function next() {
+      if (idx >= list.length) { $('#svcStatus').textContent = ''; return; }
+      var m = list[idx++];
+      fetch('/api/metrics-service?month=' + m.month + (key ? '&secret=' + encodeURIComponent(key) : ''))
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j && j.ok) { list[list.indexOf(m)] = j; state.svc = list; renderService(); }
+          else if (j && j.error) { $('#svcStatus').textContent = 'Service metrics: ' + j.error; }
+          if (idx < list.length) $('#svcStatus').textContent = 'Reading tickets, metrics and ratings… ' + idx + '/' + list.length;
           next();
         })
         .catch(function () { next(); });
@@ -558,25 +786,25 @@
     drawMonthlyRate($('#chartConv'), months,
       function (m) { return m.presale ? m.presale.conversion_rate_pct : null; },
       function (m) {
-        if (!m.presale) return '<b>' + esc(monthLabel(m.month)) + '</b><div class="row">en cours de lecture…</div>';
-        var p = m.presale, r = m.repeat || {};
+        if (!m.presale) return '<b>' + esc(monthLabel(m.month)) + '</b><div class="row">loading\u2026</div>';
+        var p = m.presale, r = m.repeat || {}, tot = supportRevenue(m);
         return '<b>' + esc(monthLabel(m.month)) + '</b>' +
-          '<div class="row">Contacts avant-vente · <b>' + fmt(p.contacts) + '</b></div>' +
-          '<div class="row">Ont réservé · <b>' + fmt(p.converted) + '</b> (' + pct(p.conversion_rate_pct) + ')</div>' +
-          '<div class="row">CA attribué · <b>' + eur(p.revenue_eur) + '</b></div>' +
-          '<div class="row">Réachat · <b>' + fmt(r.rebooked) + '</b> · ' + eur(r.revenue_eur) + '</div>';
+          '<div class="row">Support-attributed revenue \u00b7 <b>' + eur(tot.total_eur) + '</b></div>' +
+          '<div class="row">\u2003pre-sale \u00b7 ' + eur(tot.presale_eur) + ' \u00b7 ' + fmt(p.converted) + ' sales</div>' +
+          '<div class="row">\u2003repeat \u00b7 ' + eur(tot.repeat_eur) + ' \u00b7 ' + fmt(r.rebooked) + ' rebookings</div>' +
+          '<div class="row">Pre-sale contacts \u00b7 <b>' + fmt(p.contacts) + '</b> (' + pct(p.conversion_rate_pct) + ' converted)</div>';
       },
-      'Conversion indisponible — voir le message ci-dessous.');
+      'Conversion unavailable \u2014 see the message below.');
 
     $('#tableConv').innerHTML = table(
-      ['Mois', 'Contacts avant-vente', 'Ont réservé', 'Taux', 'CA attribué', 'CA / contact',
-       'Réachats', 'CA réachat', 'Appels rattachables'],
+      ['Month', 'Support revenue', 'Pre-sale \u20ac', 'Repeat \u20ac', 'Pre-sale contacts', 'Sales',
+       'Conversion', 'Rebookings', 'Calls matched'],
       months.map(function (m) {
-        if (!m.presale) return [monthLabel(m.month), '—', '—', '—', '—', '—', '—', '—', '—'];
-        var p = m.presale, r = m.repeat || {}, ph = m.phone_coverage || {};
-        return [monthLabel(m.month), fmt(p.contacts), fmt(p.converted), pct(p.conversion_rate_pct),
-                eur(p.revenue_eur), eur(p.revenue_per_contact_eur), fmt(r.rebooked), eur(r.revenue_eur),
-                ph.coverage_pct == null ? '—' : pct(ph.coverage_pct)];
+        if (!m.presale) return [monthLabel(m.month), '\u2014', '\u2014', '\u2014', '\u2014', '\u2014', '\u2014', '\u2014', '\u2014'];
+        var p = m.presale, r = m.repeat || {}, ph = m.phone_coverage || {}, tot = supportRevenue(m);
+        return [monthLabel(m.month), '<b>' + eur(tot.total_eur) + '</b>', eur(tot.presale_eur), eur(tot.repeat_eur),
+                fmt(p.contacts), fmt(p.converted), pct(p.conversion_rate_pct), fmt(r.rebooked),
+                ph.coverage_pct == null ? '\u2014' : pct(ph.coverage_pct)];
       }));
 
     // Le mois courant est partiel : il ferait un titre trompeur. On titre sur le
@@ -588,22 +816,24 @@
       if (m.presale && m.presale.contacts) { last = m; break; }
     }
     if (last) {
-      var p = last.presale, r = last.repeat || {}, ph = last.phone_coverage || {};
+      var p = last.presale, r = last.repeat || {}, ph = last.phone_coverage || {}, tot = supportRevenue(last);
       var tiles = [
-        ['Conversion · ' + monthLabel(last.month), pct(p.conversion_rate_pct),
-         fmt(p.converted) + ' ventes sur ' + fmt(p.contacts) + ' contacts', false],
-        ['CA attribué au support', eur(p.revenue_eur), eur(p.revenue_per_contact_eur) + ' par contact', false],
-        ['Réachat après contact', eur(r.revenue_eur), fmt(r.rebooked) + ' clients déjà venus', false],
-        ['Appels rattachables', ph.coverage_pct == null ? '—' : pct(ph.coverage_pct),
-         fmt(ph.unjoinable) + ' appels sans ticket', ph.coverage_pct != null && ph.coverage_pct < 70]
+        ['Support revenue \u00b7 ' + monthLabel(last.month), eur(tot.total_eur),
+         fmt(tot.bookings) + ' bookings after a contact', false],
+        ['Pre-sale', eur(tot.presale_eur),
+         fmt(p.converted) + ' sales \u00b7 ' + pct(p.conversion_rate_pct) + ' of ' + fmt(p.contacts) + ' contacts', false],
+        ['Repeat', eur(tot.repeat_eur), fmt(r.rebooked) + ' returning customers rebooked', false],
+        ['Calls matched', ph.coverage_pct == null ? '\u2014' : pct(ph.coverage_pct),
+         (ph.newly_joinable ? '+' + fmt(ph.newly_joinable) + ' via the Odin phone index' : fmt(ph.unjoinable) + ' calls still unmatched'),
+         ph.coverage_pct != null && ph.coverage_pct < 70]
       ];
-      if (last.precision === 'jour') {
-        $('#convSource').textContent = ' Lecture par lien public Metabase : le « avant / après » est à la journée, '
-          + 'donc une réservation faite le jour même du contact compte comme une conversion.';
+      if (last.precision === 'jour' || last.precision === 'day') {
+        $('#convSource').textContent = ' Read through the Metabase public link: the before/after boundary is a whole day, '
+          + 'so a booking made on the day of the contact counts as a conversion.';
       } else if (last.source && last.source.indexOf('snapshot') === 0) {
-        $('#convSource').textContent = ' Instantané ' + esc(last.generated_at ? new Date(last.generated_at).toLocaleDateString('fr-FR') : '')
-          + ' — ' + fmt(last.contacts && last.contacts.matched_in_bookings) + ' demandeurs sur '
-          + fmt(last.contacts && last.contacts.requesters) + ' retrouvés dans la base réservations.';
+        $('#convSource').textContent = ' Snapshot of ' + esc(last.generated_at ? new Date(last.generated_at).toLocaleDateString('en-GB') : '')
+          + ' \u2014 ' + fmt(last.contacts && last.contacts.matched_in_bookings) + ' of '
+          + fmt(last.contacts && last.contacts.requesters) + ' requesters found in the bookings table.';
       }
       $('#convTiles').innerHTML = tiles.map(function (t) {
         return '<div class="tile' + (t[3] ? ' alert' : '') + '">' +
@@ -638,29 +868,29 @@
           }
         });
         state.conv = list; renderConv();
-        var when = snap.generated_at ? new Date(snap.generated_at).toLocaleDateString('fr-FR') : '';
+        var when = snap.generated_at ? new Date(snap.generated_at).toLocaleDateString('en-GB') : '';
         var note = $('#convSource');
         if (note && !note.textContent) {
-          note.textContent = ' Instantané du ' + when + ' (jointure faite hors ligne, à la seconde) ; '
-            + 'le direct Metabase, s\'il répond, remplace ces valeurs mois par mois.';
+          note.textContent = ' Snapshot of ' + when + ' (joined offline, to the second); '
+            + 'the live Metabase read replaces these values month by month as it answers.';
         }
       })
       .catch(function () {});
 
     var idx = 0;
-    $('#convStatus').textContent = 'Rapprochement tickets ↔ réservations…';
+    $('#convStatus').textContent = 'Matching tickets to bookings\u2026';
     (function next() {
       if (idx >= list.length) { $('#convStatus').textContent = ''; return; }
       var m = list[idx++];
       fetch('/api/metrics-conversion?month=' + m.month + (key ? '&secret=' + encodeURIComponent(key) : ''))
         .then(function (r) { return r.json(); })
         .then(function (j) {
-          if (j && j.ok) { list[list.indexOf(m)] = j; state.conv = list; renderConv(); }
+          if (j && j.ok) { list[list.indexOf(m)] = j; state.conv = list; renderConv(); renderAgentMonth(); }
           else if (j && j.missing) {
-            $('#convStatus').innerHTML = 'Conversion non configurée — il manque : <b>' + esc(j.missing.join(', ')) + '</b>';
+            $('#convStatus').innerHTML = 'Conversion is not configured \u2014 missing: <b>' + esc(j.missing.join(', ')) + '</b>';
             $('#convStatus').className = 'note err'; idx = list.length;
           }
-          if (idx < list.length) $('#convStatus').textContent = 'Rapprochement tickets ↔ réservations… ' + idx + '/' + list.length;
+          if (idx < list.length) $('#convStatus').textContent = 'Matching tickets to bookings\u2026 ' + idx + '/' + list.length;
           next();
         })
         .catch(function () { next(); });
@@ -683,18 +913,18 @@
   /* -------------------------------------------------------------- rendering */
   function render(d) {
     state.data = d;
-    $('#stamp').textContent = 'sur ' + d.window_days + ' jours · ' +
-      new Date(d.generated_at).toLocaleString('fr-FR') +
-      (d.truncated ? ' · lecture partielle' : '');
+    $('#stamp').textContent = 'last ' + d.window_days + ' days \u00b7 ' +
+      new Date(d.generated_at).toLocaleString('en-GB') +
+      (d.truncated ? ' \u00b7 partial read' : '');
 
     var b = d.bot, tl = d.talk || {};
     var tiles = [
-      ['Tickets', fmt(d.totals.tickets), fmt(d.totals.routed_by_system) + ' vus par le bot', false],
-      ['Traités sans humain', pct(b.finished_rate_pct), fmt(b.finished_without_human) + ' tickets', false],
-      ['Passés à un humain', pct(b.handover_rate_pct), fmt(b.handed_over) + ' tickets', false],
-      ['Échecs silencieux', fmt(b.silent_failures), pct(b.silent_rate_pct) + ' des tickets routés', b.silent_failures > 0],
-      ['Agents en ligne', tl.agents_online == null ? '—' : fmt(tl.agents_online),
-        tl.calls_waiting != null ? fmt(tl.calls_waiting) + ' appel(s) en attente' : 'téléphone', false]
+      ['Tickets', fmt(d.totals.tickets), fmt(d.totals.routed_by_system) + ' seen by the bot', false],
+      ['Handled without a human', pct(b.finished_rate_pct), fmt(b.finished_without_human) + ' tickets', false],
+      ['Escalated to a human', pct(b.handover_rate_pct), fmt(b.handed_over) + ' tickets', false],
+      ['Silent failures', fmt(b.silent_failures), pct(b.silent_rate_pct) + ' of routed tickets', b.silent_failures > 0],
+      ['Agents online', tl.agents_online == null ? '\u2014' : fmt(tl.agents_online),
+        tl.calls_waiting != null ? fmt(tl.calls_waiting) + ' call(s) waiting' : 'phone', false]
     ];
     $('#tiles').innerHTML = tiles.map(function (t) {
       return '<div class="tile' + (t[3] ? ' alert' : '') + '">' +
@@ -705,32 +935,32 @@
 
     drawDaily(d.daily || []);
     $('#tableDaily').innerHTML = table(
-      ['Jour', 'Tickets', 'Sans humain', 'Humain', 'Silencieux'],
+      ['Day', 'Tickets', 'No human', 'Human', 'Silent'],
       (d.daily || []).map(function (x) { return [x.day, fmt(x.tickets), fmt(x.finished), fmt(x.human), fmt(x.silent)]; }));
 
     drawReasons(b.handover_reasons || []);
-    $('#tableReasons').innerHTML = table(['Motif', 'Tickets'],
+    $('#tableReasons').innerHTML = table(['Reason', 'Tickets'],
       (b.handover_reasons || []).map(function (r) { return [esc(r.reason), fmt(r.count)]; }));
 
     $('#tableCapability').innerHTML = table(
-      ['Capacité', 'Tickets', 'Sans humain', 'Taux', 'Humain', 'Silencieux'],
+      ['Capability', 'Tickets', 'No human', 'Rate', 'Human', 'Silent'],
       (b.by_capability || []).map(function (c) {
         return [esc(c.capability), fmt(c.total), fmt(c.finished), pct(c.finished_rate_pct),
                 fmt(c.human), c.silent ? '<span style="color:var(--critical)">' + fmt(c.silent) + '</span>' : '0'];
       }));
 
     if (tl.error) {
-      $('#talk').innerHTML = '<p class="note err">Téléphone indisponible : ' + esc(tl.error) + '</p>';
+      $('#talk').innerHTML = '<p class="note err">Phone unavailable: ' + esc(tl.error) + '</p>';
     } else if (!tl.agents) {
-      $('#talk').innerHTML = '<p class="note">Pas de données Talk.</p>';
+      $('#talk').innerHTML = '<p class="note">No Talk data.</p>';
     } else {
       $('#talk').innerHTML =
         '<div class="legend">' +
-          '<span><i class="dot" style="background:var(--good)"></i> disponible</span>' +
-          '<span><i class="dot" style="background:var(--warning)"></i> absent</span>' +
-          '<span><i class="dot" style="background:var(--muted)"></i> hors ligne</span>' +
+          '<span><i class="dot" style="background:var(--good)"></i> available</span>' +
+          '<span><i class="dot" style="background:var(--warning)"></i> away</span>' +
+          '<span><i class="dot" style="background:var(--muted)"></i> offline</span>' +
         '</div>' +
-        table(['Agent', 'État', 'En ligne', 'Disponible', 'Absent', 'Acceptés', 'Manqués', 'Durée moy.'],
+        table(['Agent', 'State', 'Online', 'Available', 'Away', 'Accepted', 'Missed', 'Avg call'],
           tl.agents.map(function (a) {
             var st = String(a.state || '').toLowerCase();
             var c = st === 'available' ? 'var(--good)' : (st === 'away' ? 'var(--warning)' : 'var(--muted)');
@@ -738,12 +968,12 @@
               esc(a.state || '—'), dur(a.online_seconds), dur(a.available_seconds), dur(a.away_seconds),
               fmt(a.calls_accepted), fmt((a.calls_missed || 0) + (a.calls_denied || 0)), dur(a.average_talk_seconds)];
           })) +
-        '<p class="note">Ces compteurs sont un <b>instantané glissant</b> de Zendesk Talk, pas un historique : ' +
-        'ils se remettent à zéro. Pour une courbe, il faut appeler cet endpoint régulièrement et stocker les réponses.</p>';
+        '<p class="note">These counters are a <b>rolling snapshot</b> from Zendesk Talk, not a history: ' +
+        'they reset. The monthly section above is the historical one.</p>';
     }
 
     $('#tableAgents').innerHTML = table(
-      ['Agent', 'Résolus', 'Délai médian création → résolution', 'Dont repris après le bot'],
+      ['Agent', 'Solved', 'Median creation \u2192 solve', 'Picked up after the bot'],
       (d.agents || []).map(function (a) {
         return [esc(a.name), fmt(a.solved),
           a.median_hours_to_solve == null ? '—' : String(a.median_hours_to_solve).replace('.', ',') + ' h',
@@ -757,22 +987,22 @@
   function load() {
     var key = $('#secret').value.trim();
     try { localStorage.setItem('alpy.metrics.key', key); } catch (e) {}
-    $('#status').textContent = 'Lecture des tickets…';
+    $('#status').textContent = 'Reading tickets\u2026';
     $('#status').className = 'note';
     fetch('/api/metrics?days=' + state.days + (key ? '&secret=' + encodeURIComponent(key) : ''))
       .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
       .then(function (o) {
-        if (o.s === 401) { $('#status').textContent = 'Clé d’accès refusée.'; $('#status').className = 'note err'; return; }
+        if (o.s === 401) { $('#status').textContent = 'Access key refused.'; $('#status').className = 'note err'; return; }
         if (!o.j || o.j.ok === false) {
-          $('#status').textContent = 'Erreur : ' + ((o.j && (o.j.error || o.j.reason)) || o.s);
+          $('#status').textContent = 'Error: ' + ((o.j && (o.j.error || o.j.reason)) || o.s);
           $('#status').className = 'note err'; return;
         }
         $('#status').textContent = '';
         render(o.j);
-        if (!state.phoneLoaded) { state.phoneLoaded = true; loadPhone(); loadConv(); }
+        if (!state.phoneLoaded) { state.phoneLoaded = true; loadService(); loadPhone(); loadConv(); }
       })
       .catch(function (e) {
-        $('#status').textContent = 'Erreur réseau : ' + e.message;
+        $('#status').textContent = 'Network error: ' + e.message;
         $('#status').className = 'note err';
       });
   }
@@ -789,7 +1019,7 @@
   $('#tableToggle').addEventListener('click', function () {
     state.tables = !state.tables;
     this.setAttribute('aria-pressed', String(state.tables));
-    this.textContent = state.tables ? 'Voir les graphiques' : 'Voir les tableaux';
+    this.textContent = state.tables ? 'Show charts' : 'Show tables';
     $('#chartDaily').hidden = state.tables;   $('#tableDaily').hidden = !state.tables;
     $('#chartReasons').hidden = state.tables; $('#tableReasons').hidden = !state.tables;
     $('#chartPhone').hidden = state.tables;   $('#tablePhone').hidden = !state.tables;

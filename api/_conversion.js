@@ -78,6 +78,7 @@
  */
 
 import crypto from 'node:crypto';
+import { loadIndex, resolvePhone } from './_phone-index.js';
 
 const ZD_SUB = String(process.env.ZENDESK_SUBDOMAIN || '')
   .trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '').replace(/\.zendesk\.com$/i, '');
@@ -179,6 +180,10 @@ const pct = (n, d) => (d ? Math.round((n * 1000) / d) / 10 : null);
 async function ticketsOfMonth(b, deadline) {
   let url = '/api/v2/incremental/tickets.json?start_time=' + Math.floor(b.start / 1000);
   const firstContact = new Map();   // requester_id -> premier contact du mois (ms)
+  // L'agent qui a pris le PREMIER ticket du mois pour ce demandeur. C'est lui
+  // qui portera la vente : attribuer au dernier reviendrait à créditer celui qui
+  // a clôturé plutôt que celui qui a répondu.
+  const firstAgent = new Map();     // requester_id -> assignee_id (string) | 'unassigned'
   let pages = 0, seen = 0, truncated = false;
 
   while (url) {
@@ -193,18 +198,26 @@ async function ticketsOfMonth(b, deadline) {
       const k = t.requester_id;
       if (!k) continue;
       const prev = firstContact.get(k);
-      if (prev == null || c < prev) firstContact.set(k, c);
+      if (prev == null || c < prev) {
+        firstContact.set(k, c);
+        firstAgent.set(k, t.assignee_id ? String(t.assignee_id) : 'unassigned');
+      }
     }
     const last = batch.length ? Date.parse(batch[batch.length - 1].generated_timestamp * 1000 || batch[batch.length - 1].updated_at) : 0;
     if (d.end_of_stream || !d.next_page || last > b.end + 2 * 86400000) break;
     url = d.next_page;
   }
-  return { firstContact, pages, tickets: seen, truncated };
+  return { firstContact, firstAgent, pages, tickets: seen, truncated };
 }
 
-/** Les adresses des demandeurs, hachées immédiatement : rien d'autre n'en sort. */
-async function hashRequesters(ids, deadline) {
+/**
+ * Les adresses des demandeurs, hachées immédiatement : rien d'autre n'en sort.
+ * On garde aussi, par empreinte, l'agent du premier ticket, pour pouvoir dire
+ * plus loin quelle vente suit quel agent.
+ */
+async function hashRequesters(ids, firstAgent, deadline) {
   const byHash = new Map();      // md5 -> premier contact (ms)
+  const agentOf = new Map();     // md5 -> assignee_id
   let withEmail = 0, calls = 0;
   for (let i = 0; i < ids.length; i += 100) {
     if (Date.now() > deadline) break;
@@ -218,10 +231,14 @@ async function hashRequesters(ids, deadline) {
       const h = md5(u.email);
       const c = when.get(u.id);
       const prev = byHash.get(h);
-      if (prev == null || (c != null && c < prev)) byHash.set(h, c);
+      if (prev == null || (c != null && c < prev)) {
+        byHash.set(h, c);
+        const a = firstAgent && firstAgent.get(u.id);
+        if (a) agentOf.set(h, a);
+      }
     }
   }
-  return { byHash, withEmail, calls };
+  return { byHash, agentOf, withEmail, calls };
 }
 
 /**
@@ -246,10 +263,23 @@ GROUP BY z.h
 HAVING before_n > 0 OR after_n > 0`;
 }
 
-/** Les appels du mois, pour chiffrer ce que la jointure par email ne couvre pas. */
-async function phoneCoverage(b, knownRequesters, deadline) {
+/**
+ * LES APPELS DU MOIS, ET LEUR RATTRAPAGE PAR LE NUMÉRO.
+ *
+ * Avant : un appelant sans adresse connue de Zendesk était perdu pour la mesure,
+ * et `phone_coverage` se contentait de chiffrer le trou. Maintenant l'index
+ * construit depuis Odin (voir _phone-index.js) rend le numéro à une empreinte
+ * d'email — la même clé que la table BI — et l'appel rejoint la jointure.
+ *
+ * Ce qui circule reste une empreinte de part et d'autre : le numéro est haché
+ * avant d'être cherché, et ce qui en ressort est un md5 d'adresse, jamais
+ * l'adresse.
+ */
+async function phoneCoverage(b, existingHashes, index, deadline) {
   let url = '/api/v2/channels/voice/stats/incremental/calls.json?start_time=' + Math.floor(b.start / 1000);
-  let inbound = 0, withTicket = 0, joinable = 0, pages = 0;
+  let inbound = 0, withTicket = 0, withNumber = 0, pages = 0;
+  const resolved = new Map();   // md5(email).slice(0,12) -> premier appel (ms)
+  const agentOf = new Map();    // même clé -> agent qui a pris l'appel
   while (url) {
     if (Date.now() > deadline) break;
     const d = await zd(url);
@@ -259,20 +289,43 @@ async function phoneCoverage(b, knownRequesters, deadline) {
       const t = Date.parse(c.created_at);
       if (!(t >= b.start && t < b.end) || c.direction !== 'inbound') continue;
       inbound++;
-      if (c.ticket_id) { withTicket++; if (knownRequesters) joinable++; }
+      if (c.ticket_id) withTicket++;
+      const num = c.customer_requester_id ? null : (c.phone_number || c.customer_phone || null);
+      if (!num) continue;
+      withNumber++;
+      const h = index ? resolvePhone(index, num) : null;
+      if (!h) continue;
+      const prev = resolved.get(h);
+      if (prev == null || t < prev) {
+        resolved.set(h, t);
+        if (c.agent_id) agentOf.set(h, String(c.agent_id));
+      }
     }
     const last = batch.length ? Date.parse(batch[batch.length - 1].updated_at || batch[batch.length - 1].created_at) : 0;
     if (d.end_of_stream || !d.next_page || last > b.end + 2 * 86400000) break;
     url = d.next_page;
   }
+
+  // Ceux que la jointure par email tenait déjà ne sont pas un gain : on ne les
+  // compte qu'une fois, et le chiffre annoncé est le vrai gain net.
+  let added = 0;
+  for (const h of resolved.keys()) if (!existingHashes.has(h)) added++;
+
   return {
-    inbound_calls: inbound,
-    with_ticket: withTicket,
-    // Un appel sans ticket n'a pas de demandeur, donc pas d'adresse, donc rien
-    // à joindre tant que la table BI n'expose pas d'empreinte de numéro.
-    unjoinable: inbound - withTicket,
-    coverage_pct: pct(withTicket, inbound),
-    pages_read: pages,
+    coverage: {
+      inbound_calls: inbound,
+      with_ticket: withTicket,
+      with_number: withNumber,
+      matched_in_odin_index: resolved.size,
+      newly_joinable: added,
+      unjoinable: Math.max(0, inbound - withTicket - added),
+      coverage_pct: pct(withTicket + added, inbound),
+      index_pairs: index && index.map ? Object.keys(index.map).length : 0,
+      index_built_at: index && index.meta ? index.meta.built_at : null,
+      pages_read: pages,
+    },
+    resolved,
+    agentOf,
   };
 }
 
@@ -307,11 +360,44 @@ export async function handler(req, res) {
 
   const deadline = Date.now() + BUDGET_MS;
   try {
-    const { firstContact, pages, tickets, truncated } = await ticketsOfMonth(b, deadline);
+    const { firstContact, firstAgent, pages, tickets, truncated } = await ticketsOfMonth(b, deadline);
     const ids = [...firstContact.entries()];
-    const { byHash, withEmail } = await hashRequesters(ids, deadline - 12000);
+    const { byHash, agentOf, withEmail } = await hashRequesters(ids, firstAgent, deadline - 20000);
 
-    const entries = [...byHash.entries()];
+    // ── Une seule population, en clés de 12 hexadécimaux ─────────────────────
+    // C'est la clé que la table BI expose (SUBSTR(customer_email_hash,4,12)), et
+    // c'est aussi celle que l'index téléphone stocke : email et téléphone se
+    // rejoignent donc naturellement, sans convertir quoi que ce soit deux fois.
+    const contactAt = new Map();     // h12 -> premier contact (ms)
+    const contactAgent = new Map();  // h12 -> agent
+    const fromEmail = new Set();
+    for (const [h, ms] of byHash.entries()) {
+      const h12 = h.slice(0, 12);
+      fromEmail.add(h12);
+      const prev = contactAt.get(h12);
+      if (prev == null || ms < prev) {
+        contactAt.set(h12, ms);
+        const a = agentOf.get(h);
+        if (a) contactAgent.set(h12, a);
+      }
+    }
+
+    // ── Le téléphone, rattrapé par l'index Odin ──────────────────────────────
+    let index = null;
+    try { index = await loadIndex(); } catch { index = null; }
+    const phone = await phoneCoverage(b, fromEmail, index, deadline - 4000);
+    for (const [h12, ms] of phone.resolved.entries()) {
+      const prev = contactAt.get(h12);
+      if (prev == null || ms < prev) {
+        contactAt.set(h12, ms);
+        if (!contactAgent.has(h12)) {
+          const a = phone.agentOf.get(h12);
+          if (a) contactAgent.set(h12, a);
+        }
+      }
+    }
+
+    const entries = [...contactAt.entries()];
     let rows = [];
     let partial = false;
     if (entries.length) {
@@ -338,20 +424,62 @@ export async function handler(req, res) {
     let presaleConverted = 0, presaleGmv = 0;
     let repeatContacts = 0, repeatConverted = 0, repeatGmv = 0;
 
+    // Par agent : le même partage avant-vente / réachat, mais rattaché à celui
+    // qui a pris le contact. Un agent n'apparaît que s'il a touché un contact
+    // joignable — la liste n'est pas un classement de tout le service.
+    const perAgent = new Map();
+    const agentBucket = (k) => {
+      let v = perAgent.get(k);
+      if (!v) perAgent.set(k, v = {
+        agent_id: k, contacts: 0,
+        presale_contacts: 0, presale_converted: 0, presale_revenue_eur: 0,
+        repeat_contacts: 0, repeat_rebooked: 0, repeat_revenue_eur: 0,
+      });
+      return v;
+    };
+    for (const h12 of contactAt.keys()) {
+      agentBucket(contactAgent.get(h12) || 'unassigned').contacts++;
+    }
+
     for (const r of rows) {
+      const h12 = String(r[0] || '');
       const beforeN = Number(r[1]) || 0;
       const afterN = Number(r[2]) || 0;
       const gmv = Number(r[3]) || 0;
+      const a = agentBucket(contactAgent.get(h12) || 'unassigned');
       if (beforeN > 0) {
         presaleContacts--;             // ce contact n'était pas de l'avant-vente
         repeatContacts++;
-        if (afterN > 0) { repeatConverted++; repeatGmv += gmv; }
+        a.repeat_contacts++;
+        if (afterN > 0) { repeatConverted++; repeatGmv += gmv; a.repeat_rebooked++; a.repeat_revenue_eur += gmv; }
       } else if (afterN > 0) {
         presaleConverted++; presaleGmv += gmv;
+        a.presale_converted++; a.presale_revenue_eur += gmv;
       }
     }
+    for (const a of perAgent.values()) {
+      a.presale_contacts = Math.max(0, a.contacts - a.repeat_contacts);
+      a.presale_revenue_eur = Math.round(a.presale_revenue_eur * 100) / 100;
+      a.repeat_revenue_eur = Math.round(a.repeat_revenue_eur * 100) / 100;
+      // La contribution au chiffre d'affaires, avant-vente et réachat réunis :
+      // c'est le chiffre demandé, et c'est celui qui se compare d'un agent à
+      // l'autre.
+      a.revenue_eur = Math.round((a.presale_revenue_eur + a.repeat_revenue_eur) * 100) / 100;
+      a.revenue_per_contact_eur = a.contacts ? Math.round((a.revenue_eur / a.contacts) * 100) / 100 : null;
+    }
+    const agents = [...perAgent.values()].sort((x, y) => y.revenue_eur - x.revenue_eur);
 
-    const phone = await phoneCoverage(b, true, deadline);
+    // Les noms, un seul appel, seulement pour les agents qui apparaissent.
+    const agentIds = agents.map(a => a.agent_id).filter(x => /^\d+$/.test(x)).slice(0, 80);
+    if (agentIds.length && Date.now() < deadline) {
+      try {
+        const uj = await zd('/api/v2/users/show_many.json?ids=' + agentIds.join(','));
+        const byId = {};
+        for (const u of (uj.users || [])) byId[String(u.id)] = u.name;
+        for (const a of agents) a.name = byId[a.agent_id] || a.agent_id;
+      } catch { /* les noms sont un confort */ }
+    }
+    for (const a of agents) if (!a.name) a.name = a.agent_id === 'unassigned' ? 'Unassigned' : a.agent_id;
 
     const value = {
       ok: true,
@@ -373,6 +501,11 @@ export async function handler(req, res) {
         // peuvent pas être joints : ils sont hors du calcul, pas comptés comme
         // des échecs.
         hashed: entries.length,
+        // Combien de ces empreintes viennent d'un email, et combien d'un numéro
+        // rendu à un client par l'index Odin. La seconde colonne est le gain de
+        // cette version : ces contacts-là étaient invisibles avant.
+        from_email: fromEmail.size,
+        from_phone: entries.length - fromEmail.size,
       },
 
       // LE chiffre : le support comme canal de vente.
@@ -385,7 +518,8 @@ export async function handler(req, res) {
           ? Math.round((presaleGmv / presaleContacts) * 100) / 100 : null,
       },
 
-      // Compté à part, jamais additionné au précédent.
+      // Le réachat garde sa propre ligne : c'est un autre métier, et son taux ne
+      // se mélange pas à celui de l'avant-vente.
       repeat: {
         contacts: repeatContacts,
         rebooked: repeatConverted,
@@ -393,7 +527,25 @@ export async function handler(req, res) {
         revenue_eur: Math.round(repeatGmv * 100) / 100,
       },
 
-      phone_coverage: phone,
+      // LE CHIFFRE D'AFFAIRES DU SUPPORT, tout compris.
+      //
+      // Les deux TAUX restent séparés — additionner un taux d'avant-vente et un
+      // taux de réachat ne veut rien dire — mais l'ARGENT, lui, s'additionne :
+      // une réservation qui suit un contact est une réservation qui suit un
+      // contact, que le client soit nouveau ou déjà venu. C'est ce total qui
+      // s'affiche en tête du tableau de bord, avec sa décomposition dessous.
+      support_revenue: {
+        total_eur: Math.round((presaleGmv + repeatGmv) * 100) / 100,
+        presale_eur: Math.round(presaleGmv * 100) / 100,
+        repeat_eur: Math.round(repeatGmv * 100) / 100,
+        bookings: presaleConverted + repeatConverted,
+        contacts: entries.length,
+        revenue_per_contact_eur: entries.length
+          ? Math.round(((presaleGmv + repeatGmv) / entries.length) * 100) / 100 : null,
+      },
+
+      agents,
+      phone_coverage: phone.coverage,
     };
 
     if (!truncated && !partial) CACHE.set(key, { at: Date.now(), value });

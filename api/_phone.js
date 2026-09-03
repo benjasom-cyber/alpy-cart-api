@@ -123,6 +123,39 @@ async function fetchMonthCalls(month, deadline) {
   return { calls, pages, truncated };
 }
 
+/**
+ * The legs export, which is the only place "missed" and "declined" exist per
+ * agent — a call has one completion status, but it may have been offered to
+ * three agents first. This is exactly what the Explore widget "Declined and
+ * Missed" counted, and it is why that widget could not be rebuilt from the calls
+ * export alone.
+ *
+ * Same paging rules as the calls export, and the same two-day overshoot.
+ */
+async function fetchMonthLegs(month, deadline) {
+  const b = monthBounds(month);
+  const stopAfter = b.end + 2 * 86400000;
+  let url = '/api/v2/channels/voice/stats/incremental/legs.json?start_time=' +
+    Math.floor(b.start / 1000);
+  const legs = [];
+  let pages = 0, truncated = false;
+
+  while (url) {
+    if (Date.now() > deadline) { truncated = true; break; }
+    const d = await zd(url);
+    pages++;
+    const batch = d.legs || [];
+    for (const l of batch) {
+      const t = Date.parse(l.created_at);
+      if (t >= b.start && t < b.end) legs.push(l);
+    }
+    const last = batch.length ? Date.parse(batch[batch.length - 1].updated_at || batch[batch.length - 1].created_at) : 0;
+    if (d.end_of_stream || !d.next_page || last > stopAfter) break;
+    url = d.next_page;
+  }
+  return { legs, pages, truncated };
+}
+
 function summarise(month, calls) {
   const inbound = calls.filter(c => c.direction === 'inbound' && c.completion_status !== 'failed');
   const inHours = inbound.filter(c => !c.outside_business_hours);
@@ -216,6 +249,58 @@ export async function handler(req, res) {
       truncated,
       ...summarise(month, calls),
     };
+
+    // Missed and declined, per agent, from the legs export. Attempted only with
+    // real time left: it is a second full walk of the month, and the answer is
+    // still useful without it — the flag says which case the reader is looking at.
+    value.legs_read = false;
+    if (!truncated && Date.now() < deadline - 12000) {
+      try {
+        const { legs, pages: lp, truncated: lt } = await fetchMonthLegs(month, deadline - 6000);
+        const byAgent = {};
+        for (const l of legs) {
+          if (!l.agent_id) continue;
+          const k = String(l.agent_id);
+          const a = byAgent[k] || (byAgent[k] = { missed: 0, declined: 0, answered: 0, talk_seconds: 0, hold_seconds: 0 });
+          const s = l.completion_status;
+          if (s === 'missed') a.missed++;
+          else if (s === 'declined') a.declined++;
+          else if (s === 'completed') { a.answered++; a.talk_seconds += l.talk_time || 0; a.hold_seconds += l.hold_time || 0; }
+        }
+        for (const a of value.agents) {
+          const v = byAgent[a.agent_id];
+          if (!v) continue;
+          a.missed_legs = v.missed;
+          a.declined_legs = v.declined;
+          a.answered_legs = v.answered;
+          // Offered = everything the agent's phone actually rang for.
+          const offered = v.answered + v.missed + v.declined;
+          a.offered_legs = offered;
+          a.pickup_rate_pct = pct(v.answered, offered);
+          a.average_talk_seconds = v.answered ? Math.round(v.talk_seconds / v.answered) : null;
+        }
+        // Agents who were offered calls but answered none never appear in the
+        // calls-based list. They are exactly the ones worth seeing.
+        for (const [id, v] of Object.entries(byAgent)) {
+          if (value.agents.some(a => a.agent_id === id)) continue;
+          const offered = v.answered + v.missed + v.declined;
+          value.agents.push({
+            agent_id: id, calls: 0, talk_seconds: 0, hold_seconds: 0,
+            missed_legs: v.missed, declined_legs: v.declined, answered_legs: v.answered,
+            offered_legs: offered, pickup_rate_pct: pct(v.answered, offered),
+            average_talk_seconds: null,
+          });
+        }
+        value.legs_read = !lt;
+        value.legs_pages_read = lp;
+        value.legs = {
+          total: legs.length,
+          missed: legs.filter(l => l.completion_status === 'missed').length,
+          declined: legs.filter(l => l.completion_status === 'declined').length,
+          completed: legs.filter(l => l.completion_status === 'completed').length,
+        };
+      } catch { /* the month still stands without the legs */ }
+    }
     // Names, one call, only for the agents who took a call this month.
     const ids = value.agents.map(a => a.agent_id).filter(x => /^\d+$/.test(x)).slice(0, 60);
     if (ids.length) {

@@ -39,6 +39,8 @@ import { handler as knowledge } from './_knowledge.js';
 import { handler as metrics } from './_metrics.js';
 import { handler as phone } from './_phone.js';
 import { handler as conversion } from './_conversion.js';
+import { handler as service } from './_service.js';
+import { handler as phoneIndex } from './_phone-index.js';
 import { handler as review } from './_review.js';
 import { handler as training } from './_training.js';
 
@@ -61,6 +63,12 @@ const HANDLERS = {
   // Le taux de conversion du support : tickets Zendesk hachés d'un cote, table
   // BI (BigQuery via Metabase) de l'autre, jointure sur md5(email).
   'metrics-conversion': conversion,
+  // Les chiffres qui vivaient dans Explore : volume, satisfaction, premier
+  // temps de reponse, resolution, et le tout ventile par agent.
+  'metrics-service': service,
+  // Le pont telephone : l'index numero -> empreinte d'email construit depuis
+  // Odin, que la conversion interroge pour rattraper les appelants sans adresse.
+  'phone-index': phoneIndex,
   // Both review actions share one handler: it reads req.query.action itself, so
   // the two URLs stay separate for the caller while the code stays single.
   'review-run': review,

@@ -101,12 +101,24 @@
     {
       "source": "/api/metrics-conversion",
       "destination": "/api/support?action=metrics-conversion"
+    },
+    {
+      "source": "/api/metrics-service",
+      "destination": "/api/support?action=metrics-service"
+    },
+    {
+      "source": "/api/phone-index",
+      "destination": "/api/support?action=phone-index"
     }
   ],
   "crons": [
     {
       "path": "/api/review-run",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/phone-index",
+      "schedule": "0 3 * * *"
     }
   ]
 }
