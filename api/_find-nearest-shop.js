@@ -386,11 +386,18 @@ export async function handler(req, res) {
     });
 
     const nearest = top[0] || null;
+    // A map of the walk: Google Maps directions, on foot, from the accommodation
+    // (or the resort centre) to the shop. A plain URL, so it survives a text email.
+    const origin = acc || centre;
+    const mapUrlFor = s => (origin && s.lat != null && s.lng != null)
+      ? 'https://www.google.com/maps/dir/?api=1&origin=' + origin.lat + ',' + origin.lng + '&destination=' + s.lat + ',' + s.lng + '&travelmode=walking'
+      : '';
     const nearestShops = top.map(s => ({
       shopId: s.id, odinId: s.odinId || null, shopName: s.name, address: s.address || '', distanceM: s.distanceM,
       distanceText: s.distanceM != null ? fmtDist(s.distanceM) : '', walkMinutes: s.distanceM != null ? walkMin(s.distanceM) : null,
       deliveryOptions: s.deliveryOptions || [], delivery: deliveryText(s.deliveryOptions), isInTown: s.isInTown,
       shopUrl: shopUrlFor(s),
+      mapUrl: mapUrlFor(s),
       cartUrl: buildCartUrl(shopUrlFor(s), persons, body.startDate, body.endDate),
     }));
 
@@ -420,6 +427,8 @@ export async function handler(req, res) {
       nearestWalkMinutes: nearest && nearest.distanceM != null ? walkMin(nearest.distanceM) : null,
       nearestDelivery: nearest ? deliveryText(nearest.deliveryOptions) : '',
       nearestShopUrl: nearest ? shopUrlFor(nearest) : '',
+      nearestMapUrl: nearest ? mapUrlFor(nearest) : '',
+      nearestShopLat: nearest ? nearest.lat : null, nearestShopLng: nearest ? nearest.lng : null,
       nearestShopsText: lines.join('\n'),
       deliveryShopsText: deliveryShops.join('; '),
       nearestShops,
