@@ -1000,11 +1000,29 @@ export default async function handler(req, res) {
 
       const personsBuiltFromScalars = personsSource === 'scalars';
 
+  // ── A question decided upstream (nearest-shop step of the flow) ───────────
+  //
+  // The Quote Generator now locates the customer's accommodation before pricing
+  // (find-nearest-shop). When that step cannot place "Chalet Belle Vue" on the
+  // map, or "Courchevel" is three resorts, it hands us the ONE question to ask
+  // in `ask` and we do not price anything: a quote from a shop 4 km from the
+  // chalet, sent to someone who asked for the closest one, is a wrong answer
+  // delivered confidently.
+  const askUpstream = hasValue(params.ask) ? params.ask : (hasValue(cj.ask) ? cj.ask : null);
+  if (askUpstream && String(askUpstream).trim()) {
+          return askCustomer(res, { reason: 'CALLER_QUESTION', resort, question: String(askUpstream).trim() });
+  }
+
   let shop = null;
       const shops = await getShops();
 
-  if (hasValue(shopIdParam)) {
-          const id = parseInt(shopIdParam);
+  // The nearest-shop step puts the chosen shop's id inside claude_json
+  // (`shopId`); a caller may also pass it as a plain parameter.
+  const shopIdEff = hasValue(shopIdParam) ? shopIdParam
+                  : (hasValue(cj.shopId) ? cj.shopId : (hasValue(cj.shop_id) ? cj.shop_id : undefined));
+
+  if (hasValue(shopIdEff)) {
+          const id = parseInt(shopIdEff);
           shop = shops.find(s => s.id === id) || {
                     id, slug: 'shop', country: 'france', region: 'region',
                     town: 'Shop ' + id, name: 'Shop ' + id
@@ -1040,12 +1058,11 @@ export default async function handler(req, res) {
                     });
           }
   } else {
-          return res.status(400).json({
-                    error: 'Missing required param: resort (or shopId, or resort inside claude_json)',
-                    example: {
-                                resort: 'Chamonix', startDate: '2027-03-21', endDate: '2027-03-28',
-                                adults: 2, children_ages: '6,8,12', skill: 'intermediate', equipment: 'ski'
-                    }
+          // No resort at all: a question, not a 400 (see the vague-request note below).
+          return askCustomer(res, {
+                    reason: 'MISSING_RESORT',
+                    question: 'In which resort (or village) will you be skiing, and where are you staying there? ' +
+                              'With that we can pick the partner shop closest to you and send the quote right away.',
           });
   }
 
@@ -1118,11 +1135,25 @@ export default async function handler(req, res) {
       }
 
   if (missing.length) {
-          return res.status(400).json({
-                    error: 'Missing required params: ' + missing.join(', '),
-                    receivedClaudeJson: !!claudeParsed,
-                    example: { resort: 'Chamonix', startDate: '2027-03-21', endDate: '2027-03-28',
-                                               adults: 2, children_ages: '6,8,12', skill: 'intermediate', equipment: 'ski' }
+          // VAGUE IS THE NORMAL CASE, NOT AN ERROR (2026-09-04).
+          //
+          // "We are coming to Méribel in January, how much for two of us?" has no
+          // dates and no ages. Answering 400 sent these to the flow's error branch
+          // and a human read "Missing required params" on a ticket that only
+          // needed one question. Benjamin: when the customer is vague, asking is
+          // the only way to get the elements of the quote. So: one question,
+          // covering everything that is missing, and no price.
+          const needDates = !startDate || !endDate;
+          const needGroup = !persons || !Array.isArray(persons) || persons.length === 0;
+          const asks = [];
+          if (needDates) asks.push('the exact dates of the rental (first and last day on the slopes)');
+          if (needGroup) asks.push('how many people need equipment, with the age of each child, and for each person skis or snowboard and the level (beginner, intermediate, expert)');
+          return askCustomer(res, {
+                    reason: 'MISSING_' + (needDates ? 'DATES' : '') + (needDates && needGroup ? '_AND_' : '') + (needGroup ? 'GROUP' : ''),
+                    resort,
+                    question: 'To prepare the quote' + (resort ? ' for ' + resort : '') + ' we still need ' + asks.join(', and ') +
+                              '. As soon as we have this we will send the price and the booking link.',
+                    missing,
           });
   }
 
