@@ -199,6 +199,16 @@ const KEYWORDS = [
       // No reference is required to match. ROUTES.REQUOTE demands booking_ref
       // before the flow may run, so a customer who asks without one is asked
       // for it instead of being handed over - which is the behaviour we want.
+      // A SKIER'S DETAILS ON AN EXISTING BOOKING (581982).
+      //
+      // "My son has grown - height is now 142 cm, weight 38 kg, boot size 37.
+      // Can you update this?" matched nothing and died as "No capability
+      // matches this message" - while Odin exposes exactly this update. A body
+      // measurement, a shoe size, a level, a date of birth or a person's name,
+      // next to a change verb (or a stated new value), is the Skier details
+      // flow. Dates and equipment are excluded: those are DATE_CHANGE / REQUOTE.
+      { topic: 'PERSONAL_INFO',
+        re: /(?=[\s\S]*\b(?:height|weight|shoe\s*size|boot\s*size|foot\s*size|taille|poids|pointure|gr[oö][sß]e|gewicht|schuhgr[oö][sß]e|altezza|peso|numero\s+di\s+scarpe|estatura|talla|skier\s+details|skier\s+information|personal\s+(?:details|information|data)|donn[eé]es\s+personnelles|pers[oö]nliche\s+(?:daten|angaben)|(?:ski\s+)?level|niveau|(?:ski)?niveau|date\s+of\s+birth|birth\s*date|date\s+de\s+naissance|geburtsdatum|\d{2,3}\s*cm\b|\d{2,3}\s*kg\b|\d{2,3}\s*lbs?\b))(?=[\s\S]*(?:^|[^a-zA-Z])(?:updat\w*|chang\w*|correct\w*|modif\w*|adjust\w*|fix\b|wrong|mistake|error|typo|grown|grew|mettre\s+[aà]\s+jour|changer|corriger|rectifier|erreur|grandi|[aä]ndern|aktualisier\w*|korrigier\w*|falsch|fehler|gewachsen|aggiorn\w*|cambiar|corregir|actualizar|is\s+now\b|are\s+now\b|now\s+\d|fait\s+maintenant|mesure\s+maintenant|ist\s+jetzt|misst\s+jetzt))(?![\s\S]*\b(?:cancel\w*|annul\w*|stornier\w*|refund\w*|rembours\w*))/i },
       { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|add\s+(?:a\s+|an\s+|the\s+|another\s+|one\s+|\d+\s+)?(?:more\s+)?(?:skis?|snowboards?|persons?|people|adults?|child(?:ren)?|skiers?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
       // Helmets, boots and protections added to an EXISTING booking: the General
       // questions flow rebuilds the cart with the addon and answers the customer
@@ -1538,7 +1548,7 @@ export default async function handler(req, res) {
       const nativeTopic = (fromTags && !fromTags.blocked) ? fromTags : null;
       const firstTurn = !thread.turns || thread.turns.length <= 1;
       const SWITCHES_SUBJECT = ['CANCELLATION', 'PARTIAL_CANCELLATION', 'DATE_CHANGE',
-                                'VOUCHER_RESEND', 'DEPOT_SWITCH', 'CANCELLATION_AFTER'];
+                                'VOUCHER_RESEND', 'DEPOT_SWITCH', 'CANCELLATION_AFTER', 'PERSONAL_INFO'];
       const modelSwitches = (base) => llm && llm.topic !== base.topic && SWITCHES_SUBJECT.includes(llm.topic);
 
       let decision;

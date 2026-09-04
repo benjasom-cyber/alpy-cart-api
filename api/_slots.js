@@ -245,6 +245,17 @@ export const ROUTES = {
               flow: 'General questions',
               needs: [],
       },
+      // A skier's details on an existing booking: height, weight, shoe size,
+      // level, date of birth, name (581982). The flow reads the booking, matches
+      // the person, writes through Odin and verifies by read-back. needs is
+      // empty on purpose: the flow reads the reference from the whole ticket
+      // (the subject line included, where customers put it) and asks for it
+      // itself when it is genuinely absent - gating here would only cost a
+      // round trip when the code is sitting in the subject.
+      PERSONAL_INFO: {
+              flow: 'Skier details (personal info)',
+              needs: [],
+      },
       OTHER: {
               flow: null,
               needs: [],
