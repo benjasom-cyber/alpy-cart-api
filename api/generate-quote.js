@@ -829,6 +829,44 @@ function findShop(shops, resort) {
       return r.shop || null;
 }
 
+/**
+ * ASK THE CUSTOMER INSTEAD OF FAILING.
+ *
+ * The Quote Generator flow builds its letter from `quoteLine` and nothing else,
+ * and a custom-action step that receives a 4xx stops the flow (581984: a
+ * "Courchevel" group got "generate quote reply failed" for want of a "1650").
+ * So when the request is readable but one fact is missing, this answers 200
+ * with a question in the quote line, marked so the prompt writes the question
+ * and no price, and with every price field empty so nothing downstream can
+ * mistake it for a quote.
+ */
+function askCustomer(res, o) {
+  const line = 'QUESTION FOR THE CUSTOMER - this is NOT a quote, no price exists yet. Reply with this ' +
+               'single question, in the customer\'s language, and nothing else: ' + o.question;
+  return res.status(200).json({
+    action: 'ASK',
+    needsClarification: true,
+    needsclarification: true,
+    reason: o.reason,
+    resort: o.resort || null,
+    candidates: o.candidates || [],
+    question: o.question,
+    quoteLine: line,
+    quoteline: line,
+    quoteLineHtml: line,
+    quotelinehtml: line,
+    quoteHasPrice: false,
+    quotehasprice: false,
+    cartUrl: '', carturl: '',
+    shopUrl: '', shopurl: '',
+    cartOnlinePrice: null, cartonlineprice: null,
+    cartInStorePrice: null, cartinstoreprice: null,
+    cartPriceComplete: false, cartpricecomplete: false,
+    pricingAvailable: false,
+    couponValue: null, couponMessage: '',
+  });
+}
+
 export default async function handler(req, res) {
       Object.entries(CORS).forEach(([k, v]) => res.setHeader(k, v));
       if (req.method === 'OPTIONS') return res.status(200).end();
@@ -974,21 +1012,31 @@ export default async function handler(req, res) {
   } else if (resort) {
           const resolved = resolveShop(shops, String(resort));
           if (resolved.ambiguous) {
+                    // A QUESTION IS AN ANSWER, NOT A CRASH (581984).
+                    //
+                    // "Courchevel" is three resorts (1300, 1650, 1850). Answering 409
+                    // stopped the Quote Generator's custom-action step, the flow took
+                    // its error branch, and a fifteen-person group got "generate quote
+                    // reply failed" and a human. The right reply is one question. The
+                    // flow composes its letter from `quoteLine`, so the question
+                    // travels there, marked so the prompt knows it is not a quote.
                     const shortlist = resolved.candidates.slice(0, 8);
-                    return res.status(409).json({
-                                error: '"' + resort + '" matches several resorts: ' + shortlist.join(', ') +
-                                       '. Ask the customer which one before quoting - the wrong resort can be ' +
-                                       'in the wrong country.',
-                                reason: 'AMBIGUOUS_RESORT',
-                                resort, candidates: shortlist,
-                                candidateCount: resolved.candidates.length,
+                    return askCustomer(res, {
+                              reason: 'AMBIGUOUS_RESORT',
+                              resort, candidates: shortlist, candidateCount: resolved.candidates.length,
+                              question: 'Which "' + resort + '" do you mean? We have partner shops in ' +
+                                        shortlist.join(', ') + '. Tell us the exact resort (or the name of your ' +
+                                        'accommodation or the shop you have in mind) and we will send the quote right away.',
                     });
           }
           shop = resolved.shop;
           if (!shop) {
-                    return res.status(404).json({
-                                error: 'No shop found for resort: "' + resort + '". Check spelling or use alpy.com to find a valid resort name.',
-                                hint: 'Examples: "Chamonix", "Morzine", "Zermatt", "Val d Isere", "Les Deux Alpes", "St Anton"'
+                    return askCustomer(res, {
+                              reason: 'RESORT_NOT_FOUND',
+                              resort,
+                              question: 'We could not find a partner shop for "' + resort + '". Could you tell us ' +
+                                        'the exact name of the resort (and the village or the shop, if you have one ' +
+                                        'in mind)? We will send the quote as soon as we have it.',
                     });
           }
   } else {
