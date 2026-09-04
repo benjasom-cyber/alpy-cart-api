@@ -84,6 +84,16 @@ const KEYWORDS = [
       { topic: 'DEPOT_SWITCH', re: /^(?![\s\S]*\b(?:stolen|theft|thie(?:f|ves)|vol[eé]e?s?\b|gestohlen|diebstahl|damaged|cass[eé]e?s?\b|besch[aä]digt|claim\b|sinistre)\b)[\s\S]*\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
       { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|changement\s+d.?[eé]quipement|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard))\b/i },
       { topic: 'VOUCHER_RESEND', re: /\b(voucher|bon\s+de\s+r[eé]servation|renvoyer\s+le\s+voucher|resend\s+(the\s+)?voucher|confirmation\s+email\s+again)\b/i },
+      // THE DOCUMENTS OF A PROTECTION ARE VOUCHERS TOO (581968).
+      //
+      // "Wie komme ich an die Unterlagen zur gebuchten Versicherung?" went to
+      // General questions, which explained the protection and handed over. The
+      // customer wanted the PDF. The Voucher Resend flow now answers with the
+      // direct links to every document of the booking (rental voucher, the
+      // protection certificates, the payment confirmation) read from Odin, so a
+      // document word next to a protection or payment word routes there.
+      { topic: 'VOUCHER_RESEND',
+        re: /(?=[\s\S]*\b(?:documents?|unterlagen|dokumente?|paperwork|attestations?|certificat\w*|zertifikat\w*|bescheinigung\w*|versicherungsschein\w*|nachweis\w*|justificatifs?|policy|police\s+d.assurance|contrat|contract|vertrag|copie|copy|pdf|re[cç]u|receipt|quittung|rechnung|facture|invoice|confirmation\s+de\s+paiement|payment\s+confirmation|zahlungsbest[aä]tigung|ricevuta|recibo|documentos?|documenti))(?=[\s\S]*\b(?:protections?|assurances?|insurances?|versicherung\w*|assicurazion\w*|seguros?|guaranty|garantie|flexi|safety|paiement|payment|zahlung|pagamento|pago))/i },
       // The rental has started and something went wrong with the person, not
       // with the booking. This sits ABOVE CANCELLATION on purpose: "I want to
       // cancel, I broke my leg" is not a cancellation we can process, it is a
@@ -112,6 +122,15 @@ const KEYWORDS = [
       // for, and days that were paid but not used.
       { topic: 'CANCELLATION_AFTER',
         re: /(?=[\s\S]*\b(?:refund\w*|reimburs\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|money\s+back|rimbors\w*|reembols\w*))(?=[\s\S]*(?:\bunused\s+days?\b|\bdays?\s+(?:we|they|i)\s+(?:did\s+not|didn.t|could\s+not|couldn.t|never)\s+use\b|\bjours?\s+(?:non\s+)?utilis[eé]s?\b|\bnicht\s+genutzte\w*\s+tage\b|\breturn\w*[\s\S]{0,40}(?:early|earlier|\d+\s+days?\s+(?:before|early))\b|\brendu[\s\S]{0,30}(?:mat[eé]riel|skis?|plus\s+t[oô]t)\b|\brentr[eé]\w*\s+plus\s+t[oô]t\b|\b(?:vorzeitig|fr[uü]her)\s+zur[uü]ck\w*|\bremaining\s+days?\b|\bjours?\s+restants?\b))/i },
+      // "I DO NOT UNDERSTAND THE AMOUNT CHARGED" IS A VOUCHER QUESTION.
+      //
+      // Customers open the rental voucher, see one figure, compare it to the card
+      // debit and write to us. The difference is always on the other documents -
+      // the protection certificates. Voucher Resend sends every document and the
+      // breakdown of the total. Excluded: anything that asks for money back
+      // (a refund question is a cancellation, handled above and below).
+      { topic: 'VOUCHER_RESEND',
+        re: /^(?![\s\S]*\b(?:refund\w*|reimburs\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|rimbors\w*|reembols\w*|money\s+back|cancel\w*|annul\w*|stornier\w*))(?=[\s\S]*\b(?:d[eé]bit[eé]\w*|pr[eé]lev[eé]\w*|pr[eé]l[eè]vement|charged|debited|abgebucht|belastet|abgezogen|addebitat\w*|cobrad\w*|pay[eé]s?\b|paid|bezahlt|gezahlt|pagato|pagado|carte\s+(?:bancaire|bleue|de\s+cr[eé]dit)|credit\s+card|card\s+statement|kreditkarte|bank(?:ing)?\s+statement|relev[eé]\s+(?:bancaire|de\s+compte)|kontoauszug))(?=[\s\S]*(?:\bne\s+correspond|\bpas\s+le\s+m[eê]me|\bdiff[eé]ren\w*|\bplus\s+(?:cher|[eé]lev[eé])|\btrop\b|\bdoes\s*n.?t\s+match|\bdon.?t\s+understand|\bdo\s+not\s+understand|\bwhy\s+(?:was|were|have|did|is)\b|\bmore\s+than\b|\bhigher\s+than\b|\bstimmt\s+nicht|\bnicht\s+nachvollzieh\w*|\bverstehe\s+nicht|\bwarum\s+(?:wurde|ist|wird)\b|\bmehr\s+als\b|\bh[oö]her\b|\bzu\s+viel\b|\bnon\s+corrisponde|\bperch[eé]\b|\bno\s+coincide|\bpor\s+qu[eé]\b|\bcomprends\s+pas|\bcomprend\s+pas|\bexpli\w*|\berkl[aä]r\w*|\bbreakdown|\bd[eé]tail\w*|\bzusammensetz\w*|\baufschl[uü]sselung))/i },
       // The article is optional on purpose. "Cancel booking BT4WSA" is the way
       // customers actually write it, and requiring "my" or "the" meant the
       // keyword layer missed it and the whole decision fell to the model.
