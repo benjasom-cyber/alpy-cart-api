@@ -27,7 +27,7 @@
  *                 town match only, as before). Kept for the ZAF and old callers.
  *
  * GEOCODING. The accommodation is located with, in order:
- *   1. Google Places Text Search, when GOOGLE_MAPS_API_KEY is set in Vercel -
+ *   1. Google Places API (New) Text Search, when GOOGLE_MAPS_API_KEY is set in Vercel -
  *      by far the best source for hotels, chalets and résidences by name;
  *   2. Photon (komoot, OpenStreetMap) then Nominatim, both restricted to the
  *      resort's surroundings - a "Chalet Belle Vue" in Bastia is not the one;
@@ -160,12 +160,21 @@ async function geocodeCentre(town, country) {
 async function geocodeGoogle(text, centre) {
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return null;
-  const params = new URLSearchParams({ query: text, key });
-  if (centre) { params.set('location', centre.lat + ',' + centre.lng); params.set('radius', String(MAX_KM * 1000)); }
-  const j = await fetchJson('https://maps.googleapis.com/maps/api/place/textsearch/json?' + params.toString());
-  const r = j && j.results && j.results.find(x => !(x.types || []).some(t => /^(locality|political|administrative_area|country|postal_code|sublocality|neighborhood|route)/.test(t)));
-  if (!r || !r.geometry) return null;
-  return { lat: r.geometry.location.lat, lng: r.geometry.location.lng, label: r.name + (r.formatted_address ? ', ' + r.formatted_address : ''), source: 'google' };
+  // Places API (New) - Text Search. The legacy Places API is closed to new
+  // Google Cloud projects since March 2025, so this is the one to enable.
+  const body = { textQuery: text, languageCode: 'fr', maxResultCount: 5 };
+  if (centre) body.locationBias = { circle: { center: { latitude: centre.lat, longitude: centre.lng }, radius: MAX_KM * 1000 } };
+  const j = await fetchJson('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': UA,
+               'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.types' },
+    body: JSON.stringify(body),
+  });
+  const places = (j && j.places) || [];
+  const r = places.find(x => !(x.types || []).some(t => /^(locality|political|administrative_area|country|postal_code|sublocality|neighborhood|route)/.test(t)));
+  if (!r || !r.location) return null;
+  const name = r.displayName && r.displayName.text ? r.displayName.text : '';
+  return { lat: r.location.latitude, lng: r.location.longitude, label: [name, r.formattedAddress].filter(Boolean).join(', '), source: 'google' };
 }
 
 async function geocodePhoton(text, centre) {
@@ -218,6 +227,28 @@ async function geocodeAccommodation(text, town, country, centre) {
     if (n && (!centre || haversineM(n, centre) <= MAX_KM * 1000)) return n;
   }
   return null;
+}
+
+/**
+ * Several candidate towns, one accommodation: geocode the accommodation around
+ * the candidates and keep the candidate whose centre is closest. Returns
+ * { town, acc } or null when the accommodation cannot be placed.
+ */
+async function disambiguateByAccommodation(towns, accommodation, wordUsed) {
+  const centres = [];
+  for (const t of towns) {
+    const c = await geocodeCentre(t.town, t.country).catch(() => null);
+    if (c) centres.push({ town: t, c });
+  }
+  if (!centres.length) return null;
+  const mean = { lat: centres.reduce((a, x) => a + x.c.lat, 0) / centres.length, lng: centres.reduce((a, x) => a + x.c.lng, 0) / centres.length };
+  const country = towns[0].country;
+  const acc = await geocodeAccommodation(accommodation, wordUsed, country, mean).catch(() => null);
+  if (!acc) return null;
+  let best = null;
+  for (const x of centres) { const d = haversineM(acc, x.c); if (!best || d < best.d) best = { d, town: x.town }; }
+  if (!best || best.d > MAX_KM * 1000) return null;
+  return { town: best.town, acc };
 }
 
 // ── Shops from Odin (passed by the caller) ────────────────────────────────────
@@ -320,6 +351,15 @@ export async function handler(req, res) {
     // ── Resolve the town ─────────────────────────────────────────────────────
     let resolved = resolveTown(shopsData, resort || accommodation);
     if (!resolved.towns.length && accommodation && resort) resolved = resolveTown(shopsData, accommodation);
+    // "Courchevel" is three resorts - but "Chalet du Forum, Courchevel" is one
+    // point on the map (581986). When the customer named where they stay, the
+    // accommodation decides the village; the question is only for when even
+    // that fails.
+    let preAcc = null;
+    if (resolved.ambiguous && accommodation && resolved.towns.length <= 8) {
+      const pick = await disambiguateByAccommodation(resolved.towns, accommodation, resort || accommodation).catch(() => null);
+      if (pick) { resolved = { towns: [pick.town], ambiguous: false }; preAcc = pick.acc; }
+    }
     if (resolved.ambiguous) {
       const names = resolved.towns.map(t => t.town).slice(0, 8);
       return reply(res, { found: false, located: false, needsQuestion: true, reason: 'AMBIGUOUS_RESORT',
@@ -353,8 +393,8 @@ export async function handler(req, res) {
     // ── Rank ─────────────────────────────────────────────────────────────────
     let odinShops = parseShopsParam(body.shops);
     const withCoords = odinShops.filter(s => s.lat != null && s.lng != null);
-    let acc = null;
-    if (accommodation && norm(accommodation) !== norm(town.town)) {
+    let acc = preAcc;
+    if (!acc && accommodation && norm(accommodation) !== norm(town.town)) {
       acc = await geocodeAccommodation(accommodation, town.town, town.country, centre).catch(() => null);
     }
 
