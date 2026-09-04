@@ -450,8 +450,13 @@ const SKILL_STARS = { beginner: 3, intermediate: 4, expert: 5 };
 function buildDefinitionResolver(grid, intervals) {
       const products = (grid && intervals) ? flattenGrid(grid) : [];
       const misses = [];
+      // Tier substitutions: the shop has no line at the requested level, so a
+      // neighbouring level was quoted. The quote line has to SAY so (581993:
+      // five beginners silently priced on red 4* skis because Le Camp de Base
+      // stocks no blue line - the customer saw "red for everybody").
+      const subs = new Map();
       if (!products.length || !intervals || !intervals.length) {
-              return { resolve: getDefinitionId, addonsFor: () => null, misses, live: false };
+              return { resolve: getDefinitionId, addonsFor: () => null, misses, subs, live: false };
       }
       const cache = new Map();
       function pick(age, skill, equipment) {
@@ -471,6 +476,7 @@ function buildDefinitionResolver(grid, intervals) {
                         pool = pool.slice().sort((x, y) =>
                                   Math.abs(x.stars - want) - Math.abs(y.stars - want) || x.stars - y.stars);
                         hit = pool[0];
+                        if (hit.stars !== want) subs.set(key, { skill: sk, equipment: equip, wantStars: want, gotStars: hit.stars, product: hit.name });
               } else {
                         misses.push(a + 'yr ' + sk + ' ' + equip);
               }
@@ -480,6 +486,7 @@ function buildDefinitionResolver(grid, intervals) {
       return {
               live: true,
               misses,
+              subs,
               resolve: (age, skill, equipment) => {
                         const hit = pick(age, skill, equipment);
                         return hit ? hit.def : getDefinitionId(age, skill, equipment);
@@ -646,7 +653,36 @@ function buildSavingBit(online, inStore, currency) {
              (pct > 0 ? ' (' + pct + '%)' : '') + '.';
 }
 
-function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price, inStorePrice, currency, cartUrl, couponValue }) {
+const STARS_LABEL = { 3: '3* (blue, beginner)', 4: '4* (red, intermediate)', 5: '5* (black, expert)' };
+
+/**
+ * One sentence per level the shop could not serve at the requested tier, with
+ * the number of people concerned. Empty when every requested level exists.
+ */
+function buildLevelNote(persons, defs) {
+      if (!defs || !defs.subs || !defs.subs.size) return '';
+      const counts = new Map();
+      for (const p of persons) {
+              const sk = SKILL_STARS[p.skill] ? p.skill : 'intermediate';
+              const eq = p.equipment === 'snowboard' ? 'snowboard' : 'ski';
+              const a  = parseInt(p.age, 10) || ADULT_DEFAULT_AGE;
+              const sub = defs.subs.get(a + '|' + sk + '|' + eq);
+              if (!sub) continue;
+              const k = sk + '|' + eq + '|' + sub.gotStars;
+              const cur = counts.get(k) || { n: 0, sub };
+              cur.n++; counts.set(k, cur);
+      }
+      if (!counts.size) return '';
+      const parts = [];
+      for (const { n, sub } of counts.values()) {
+              parts.push('this shop has no ' + (STARS_LABEL[sub.wantStars] || sub.wantStars + '*') + ' ' + sub.equipment + ' line, so the ' +
+                         n + ' ' + sub.skill + ' ' + (sub.equipment === 'snowboard' ? 'snowboarder' : 'skier') + (n > 1 ? 's are' : ' is') +
+                         ' quoted on the ' + (STARS_LABEL[sub.gotStars] || sub.gotStars + '*') + ' line (' + sub.product.trim() + ')');
+      }
+      return ' Level note - tell the customer plainly: ' + parts.join('; ') + '. The shop fits each person with a model suited to their real level at pick-up.';
+}
+
+function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price, inStorePrice, currency, cartUrl, couponValue, levelNote }) {
       const head = 'Selected partner shop: ' + shop.name + ', in ' + shop.town + '. ' +
                    'Group of ' + persons.length + ' (' + describeGroup(persons) + '), ' +
                    'from ' + formatDate(startDate) + ' to ' + formatDate(endDate) +
@@ -663,7 +699,7 @@ function buildQuoteLine({ shop, persons, addons, startDate, endDate, days, price
 
       const savingBit = price != null ? buildSavingBit(price, inStorePrice, currency) : '';
 
-      const body = head + priceBit + savingBit + couponBit;
+      const body = head + priceBit + savingBit + couponBit + (levelNote || '');
 
       // LE LIEN SUR SA PROPRE LIGNE, ET PAS AU MILIEU DE LA PHRASE.
       //
@@ -1346,6 +1382,7 @@ export default async function handler(req, res) {
               shop, persons, addons: cartAddons, startDate, endDate, days,
               price: cartOnlinePrice, inStorePrice: cartInStorePrice,
               currency: cartPriceCurrency, cartUrl, couponValue,
+              levelNote: buildLevelNote(persons, defs),
       });
 
   const topLevelPricing = {
