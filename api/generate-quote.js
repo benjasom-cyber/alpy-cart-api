@@ -71,7 +71,7 @@
  */
 
 import { fetchLivePricing, countryToCode } from './_alpyPricing.js';
-import { resolveDomain, brandLabel } from './_platform.js';
+import { resolveDomain, brandLabel, coreBase, hasOwnCore } from './_platform.js';
 
 // Localised "ski rental" URL segment, taken from the hreflang alternates that
 // alpy.com publishes on every shop page. Verified 2026-08-01.
@@ -1166,11 +1166,22 @@ export default async function handler(req, res) {
   // direction the customer discovers at payment.
   const days = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
 
+  // PRICE ON THE BRAND'S OWN CORE HOST (581971).
+  //
+  // Each brand's frontend prices its basket on its own core - snowbrainer.com
+  // on core.snowbrainer.com - and each core applies the brand's own online
+  // discount, a few tenths of a percent away from alpy.com's. Priced here on
+  // core.alpy.com and sent with a snowbrainer link, the quote said 389,76 and
+  // the basket said 391,84. Same host as the link, same figure as the basket.
+  // Brands without a core of their own (swissrent.com) keep alpy.com's figure,
+  // and say so in `pricedOn`.
+  const pricingBase = coreBase(siteDomain);
   const pricing = await fetchLivePricing({
           shop, startDate, endDate, persons, getDefinitionId: defs.resolve,
           currency: params.currency || 'EUR',
           countryCode: countryToCode(shop.country),
           promoCode: effectivePromoCode,
+          coreBase: pricingBase,
   });
 
       const cartPrice = grid
@@ -1317,6 +1328,11 @@ export default async function handler(req, res) {
           platformdomain: siteDomain,
           platformLabel: brandLabel(siteDomain),
           platformlabel: brandLabel(siteDomain),
+          // Where the online price was computed. Equal to the brand's own core
+          // when it has one; "core.alpy.com (approximation)" for a brand that
+          // prices elsewhere (swissrent.com).
+          pricedOn: pricingBase.replace(/^https?:\/\//, '') + (hasOwnCore(siteDomain) ? '' : ' (approximation: this brand has no core of its own)'),
+          pricedon: pricingBase.replace(/^https?:\/\//, '') + (hasOwnCore(siteDomain) ? '' : ' (approximation: this brand has no core of its own)'),
           shopName: shop.name,
           shopId: shop.id,
           resort: shop.town,

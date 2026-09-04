@@ -13,6 +13,18 @@
  *   to price the cart - it has no such restriction and is public/no-auth.
  *
  * ─────────────────────────────────────────────────────────────────────────────
+ * ONE CORE HOST PER BRAND (581971, 2026-09-04)
+ *
+ * Every brand's frontend prices on its OWN core host - www.snowbrainer.com
+ * calls core.snowbrainer.com - and each host applies the brand's own online
+ * discount, a few tenths of a percent below (or above) alpy.com's. A quote
+ * priced here on core.alpy.com and sent with a snowbrainer cart link was
+ * therefore always slightly off: 389,76 announced, 391,84 in the basket.
+ * `fetchLivePricing` now takes `coreBase` (see coreBase() in _platform.js) and
+ * prices on the brand's host, so the announced figure is the basket figure.
+ * Nothing else about the call changes: same endpoint path, same body.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
  * WHY THERE IS A SAMPLING PATH (ticket 581886, group of 150)
  *
  * `dynamic-price-info` prices person by person, and its own response time grows
@@ -93,7 +105,9 @@ function baseBody({ shop, startDate, endDate, currency, countryCode, promoCode }
 async function priceCall(ctx, entries) {
   const body = baseBody(ctx);
   entries.forEach((e, i) => { body.person[String(i)] = e; });
-  const res = await fetch(CORE_BASE + '/core/cart/dynamic-price-info', {
+  // The brand's own core host, alpy.com's by default - see the header note.
+  const base = ctx.coreBase || CORE_BASE;
+  const res = await fetch(base + '/core/cart/dynamic-price-info', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -138,8 +152,9 @@ export async function fetchLivePricing({
   currency = 'EUR',
   countryCode = 'FR',
   promoCode,
+  coreBase,
 }) {
-  const ctx = { shop, startDate, endDate, currency, countryCode, promoCode };
+  const ctx = { shop, startDate, endDate, currency, countryCode, promoCode, coreBase: coreBase || CORE_BASE };
   const rentalDays = Math.round((new Date(endDate) - new Date(startDate)) / 86400000) + 1;
 
   const shape = (priced) => {
@@ -155,6 +170,8 @@ export async function fetchLivePricing({
       rentalDays,
       shopName: shop.name,
       discountPercentage: priced.percentage,
+      // Which host produced these figures - the brand's own, or alpy.com's.
+      pricedOn: ctx.coreBase.replace(/^https?:\/\//, ''),
     };
   };
 

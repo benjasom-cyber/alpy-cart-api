@@ -38,7 +38,7 @@ const BRAND_ID_TO_DOMAIN = {
   '360000234818':   'www.skidiscount.fr',
   '360000306518':   'www.skidiscount.co.uk',
   '360000306598':   'www.skimarie.fr',
-  '6898647504797':  'www.simplytoski.com',
+  '6898647504797':  'www.simplytoski.fr',
   '360000306498':   'www.slopefox.co.uk',
   '360000304717':   'www.pistenfuchs.de',
 };
@@ -50,7 +50,7 @@ const WORD_TO_DOMAIN = [
   [/pistenfuchs/i,                    'www.pistenfuchs.de'],
   [/snowbrainer/i,                    'www.snowbrainer.com'],
   [/skimarie/i,                       'www.skimarie.fr'],
-  [/simply\s*to\s*ski|simplytoski/i,  'www.simplytoski.com'],
+  [/simply\s*to\s*ski|simplytoski/i,  'www.simplytoski.fr'],
   [/skidiscount\.co\.uk/i,            'www.skidiscount.co.uk'],
   [/skidiscount/i,                    'www.skidiscount.fr'],
   [/location-ski-moins-cher/i,        'www.location-ski-moins-cher.com'],
@@ -66,7 +66,7 @@ const SERVICE_TO_DOMAIN = [
   [/pisten\s*flex|material\s*garantie/i,      'www.pistenfuchs.de'],
   [/snow\s*flex|snow\s*guaranty/i,            'www.snowbrainer.com'],
   [/marie\s*annulation|marie\s*assurance/i,   'www.skimarie.fr'],
-  [/simply\s*annulation|simply\s*garantie/i,  'www.simplytoski.com'],
+  [/simply\s*annulation|simply\s*garantie/i,  'www.simplytoski.fr'],
 ];
 
 /** Domain for an explicit platform hint: a Zendesk brand id, a domain, a brand word, or a URL. */
@@ -100,9 +100,60 @@ export function resolveDomain(hint, booking) {
   return domainFromHint(hint) || (booking ? domainFromBooking(booking) : null) || DEFAULT_DOMAIN;
 }
 
+
+/**
+ * WHERE EACH BRAND PRICES ITS CART.
+ *
+ * Every brand's frontend calls its OWN core host - www.snowbrainer.com talks
+ * to core.snowbrainer.com, not to core.alpy.com - and that host applies the
+ * brand's own online discount. Measured 2026-09-04, shop 2494, one adult
+ * 4* ski, 10-17/01/2027, promo SKI26, gross 133.00 EUR everywhere:
+ *
+ *     core.alpy.com                       40.00 %   79.80
+ *     core.snowbrainer.com                39.70 %   80.20
+ *     core.slopefox.co.uk / pistenfuchs.de / skimarie.fr
+ *                                         39.50 %   80.47
+ *     core.skidiscount.fr / .co.uk / location-ski-moins-cher.com /
+ *     best-price-ski-rental.com           39.25 %   80.80
+ *     core.simplytoski.fr                 40.20 %   79.53
+ *
+ * So a quote priced on core.alpy.com and sent with a snowbrainer.com cart link
+ * is off by a few tenths of a percent - 389,76 announced, 391,84 in the basket
+ * (581971). The haircut is not a fixed rule we could hard-code: it is whatever
+ * the brand's core answers today. Price on the brand's own host, and the number
+ * in the message is the number in the basket.
+ *
+ * swissrent.com runs on another platform (no core.swissrent.* answers), so it
+ * falls back to core.alpy.com - the best figure we have, flagged as such.
+ */
+const CORE_HOSTS = {
+  'www.alpy.com':                      'core.alpy.com',
+  'www.snowbrainer.com':               'core.snowbrainer.com',
+  'www.slopefox.co.uk':                'core.slopefox.co.uk',
+  'www.pistenfuchs.de':                'core.pistenfuchs.de',
+  'www.skidiscount.fr':                'core.skidiscount.fr',
+  'www.skidiscount.co.uk':             'core.skidiscount.co.uk',
+  'www.location-ski-moins-cher.com':   'core.location-ski-moins-cher.com',
+  'www.best-price-ski-rental.com':     'core.best-price-ski-rental.com',
+  'www.skimarie.fr':                   'core.skimarie.fr',
+  'www.simplytoski.fr':                'core.simplytoski.fr',
+};
+const DEFAULT_CORE = 'https://core.alpy.com';
+
+/** The pricing host for a site domain: "https://core.snowbrainer.com". alpy.com's when the brand has none. */
+export function coreBase(domain) {
+  const host = CORE_HOSTS[String(domain || '').toLowerCase()];
+  return host ? 'https://' + host : DEFAULT_CORE;
+}
+
+/** True when the brand prices on its own core host (false = priced on alpy.com's, an approximation). */
+export function hasOwnCore(domain) {
+  return !!CORE_HOSTS[String(domain || '').toLowerCase()];
+}
+
 /** Brand label for prose ("slopefox.co.uk"), from a domain. */
 export function brandLabel(domain) {
   return String(domain || DEFAULT_DOMAIN).replace(/^www\./, '');
 }
 
-export { DEFAULT_DOMAIN, BRAND_ID_TO_DOMAIN };
+export { DEFAULT_DOMAIN, BRAND_ID_TO_DOMAIN, CORE_HOSTS, DEFAULT_CORE };
