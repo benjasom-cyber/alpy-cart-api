@@ -190,7 +190,7 @@ async function geocodePhoton(text, centre) {
     if (PLACE_TYPES.test(String(p.osm_value || p.type || ''))) continue;
     const c = { lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
     if (!centre || haversineM(c, centre) <= MAX_KM * 1000) {
-      return Object.assign(c, { label: [p.name, p.street, p.city].filter(Boolean).join(', '), source: 'photon' });
+      return Object.assign(c, { label: [p.name, [p.housenumber, p.street].filter(Boolean).join(' '), p.postcode, p.city].filter(Boolean).join(', '), source: 'photon' });
     }
   }
   return null;
@@ -205,27 +205,73 @@ async function geocodeNominatim(text, centre) {
   const j = await fetchJson(url);
   const r = (j || []).find(x => !PLACE_TYPES.test(String(x.type || '')) && !/^(place|boundary)$/.test(String(x.category || x.class || '')));
   if (!r) return null;
-  return { lat: parseFloat(r.lat), lng: parseFloat(r.lon), label: String(r.display_name || '').split(',').slice(0, 3).join(','), source: 'nominatim' };
+  return { lat: parseFloat(r.lat), lng: parseFloat(r.lon), label: String(r.display_name || '').split(',').slice(0, 5).join(','), source: 'nominatim' };
+}
+
+// Words that carry no identity: they appear in half the accommodation names of a
+// resort and in every geocoder result, so they cannot vouch for a match.
+const GENERIC = new Set(('chalet chalets residence residences hotel hotels appartement appartements apartment apartments studio maison villa lodge gite gites ' +
+  'les le la l du de des d et and the un une au aux en a premium prestige luxe luxury club village center centre resort ' +
+  'rue route avenue chemin place impasse allee boulevard quai montee lotissement lieu dit hameau ' +
+  'pierre vacances p&v mgm cgh odalys lagrange nemea madame vacances belambra vvf interhome airbnb booking').split(/\s+/));
+const STREET_RE = /\b(rue|route|avenue|av|chemin|place|impasse|allee|allée|boulevard|bd|quai|montee|montée|lotissement|lieu-dit|hameau|strasse|straße|str|weg|via|strada|piazza)\b/i;
+const POSTCODE_RE = /\b\d{4,5}\b/;
+
+function tokens(text) {
+  return norm(text).split(' ').filter(t => t.length >= 3 && !GENERIC.has(t) && !/^\d+$/.test(t));
 }
 
 /**
- * Locate the accommodation. Tries the text as written, then with the town
- * appended, on each geocoder in order. Returns null when nothing plausible.
+ * Does a geocoder hit actually name what the customer wrote? Photon happily
+ * answers "Les chalets du Belvédère" for "Les Chalets du Forum" (581986): same
+ * shape, different building, 2 km apart. A hit must share at least one
+ * identifying word (not "chalet", not "résidence") with the query - a street
+ * name, a proper noun, a number of the address.
+ */
+function hitMatches(query, hitLabel) {
+  const q = tokens(query);
+  if (!q.length) return true; // nothing to check against ("Résidence", alone)
+  const h = new Set(norm(hitLabel).split(' '));
+  if (q.some(t => h.has(t))) return true;
+  // house numbers count too: "1 rue de plantret" vs "1, Rue de Plantret"
+  const qn = (norm(query).match(/\b\d{1,4}\b/g) || []).filter(n => n.length < 4);
+  const hn = new Set((norm(hitLabel).match(/\b\d{1,4}\b/g) || []));
+  return qn.some(n => hn.has(n)) && q.some(t => [...h].some(w => w.startsWith(t.slice(0, 4))));
+}
+
+/**
+ * The customer's text, cut into the pieces a geocoder can digest: the whole
+ * thing, the postal address alone ("1 Rue de Plantret, 73120 Courchevel"), the
+ * name alone ("Les Chalets du Forum"), the name without brand words.
+ */
+function accommodationVariants(text, town, country) {
+  const segs = String(text).split(/[,\n;]+/).map(x => x.trim()).filter(Boolean);
+  const addr = segs.filter(x => STREET_RE.test(x) || POSTCODE_RE.test(x));
+  const name = segs.filter(x => !STREET_RE.test(x) && !POSTCODE_RE.test(x));
+  const bases = [];
+  const push = v => { v = String(v || '').replace(/\s+/g, ' ').trim(); if (v && !bases.includes(v)) bases.push(v); };
+  push(text);
+  if (addr.length && addr.length < segs.length) push(addr.join(', '));
+  if (name.length && name.length < segs.length) push(name.join(' '));
+  // "Résidence Pierre & Vacances Premium Les Chalets du Forum" -> "Chalets du Forum"
+  const stripped = norm(name.join(' ') || text).split(' ').filter(t => !GENERIC.has(t) || ['chalet', 'chalets', 'residence', 'hotel'].includes(t)).join(' ');
+  if (stripped && norm(stripped) !== norm(bases[bases.length - 1] || '')) push(stripped);
+  const out = [];
+  for (const b of bases) for (const v of [b, b + ', ' + town, b + ', ' + town + ', ' + country]) if (!out.includes(v)) out.push(v);
+  return out;
+}
+
+/**
+ * Locate the accommodation. Tries each variant on each geocoder in order, and
+ * keeps only a hit that names what the customer wrote. Returns null when
+ * nothing plausible.
  */
 async function geocodeAccommodation(text, town, country, centre) {
-  const variants = [...new Set([text, text + ', ' + town, text + ', ' + town + ', ' + country].map(s => s.trim()))];
-  for (const v of variants) {
-    const g = await geocodeGoogle(v, centre);
-    if (g && (!centre || haversineM(g, centre) <= MAX_KM * 1000)) return g;
-  }
-  for (const v of variants) {
-    const p = await geocodePhoton(v, centre);
-    if (p) return p;
-  }
-  for (const v of variants) {
-    const n = await geocodeNominatim(v, centre);
-    if (n && (!centre || haversineM(n, centre) <= MAX_KM * 1000)) return n;
-  }
+  const variants = accommodationVariants(text, town, country);
+  const ok = hit => hit && (!centre || haversineM(hit, centre) <= MAX_KM * 1000) && hitMatches(text, hit.label || '');
+  for (const v of variants) { const g = await geocodeGoogle(v, centre); if (ok(g)) return g; }
+  for (const v of variants) { const p = await geocodePhoton(v, centre); if (ok(p)) return p; }
+  for (const v of variants) { const n = await geocodeNominatim(v, centre); if (ok(n)) return n; }
   return null;
 }
 
