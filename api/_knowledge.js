@@ -262,7 +262,13 @@ Same price as unisex skis, available in nearly every type and level.
 MODELCHANGE
 A paid option bought at the time of booking: one change of model during the
 rental, generally after two days, within the same price category and subject to
-availability.
+availability. It is what a customer buys when they want to TRY several models
+during the week, or to follow the snow conditions.
+Not to be confused with a plain exchange: if the equipment simply does not suit
+the customer - wrong model, wrong feel - the shop exchanges it, always, and
+charges nothing. A shop wants its customer comfortable on their skis. Never tell
+a customer that an exchange is impossible, and never tell them that no shop
+offers one.
 
 PRIORITY CHECK-IN
 A paid option bought at booking: a separate, faster check-in desk when the rental
@@ -295,10 +301,18 @@ including by us.
 MODELCHANGE AND SWITCH
 Modelchange is a paid option bought when booking: one change of model during the
 rental, generally after two days, within the same price category and subject to
-availability. A switch between skis and a snowboard is an extended modelchange -
-every switch is a modelchange, not every modelchange is a switch. The shop does
-not charge for the switch itself, it charges for the option. Whether a
-particular shop or chain allows it is shop-specific and has its own flow.
+availability - the option to buy when the customer wants to try several models
+or to adapt to the snow. A switch between skis and a snowboard is an extended
+modelchange - every switch is a modelchange, not every modelchange is a switch.
+The shop does not charge for the switch itself, it charges for the option.
+Whether a particular shop or chain allows it is shop-specific and has its own
+flow.
+A PLAIN EXCHANGE IS NOT A MODELCHANGE. When the equipment does not suit the
+customer, the shop exchanges it during the rental, free, and will look for
+something the customer is happy on. That needs no option and no permission, and
+it is never to be answered with "impossible" or "no shop offers it". The paid
+option is only for changing models by choice - to try several, or to follow the
+conditions.
 
 CHANGING CATEGORY AT THE COUNTER
 Only if the shop agrees. To a higher category the customer pays the difference
