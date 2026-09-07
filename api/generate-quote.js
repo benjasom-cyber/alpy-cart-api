@@ -8,6 +8,7 @@
  *
  * A) Individual scalar params (SKIBOT / direct callers):
  *      adults, children_ages, skill, equipment, with_boots, with_helmets,
+ *      with_model_change,
  *      resort, startDate, endDate
  *
  * B) One JSON blob in `claude_json` (Zendesk action flows):
@@ -143,6 +144,17 @@ const ADDON_HELMET = 2;
 // alone. Adding this id without honouring priceRelative would have added
 // exactly nothing and understated every protected quote by 15%.
 const ADDON_INSURANCE = 3;
+
+// Modelchange, addon 5 - "changement de l'equipement" / Materialwechsel.
+// A paid option bought with the booking (measured at ~1.00 EUR per product per
+// day on shop 1986): it entitles the customer to ONE free change of model
+// during the rental, after two days, in the same price category. 582068 asked
+// for "un devis avec l'option changement de l'equipement" and got a quote
+// without it, because the endpoint knew only addons 1, 2 and 3.
+// A plain exchange because the equipment does not suit is free and needs no
+// option - this addon is for changing models by choice, or for a ski/snowboard
+// switch during the week.
+const ADDON_MODELCHANGE = 5;
 const ADULT_DEFAULT_AGE = 35;
 
 const PRODUCTS_INFO_URL = 'https://core.alpy.com/core/cart/products-information';
@@ -252,8 +264,9 @@ function mergePersons(base, detail) {
  * Protection is opt-in and stays opt-in: it is a real charge, and a quote that
  * adds it because nobody said otherwise is a quote the customer did not ask for.
  */
-function buildAddons({ withBoots, withHelmets, withInsurance }) {
-      if (withBoots === undefined && withHelmets === undefined && withInsurance === undefined) {
+function buildAddons({ withBoots, withHelmets, withInsurance, withModelChange }) {
+      if (withBoots === undefined && withHelmets === undefined
+          && withInsurance === undefined && withModelChange === undefined) {
               return [ADDON_BOOTS];
       }
 
@@ -261,6 +274,7 @@ function buildAddons({ withBoots, withHelmets, withInsurance }) {
       if (!isFalsy(withBoots)) addons.push(ADDON_BOOTS);
       if (isTruthy(withHelmets)) addons.push(ADDON_HELMET);
       if (isTruthy(withInsurance)) addons.push(ADDON_INSURANCE);
+      if (isTruthy(withModelChange)) addons.push(ADDON_MODELCHANGE);
       return addons.length ? addons : [ADDON_BOOTS];
 }
 
@@ -310,12 +324,14 @@ function addonsForPerson(person, groupAddons) {
       const bootsKey = has('boots', 'with_boots');
       const helmKey  = has('helmet', 'helmets', 'with_helmets');
       const insKey   = has('insurance', 'protection', 'with_insurance');
-      if (!bootsKey && !helmKey && !insKey) return groupAddons;
+      const mcKey    = has('model_change', 'modelchange', 'with_model_change', 'equipment_change');
+      if (!bootsKey && !helmKey && !insKey && !mcKey) return groupAddons;
 
       const out = [];
       if (bootsKey ? !isFalsy(person[bootsKey]) : groupAddons.includes(ADDON_BOOTS))     out.push(ADDON_BOOTS);
       if (helmKey  ? isTruthy(person[helmKey])  : groupAddons.includes(ADDON_HELMET))    out.push(ADDON_HELMET);
       if (insKey   ? isTruthy(person[insKey])   : groupAddons.includes(ADDON_INSURANCE)) out.push(ADDON_INSURANCE);
+      if (mcKey    ? isTruthy(person[mcKey])    : groupAddons.includes(ADDON_MODELCHANGE)) out.push(ADDON_MODELCHANGE);
       return out;
 }
 
@@ -628,6 +644,9 @@ function describeEquipment(addons, persons) {
       const prot = n(ADDON_INSURANCE);
       if (prot) bits.push(prot === persons.length ? 'damage & theft protection'
                                                  : 'damage & theft protection for ' + prot);
+      const mc = n(ADDON_MODELCHANGE);
+      if (mc) bits.push(mc === persons.length ? 'the Modelchange option (one change of model during the rental)'
+                                              : 'the Modelchange option for ' + mc);
       return bits.join(' + ');
 }
 
@@ -966,6 +985,7 @@ export default async function handler(req, res) {
           with_boots: withBootsParam,
           with_helmets: withHelmetsParam,
           with_insurance: withInsuranceParam,
+          with_model_change: withModelChangeParam,
   } = params;
 
   // Individual params win field by field; claude_json fills the gaps.
@@ -1003,6 +1023,12 @@ export default async function handler(req, res) {
       // Accept the three spellings a classifier is likely to produce.
       const withInsuranceEff = pickB(withInsuranceParam,
                                pickB(params.insurance, pickB(cj.with_insurance, cj.insurance)));
+      // Every spelling a classifier is likely to produce for the option, in the
+      // params and inside claude_json.
+      const withModelChangeEff = pickB(withModelChangeParam,
+                               pickB(params.model_change, pickB(params.modelchange,
+                               pickB(cj.with_model_change, pickB(cj.model_change,
+                               pickB(cj.modelchange, cj.equipment_change))))));
 
   // ── Group composition: scalars win over any persons array ─────────────────
       let persons = null;
@@ -1193,7 +1219,7 @@ export default async function handler(req, res) {
           });
   }
 
-  const cartAddons = buildAddons({ withBoots: withBootsEff, withHelmets: withHelmetsEff, withInsurance: withInsuranceEff });
+  const cartAddons = buildAddons({ withBoots: withBootsEff, withHelmets: withHelmetsEff, withInsurance: withInsuranceEff, withModelChange: withModelChangeEff });
 
       // Read the shop's real catalogue and age bands BEFORE building the cart:
       // the definitionIds we put in the URL have to be ids this shop stocks, or
@@ -1412,6 +1438,10 @@ export default async function handler(req, res) {
           accessoriesperperson: persons.map(p => addonsForPerson(p, cartAddons)),
           insuranceIncluded: persons.some(p => addonsForPerson(p, cartAddons).includes(ADDON_INSURANCE)),
           insuranceincluded: persons.some(p => addonsForPerson(p, cartAddons).includes(ADDON_INSURANCE)),
+          modelChangeIncluded: persons.some(p => addonsForPerson(p, cartAddons).includes(ADDON_MODELCHANGE)),
+          modelchangeincluded: persons.some(p => addonsForPerson(p, cartAddons).includes(ADDON_MODELCHANGE)),
+          modelChangeRequested: withModelChangeEff !== undefined ? isTruthy(withModelChangeEff) : false,
+          modelchangerequested: withModelChangeEff !== undefined ? isTruthy(withModelChangeEff) : false,
           definitionIdsFromLiveCatalogue: defs.live,
           definitionidsfromlivecatalogue: defs.live,
           // Group members this shop stocks nothing for, e.g. a 4-year-old
