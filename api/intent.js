@@ -115,6 +115,28 @@ const KEYWORDS = [
       { topic: 'QUOTE',
         re: /^(?![\s\S]*(?:\b[Bb][0-9A-Za-z]{5}\b[\s\S]{0,40}\b(?:booking|buchung|r[eé]servation|prenotazione|reserva)\b|\b(?:my|our|meine?|unsere?|ma|notre|mon)\s+(?:booking|buchung|r[eé]servation|reservierung|prenotazione|reserva)\b|\bbooking\s+(?:reference|number|code)\b|\bbuchungsnummer\b|\bnum[eé]ro\s+de\s+r[eé]servation\b))(?=[\s\S]*\b(?:angebot|gesamtangebot|offerte|offer\b|quote|quotation|devis|price|prices|preis\w*|prix|prezzo|precio|kost\w*|tarif\w*|how\s+much|wie\s+viel|combien|rate\b|rates\b|gruppenrabatt|group\s+discount|rabatt|discount|r[eé]duction|fr[uü]hbuch\w*|early\s*[- ]?book\w*)\b)(?=[\s\S]*(?:\b\d{1,3}\s*(?:erwachsene\w*|adults?|personen|persons?|people|pax|personnes|adultes|skifahrer|skiers?|kinder|children)\b|\b(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie)\b|\b\d{1,2}\s*(?:skitage|days?|tage|jours?|giorni|d[ií]as)\b|\b(?:from|vom|du|dal|desde)\s+\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b(?:angebot|gesamtangebot|offerte|offer|quote|quotation|devis|offre)\b))(?=[\s\S]*\b(?:ausleihen|leihen|mieten|verleih|ausr[uü]stung|rent|renting|rental|hire|hiring|louer|location|noleggi\w*|alquil\w*|skiausr[uü]stung|skis?\b|ski\b|snowboards?|equipment|mat[eé]riel|attrezzatura|equipo)\b)/i },
 
+      // A DOWNGRADE IS A PARTIAL CANCELLATION, NOT A QUOTE AND NOT A MODEL CHANGE.
+      //
+      // 582070: "Please change the Diamond skis Lady skis to Red skis Lady...
+      // could you refund the difference which is 27.30". Nothing matched except
+      // the QUOTE rule, so the customer got the new-quote questionnaire - dates,
+      // adults, ages of the children - for a booking she had made the day
+      // before, plus a sentence saying we cannot change bookings here. Both
+      // halves were wrong.
+      //
+      // Odin cannot swap one line for a cheaper one: the right answer is to
+      // cancel THAT item, refund it, and let the customer re-book the cheaper
+      // range at the current price. That is a partial cancellation, so the
+      // rule routes there and the flow explains the re-booking.
+      //
+      // Three conditions together, because any one of them alone is a different
+      // request: an EXISTING BOOKING marker, a CHANGE verb, and a RANGE or a
+      // difference-of-price word. "Can I switch skis mid-week" has none of the
+      // three and stays with the model-change rule below; "change my dates" is
+      // excluded outright.
+      { topic: 'PARTIAL_CANCELLATION',
+        re: /^(?![\s\S]*\b(?:dates?|date\s+change|p[eé]riode|zeitraum|termin)\b)(?=[\s\S]*(?:\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b|\b(?:my|our|the|ma|mes|notre|nos|la|meine?|unsere?)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b|\bi\s+(?:have\s+)?booked\b|\bj.ai\s+r[eé]serv[eé]\b|\bich\s+habe\s+gebucht\b))(?=[\s\S]*\b(?:change|changed|changing|swap|swapping|replace|replacing|downgrade|downgrading|switch|switching|changer|remplacer|passer|basculer|r[eé]trograder|(?:ae|[aä])ndern|wechseln|tauschen|umbuchen|umstellen|cambiare|sostituire|cambiar)\b)(?=[\s\S]*(?:\b(?:diamond|diamant|platin\w*|black|gold|silver|silber|red|rouge|rot|blue|bleu|blau|green|vert|rookie|champion|vip|top)\b[\s\S]{0,80}\b(?:ski\w*|snowboard\w*|board\w*|mat[eé]riel|ausr[uü]stung)\b|\b(?:ski\w*|snowboard\w*|board\w*|mat[eé]riel|ausr[uü]stung)\b[\s\S]{0,80}\b(?:diamond|diamant|platin\w*|black|gold|silver|silber|red|rouge|rot|blue|bleu|blau|green|vert|rookie|champion|vip|top)\b|\b(?:gamme|cat[eé]gorie|category|categoria|range|price\s+range|preisklasse|kategorie|quality\s+category|\d\s*\*|\d\s*star\w*|\d\s*[eé]toiles?|\d\s*sterne?)\b|\b(?:refund|rembours\w*|erstatt\w*|rimbors\w*|reembols\w*)\w*\s+(?:me\s+)?(?:the\s+|la\s+|die\s+|il\s+)?(?:difference|diff[eé]rence|differenz|differenza|diferencia)\b|\b(?:difference|diff[eé]rence|differenz|differenza|diferencia)\s+(?:in\s+|de\s+|of\s+|du\s+)?(?:price|prix|preis|prezzo|precio|cost|co[uû]t)\b))/i },
+
       // The depot rule must never fire on a theft that merely happened in a
       // locker: the rule above already took those.
       { topic: 'DEPOT_SWITCH', re: /^(?![\s\S]*\b(?:stolen|theft|thie(?:f|ves)|vol[eé]e?s?\b|gestohlen|diebstahl|damaged|cass[eé]e?s?\b|besch[aä]digt|claim\b|sinistre)\b)[\s\S]*\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
