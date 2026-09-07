@@ -497,6 +497,33 @@ function mutatingTopicsIn(message) {
 }
 
 /**
+ * "COULD I PLEASE SPEAK TO A COLLEAGUE" - and nothing else matters.
+ *
+ * 582070. The first reply was wrong, so the customer wrote back with the whole
+ * price table, said she did NOT want to rebook her order, and asked to speak to
+ * a person. She got a second automatic reply: a fresh quote for all six of them,
+ * 548.80 EUR, the exact thing she had just refused. There was no rule for this
+ * at all - a customer asking for a human was routed on the rest of her sentence
+ * like any other message.
+ *
+ * A request for a person is not a topic among others. It outranks every route,
+ * however confident the classifier is, because the one thing the customer has
+ * told us plainly is that they no longer want to talk to a machine. Answering it
+ * with anything automatic is the fastest way to lose a booking that was already
+ * paid for.
+ *
+ * Read from the customer's own words only - quoted mail and our footer are
+ * stripped first, and our own sign-off ("a colleague can take over at any time")
+ * cannot match: every branch below needs a verb of speaking in front of it.
+ */
+const WANTS_HUMAN_RE = /\b(?:(?:speak|talk|chat|deal)\s+(?:to|with)\s+(?:a\s+|an\s+|the\s+|one\s+of\s+(?:your|the)\s+)?(?:real\s+|actual\s+|live\s+|human\s+)?(?:person|people|human|humans|colleague|colleagues|agent|advisor|adviser|operator|someone|somebody|staff|team\s+member|member\s+of\s+(?:your|the)\s+team)|parler\s+(?:[aà]|avec)\s+(?:quelqu.?un|une\s+(?:vraie\s+)?personne|un\s+(?:vrai\s+)?humain|un\s+conseiller|une\s+conseill[eè]re|un\s+agent|un\s+collaborateur|un\s+coll[eè]gue|un\s+op[eé]rateur)|mit\s+(?:einem|einer)\s+(?:mitarbeiter\w*|person|menschen|kollegen|kollegin|berater\w*)\s+(?:sprechen|reden)|parlare\s+con\s+(?:una\s+persona|un\s+operatore|un\s+collega|qualcuno)|hablar\s+con\s+(?:una\s+persona|un\s+agente|un\s+operador|alguien)|(?:are\s+you|is\s+this)\s+(?:a\s+)?(?:bot|robot|an\s+ai|a\s+machine)|not\s+a\s+(?:bot|robot|machine)|human\s+(?:agent|being|please)|vrai\s+humain|echten\s+menschen)\b/i;
+
+function wantsHuman(message) {
+      const m = stripQuotedAndSignature(String(message || ''));
+      return WANTS_HUMAN_RE.test(m);
+}
+
+/**
  * Slots the message states outright.
  *
  * Caught on the first live call: "I want to cancel my booking B1AF9J" came back
@@ -1888,6 +1915,18 @@ export default async function handler(req, res) {
                            multipleRefs.join(', ') + ') without saying, in a sentence we can ' +
                            'read, which of them to act on. Handle it manually - and do not ask ' +
                            'for "the" booking reference, it has already been given.';
+      }
+
+      // AND ABOVE ALL OF IT: the customer asked for a person (582070).
+      //
+      // Placed after the whole chain on purpose, so that it wins whatever the
+      // branches above decided. A customer who has asked to speak to someone
+      // gets a person, not a better robot.
+      if (wantsHuman(message)) {
+              action = 'HANDOVER';
+              escalation = 'THE CUSTOMER HAS ASKED TO SPEAK TO A PERSON. Nothing automatic may ' +
+                           'answer this ticket - reply yourself, and say who you are. ' +
+                           (escalation ? 'Also relevant: ' + escalation : '');
       }
 
       // Asked once. The second time, silence on a paid option means no.
