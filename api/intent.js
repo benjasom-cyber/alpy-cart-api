@@ -94,6 +94,22 @@ const KEYWORDS = [
       // document word next to a protection or payment word routes there.
       { topic: 'VOUCHER_RESEND',
         re: /(?=[\s\S]*\b(?:documents?|unterlagen|dokumente?|paperwork|attestations?|certificat\w*|zertifikat\w*|bescheinigung\w*|versicherungsschein\w*|nachweis\w*|justificatifs?|policy|police\s+d.assurance|contrat|contract|vertrag|copie|copy|pdf|re[cç]u|receipt|quittung|rechnung|facture|invoice|confirmation\s+de\s+paiement|payment\s+confirmation|zahlungsbest[aä]tigung|ricevuta|recibo|documentos?|documenti))(?=[\s\S]*\b(?:protections?|assurances?|insurances?|versicherung\w*|assicurazion\w*|seguros?|guaranty|garantie|flexi|safety|paiement|payment|zahlung|pagamento|pago))/i },
+      // "MY PAYMENT FAILED - PLEASE RESEND THE PAYMENT LINK" (582031).
+      //
+      // Jon's Google Pay attempt was declined at 14:02, his card went through at
+      // 14:03, and at 14:06 he asked us for a new payment link on a booking that
+      // was already paid. Nothing matched: "No capability matches this message",
+      // and a customer who believed he had no booking waited for a human on a
+      // question Odin answers in one read. Voucher Resend is that read - it now
+      // states the payment status and sends the payment confirmation, and hands
+      // over when the booking really is unpaid.
+      //
+      // Excluded: refunds and cancellations (a payment that must come BACK is
+      // another route entirely), and the "I do not understand the amount" case,
+      // which the rule further down already owns.
+      { topic: 'VOUCHER_RESEND',
+        re: /^(?![\s\S]*\b(?:refund\w*|reimburs\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|rimbors\w*|reembols\w*|money\s+back|cancel\w*|annul\w*|stornier\w*|chargeback)\b)(?=[\s\S]*\b(?:payment|paiement|zahlung|pagamento|pago|paid|pay|payer|zahlen|pagare|pagar|card|carte|karte|kreditkarte|checkout|google\s*pay|apple\s*pay|paypal)\b)(?=[\s\S]*(?:\b(?:fail\w*|declin\w*|refus[eé]\w*|rejet[eé]\w*|d[eé]clin\w*|fehlgeschlagen|abgelehnt|gescheitert|rifiutat\w*|fallit\w*|rechazad\w*|fallid\w*|unsuccessful|not\s+work\w*|did\s*n.?t\s+work)\b|\b(?:did\s*n.?t|does\s*n.?t|not)\s+go(?:ne)?\s+through\b|\bnot\s+been\s+taken\b|\bpayment\s+(?:link|page)\b|\blien\s+de\s+paiement\b|\bzahlungslink\b|\blink\s+di\s+pagamento\b|\benlace\s+de\s+pago\b|\b(?:resend|re-?send|send)\s+(?:me\s+)?(?:a\s+|the\s+|another\s+|new\s+)*(?:payment|paiement)\b|\brenvoyer[\s\S]{0,25}(?:paiement|lien)\b|\bpay\s+again\b|\bpayer\s+[aà]\s+nouveau\b|\bnochmal\s+(?:be)?zahlen\b))/i },
+
       // The rental has started and something went wrong with the person, not
       // with the booking. This sits ABOVE CANCELLATION on purpose: "I want to
       // cancel, I broke my leg" is not a cancellation we can process, it is a
