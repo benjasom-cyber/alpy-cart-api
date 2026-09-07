@@ -256,6 +256,13 @@ export const ROUTES = {
               flow: 'Skier details (personal info)',
               needs: [],
       },
+      // No slot at all: the flow finds BOTH bookings itself, from the email
+      // address that made them. Asking the customer for a reference is exactly
+      // the failure this capability was written to remove (582032).
+      DUPLICATE_BOOKING: {
+              flow: 'Duplicate booking',
+              needs: [],
+      },
       OTHER: {
               flow: null,
               needs: [],

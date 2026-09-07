@@ -66,6 +66,22 @@ const NEVER_ANSWER = [
 // Alpy's own vocabulary. Order matters: the first match wins, so the most
 // specific patterns come first.
 const KEYWORDS = [
+      // THE SAME BOOKING MADE TWICE (582032).
+      //
+      // "I have accidentally made a duplicate booking when making payment for
+      // our ski hire. Could one of these be refunded please?" was read as a
+      // refund request, routed to the cancel-after flow, and answered by asking
+      // Colin for the second reference - which Odin already held, twice, under
+      // his own email. This rule sits FIRST because a duplicate says "refund"
+      // and "cancel" out loud and would otherwise be eaten by those rules; the
+      // duplicate flow finds both bookings itself and needs no reference.
+      //
+      // Both halves are required: the idea of doubling AND the idea of a
+      // booking or a payment. "I paid twice for the boots" is a billing
+      // question, not two bookings, so the second half names the booking.
+      { topic: 'DUPLICATE_BOOKING',
+        re: /(?=[\s\S]*\b(?:duplicate|duplicated|duplicat\w*|doubl\w*|twice|two\s+times|2\s+times|deux\s+fois|en\s+double|doppelt|zweimal|due\s+volte|dos\s+veces|same\s+booking\s+again|by\s+mistake|par\s+erreur|aus\s+versehen|versehentlich|accidentally|accidentellement)\b)(?=[\s\S]*\b(?:booking|bookings|reservation|reservations|r[eé]servations?|buchung\w*|prenotazion\w*|reservas?|order|commande|bestellung)\b)(?=[\s\S]*\b(?:refund\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|rimbors\w*|reembols\w*|cancel\w*|annul\w*|stornier\w*|charged|d[eé]bit[eé]\w*|abgebucht|paid|pay[eé]\w*|payment|paiement|zahlung)\b)/i },
+
       // STOLEN OR DAMAGED EQUIPMENT IS A CLAIM, NOT A LOCKER QUESTION.
       //
       // 581954: "the ski boots I rented at Le Bourg were stolen from our hotel
@@ -79,10 +95,34 @@ const KEYWORDS = [
       // protections and knows to hand a claim over rather than improvise.
       { topic: 'GENERAL_QUESTION',
         re: /(?=[\s\S]*\b(?:stolen|theft|thie(?:f|ves)|robbed|vol[eé]e?s?\b|d[eé]rob[eé]\w*|gestohlen|diebstahl|entwendet|rubat[oi]|furto|robad[oa]s?|robo\b|damaged|broken\s+(?:ski|boot|board|helmet|binding|pole)|snapped|cass[eé]e?s?\b|endommag[eé]\w*|besch[aä]digt|kaputt|danneggiat\w*|da[nñ]ad[oa]s?|rot[oa]s?\b|sinistre|claim\b|r[eé]clamation|schaden(?:s?fall|meldung)?))(?=[\s\S]*\b(?:skis?|boots?|snowboard|board|helmet|casque|chaussures?|mat[eé]riel|equipment|Ski|Schuhe|Helm|Brett|attrezzatura|scarponi|equipo|botas|guaranty|guarantee|protection|assurance|insurance|versicherung|assicurazione|seguro|garantie))/i },
+      // A PROSPECT WHO ALSO MENTIONS THE DEPOT IS STILL A PROSPECT (582033).
+      //
+      // "Wir sind 5 Erwachsene, 6 Skitage in Solden, wir moechten die komplette
+      // Skiausruestung ausleihen ... ausserdem gerne Ihr Depot an der
+      // Gaislachkoglbahn ... Koennten Sie uns bitte ein Gesamtangebot fuer 5
+      // Personen zukommen lassen?" - one word, "Depot", sent the whole thing to
+      // the shop-services flow. The customer got a paragraph about overnight
+      // storage, the promise of an offer, and no offer. Five pairs of skis for
+      // six days, lost.
+      //
+      // A quote is the commercial answer and it comes first: when someone asks
+      // for an offer or a price AND talks about renting equipment, this is a
+      // QUOTE, whatever else the message mentions. The depot, the group discount
+      // and the early-booking question are answered inside the quote reply.
+      //
+      // Excluded: anyone who already has a booking (a reference, "my booking",
+      // "meine Buchung") - for them the depot question is a real depot request.
+      { topic: 'QUOTE',
+        re: /^(?![\s\S]*(?:\b[Bb][0-9A-Za-z]{5}\b[\s\S]{0,40}\b(?:booking|buchung|r[eé]servation|prenotazione|reserva)\b|\b(?:my|our|meine?|unsere?|ma|notre|mon)\s+(?:booking|buchung|r[eé]servation|reservierung|prenotazione|reserva)\b|\bbooking\s+(?:reference|number|code)\b|\bbuchungsnummer\b|\bnum[eé]ro\s+de\s+r[eé]servation\b))(?=[\s\S]*\b(?:angebot|gesamtangebot|offerte|offer\b|quote|quotation|devis|price|prices|preis\w*|prix|prezzo|precio|kost\w*|tarif\w*|how\s+much|wie\s+viel|combien|rate\b|rates\b|gruppenrabatt|group\s+discount|rabatt|discount|r[eé]duction|fr[uü]hbuch\w*|early\s*[- ]?book\w*)\b)(?=[\s\S]*(?:\b\d{1,3}\s*(?:erwachsene\w*|adults?|personen|persons?|people|pax|personnes|adultes|skifahrer|skiers?|kinder|children)\b|\b(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie)\b|\b\d{1,2}\s*(?:skitage|days?|tage|jours?|giorni|d[ií]as)\b|\b(?:from|vom|du|dal|desde)\s+\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b(?:angebot|gesamtangebot|offerte|offer|quote|quotation|devis|offre)\b))(?=[\s\S]*\b(?:ausleihen|leihen|mieten|verleih|ausr[uü]stung|rent|renting|rental|hire|hiring|louer|location|noleggi\w*|alquil\w*|skiausr[uü]stung|skis?\b|ski\b|snowboards?|equipment|mat[eé]riel|attrezzatura|equipo)\b)/i },
+
       // The depot rule must never fire on a theft that merely happened in a
       // locker: the rule above already took those.
       { topic: 'DEPOT_SWITCH', re: /^(?![\s\S]*\b(?:stolen|theft|thie(?:f|ves)|vol[eé]e?s?\b|gestohlen|diebstahl|damaged|cass[eé]e?s?\b|besch[aä]digt|claim\b|sinistre)\b)[\s\S]*\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
-      { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|changement\s+d.?[eé]quipement|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard))\b/i },
+      // "change the model of skis" is a model change too. The rule used to
+      // require the two words welded together ("model change") or "switch my
+      // skis", so a customer writing the sentence the natural way matched
+      // nothing at all.
+      { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|change\s+(?:the\s+|my\s+)?model|changement\s+d.?[eé]quipement|changer\s+(?:le\s+)?mod[eè]le|modell\s*(?:wechsel|tausch)|modell\s+(?:zu\s+)?[aä]ndern|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard))\b/i },
       { topic: 'VOUCHER_RESEND', re: /\b(voucher|bon\s+de\s+r[eé]servation|renvoyer\s+le\s+voucher|resend\s+(the\s+)?voucher|confirmation\s+email\s+again)\b/i },
       // THE DOCUMENTS OF A PROTECTION ARE VOUCHERS TOO (581968).
       //
@@ -1564,7 +1604,8 @@ export default async function handler(req, res) {
       const nativeTopic = (fromTags && !fromTags.blocked) ? fromTags : null;
       const firstTurn = !thread.turns || thread.turns.length <= 1;
       const SWITCHES_SUBJECT = ['CANCELLATION', 'PARTIAL_CANCELLATION', 'DATE_CHANGE',
-                                'VOUCHER_RESEND', 'DEPOT_SWITCH', 'CANCELLATION_AFTER', 'PERSONAL_INFO'];
+                                'VOUCHER_RESEND', 'DEPOT_SWITCH', 'CANCELLATION_AFTER', 'PERSONAL_INFO',
+                                'DUPLICATE_BOOKING'];
       const modelSwitches = (base) => llm && llm.topic !== base.topic && SWITCHES_SUBJECT.includes(llm.topic);
 
       let decision;
