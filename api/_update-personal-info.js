@@ -117,12 +117,18 @@ function extractEquipmentItems(booking) {
  */
 function selectItems(equipmentItems, skierName, skierIndex) {
   if (skierName !== undefined && skierName !== null) {
-    const q = String(skierName).toLowerCase();
-    const matched = equipmentItems.filter(item => {
-      const nameA = String(item.name || '').toLowerCase();
-      const nameB = String((item.personalInfo && item.personalInfo.name) || '').toLowerCase();
-      return nameA.includes(q) || nameB.includes(q);
-    });
+    // Exact name first, substring second (D-53).
+    //
+    // 582121: the customer wrote "test test hat die Schuhgroesse 44" on a booking
+    // holding "test test" and "test2 test". A substring match returned both, the
+    // flow saw two people and refused. A customer who writes a full name means
+    // that person; "Anna Mueller" must never be blocked by "Anna-Lena Mueller".
+    const norm = v => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+    const q = norm(skierName);
+    const names = item => [norm(item.name), norm(item.personalInfo && item.personalInfo.name)];
+    const exact = equipmentItems.filter(item => names(item).some(n => n && n === q));
+    if (exact.length) return exact;
+    const matched = equipmentItems.filter(item => names(item).some(n => n && n.includes(q)));
     if (matched.length === 0) {
       throw new Error(`No skier found matching name "${skierName}".`);
     }

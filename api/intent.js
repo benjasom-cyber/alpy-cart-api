@@ -81,7 +81,19 @@ const KEYWORDS = [
       // reference and no "my booking". A customer with a booking who asks "what
       // if I cancel" is still asking about a policy, but their case can be
       // answered on their booking and is left to the rules below.
-      { topic: 'GENERAL_QUESTION', re: /^(?![\s\S]*\bB(?=[123456789A-Z]{5}\b)[A-Z]*\d[123456789A-Z]*\b)(?=[\s\S]*\b(?:what\s+(?:happens?|would\s+happen)\b[^.?!]{0,20}\bif|what\s+if|in\s+(?:the\s+)?case\s+(?:of|we|i)\b|was\s+passiert\b[^.?!]{0,20}\b(?:wenn|falls)|was\s+(?:ist|w[aä]re)\s+wenn|falls\s+(?:wir|ich|man)\b|wenn\s+(?:wir|ich|man)\b[\s\S]{0,50}\b(?:m[uü]ss(?:en|te|ten)|sollte|k[oö]nnte)\b|que\s+se\s+passe|qu.arrive|si\s+(?:je|nous|on)\b[\s\S]{0,50}\b(?:devions|devais|devions|dois|doit|devait|serais?|serions|pourrais?|pourrions)\b|au\s+cas\s+o[uù]|je\s+serais\s+rembours|serais-je|serions-nous|si\s+en\s+prenant|would\s+(?:i|we)\s+(?:be\s+)?(?:get\s+)?(?:refunded|reimbursed|entitled)|is\s+(?:it|this|that)\s+refundable|refundable|remboursable|erstattungsf[aä]hig|wat\s+(?:gebeurt|als)\b|cosa\s+succede\s+se|qu[eé]\s+pasa\s+si)\b)(?=[\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|annuler\w*|bless\w*|injur\w*|verletz\w*|krank\w*|\bill\b|sick|malad\w*|refund\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|terugbetal\w*|rimbors\w*)\b)/i },
+      { topic: 'GENERAL_QUESTION', not: /\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/, re: /^(?=[\s\S]*\b(?:what\s+(?:happens?|would\s+happen)\b[^.?!]{0,20}\bif|what\s+if|in\s+(?:the\s+)?case\s+(?:of|we|i)\b|was\s+passiert\b[^.?!]{0,20}\b(?:wenn|falls)|was\s+(?:ist|w[aä]re)\s+wenn|falls\s+(?:wir|ich|man)\b|wenn\s+(?:wir|ich|man)\b[\s\S]{0,50}\b(?:m[uü]ss(?:en|te|ten)|sollte|k[oö]nnte)\b|que\s+se\s+passe|qu.arrive|si\s+(?:je|nous|on)\b[\s\S]{0,50}\b(?:devions|devais|devions|dois|doit|devait|serais?|serions|pourrais?|pourrions)\b|au\s+cas\s+o[uù]|je\s+serais\s+rembours|serais-je|serions-nous|si\s+en\s+prenant|would\s+(?:i|we)\s+(?:be\s+)?(?:get\s+)?(?:refunded|reimbursed|entitled)|is\s+(?:it|this|that)\s+refundable|refundable|remboursable|erstattungsf[aä]hig|wat\s+(?:gebeurt|als)\b|cosa\s+succede\s+se|qu[eé]\s+pasa\s+si)\b)(?=[\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|annuler\w*|bless\w*|injur\w*|verletz\w*|krank\w*|\bill\b|sick|malad\w*|refund\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|terugbetal\w*|rimbors\w*)\b)/i },
+      // "I BOOKED A DAY TOO LONG" IS A DATE CHANGE, NOT A CANCELLATION (D-53).
+      //
+      // 582118: "realised afterwards I booked for a day too long... cancel the
+      // final day of the booking and have the cost of that day refunded" went to
+      // the Cancellation Handler, which correctly refused ("PARTIAL") and handed
+      // over - no reply. In the season corpus this is one of the most common
+      // shapes of a date change (517236, 546465, 564094, 546220, 557629): the
+      // customer says "cancel" about a day, never about the booking. The Date
+      // Change flow is the one that knows what shortening costs and what to do
+      // when the price differs.
+      { topic: 'DATE_CHANGE', re: /\b(?:cancel\w*|annul\w*|storn\w*|remove|drop|enlev\w*|supprim\w*|streich\w*|k[uü]rzen|verk[uü]rzen|raccourcir|shorten)\s+(?:the\s+|le\s+|la\s+|den\s+|die\s+|das\s+|um\s+)?(?:final|last|first|extra|additional|dernier|derni[eè]re|premier|premi[eè]re|letzten?|ersten?|einen|one|a)\s+(?:day|days|jour|jours|tag|tage|night|nights)\b|\b(?:a|one|1|two|2)\s+days?\s+too\s+(?:long|many|much)\b|\b(?:un|1)\s+jour\s+de\s+trop\b|\b(?:einen|ein|1)\s+tag\s+zu\s+(?:viel|lang)\b|\b(?:een|1)\s+dag\s+te\s+(?:veel|lang)\b|\breturn(?:ing)?\s+(?:it|them|the\s+\w+|the\s+\w+\s+\w+)\s+(?:a\s+day|one\s+day|\d\s+days?)\s+(?:early|earlier|before)\b|\bum\s+(?:einen|zwei|\d+)\s+tage?\s+(?:verk[uü]rzen|k[uü]rzer)\b|\bnur\s+bis\s+zum\s+\d|\b(?:only|just)\s+need\b[^.]{0,40}\bfor\s+\d\s+days?\b|\bnur\s+noch\s+\d\s+tage\b|\bplus\s+que\s+\d\s+jours\b/i },
+
       // THE SAME BOOKING MADE TWICE (582032).
       //
       // "I have accidentally made a duplicate booking when making payment for
@@ -144,7 +156,8 @@ const KEYWORDS = [
       // Excluded: anyone who already has a booking (a reference, "my booking",
       // "meine Buchung") - for them the depot question is a real depot request.
       { topic: 'QUOTE',
-        re: /^(?![\s\S]*(?:\b[Bb][0-9A-Za-z]{5}\b[\s\S]{0,40}\b(?:booking|buchung|r[eé]servation|prenotazione|reserva)\b|\b(?:booking|buchung|r[eé]servation|reservation|reservering|boeking|reference|referenz|prenotazione|reserva)\b[\s\S]{0,40}\bB(?=[123456789A-Z]{5}\b)[A-Z]*\d[123456789A-Z]*\b|\b(?:my|our|meine?|unsere?|ma|notre|mon|current|existing|the\s+below|below|bestehende|aktuelle|onderstaande|mijn|onze)\s+(?:online\s+)?(?:booking|buchung|r[eé]servation|reservation|reservierung|reservering|boeking|prenotazione|reserva)\b|\bbooking\s+(?:reference|number|code)\b|\bbuchungsnummer\b|\bboekingsnummer\b|\breserveringsnummer\b|\bnum[eé]ro\s+de\s+r[eé]servation\b|\b(?:have\s+|already\s+)?(?:made|placed)\s+(?:a\s+|the\s+)?(?:group\s+|online\s+)?(?:booking|reservation)\b|\bbooked\s+(?:with|through|via|on)\s+(?:you|alpy|your)|\bhabe\w*\s+(?:bereits\s+|schon\s+)?(?:[\w\s]{0,30}\s)?gebucht\b|\bj.ai\s+(?:d[eé]j[aà]\s+)?r[eé]serv[eé]\b|\bheb\s+(?:al\s+)?(?:[\w\s]{0,20}\s)?geboekt\b))(?=[\s\S]*\b(?:angebot|gesamtangebot|offerte|offer\b|quote|quotation|devis|price|prices|preis\w*|prix|prezzo|precio|kost\w*|tarif\w*|how\s+much|wie\s+viel|combien|rate\b|rates\b|gruppenrabatt|group\s+discount|rabatt|discount|r[eé]duction|fr[uü]hbuch\w*|early\s*[- ]?book\w*)\b)(?=[\s\S]*(?:\b\d{1,3}\s*(?:erwachsene\w*|adults?|personen|persons?|people|pax|personnes|adultes|skifahrer|skiers?|kinder|children)\b|\b(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie)\b|\b\d{1,2}\s*(?:skitage|days?|tage|jours?|giorni|d[ií]as)\b|\b(?:from|vom|du|dal|desde)\s+\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b(?:angebot|gesamtangebot|offerte|offer|quote|quotation|devis|offre)\b))(?=[\s\S]*\b(?:ausleihen|leihen|mieten|verleih|ausr[uü]stung|rent|renting|rental|hire|hiring|louer|location|noleggi\w*|alquil\w*|skiausr[uü]stung|skis?\b|ski\b|snowboards?|equipment|mat[eé]riel|attrezzatura|equipo)\b)/i },
+        not: /\b(?:[Bb]ooking|[Bb]uchung|[Rr][eé]servation|[Rr]eservierung|[Rr]eservering|[Bb]oeking|[Rr]eference|[Rr]eferenz|[Pp]renotazione|[Rr]eserva)\b[\s\S]{0,40}\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/,
+        re: /^(?![\s\S]*(?:\b[Bb][0-9A-Za-z]{5}\b[\s\S]{0,40}\b(?:booking|buchung|r[eé]servation|prenotazione|reserva)\b|\b(?:my|our|meine?|unsere?|ma|notre|mon|current|existing|the\s+below|below|bestehende|aktuelle|onderstaande|mijn|onze)\s+(?:online\s+)?(?:booking|buchung|r[eé]servation|reservation|reservierung|reservering|boeking|prenotazione|reserva)\b|\bbooking\s+(?:reference|number|code)\b|\bbuchungsnummer\b|\bboekingsnummer\b|\breserveringsnummer\b|\bnum[eé]ro\s+de\s+r[eé]servation\b|\b(?:have\s+|already\s+)?(?:made|placed)\s+(?:a\s+|the\s+)?(?:group\s+|online\s+)?(?:booking|reservation)\b|\bbooked\s+(?:with|through|via|on)\s+(?:you|alpy|your)|\bhabe\w*\s+(?:bereits\s+|schon\s+)?(?:[\w\s]{0,30}\s)?gebucht\b|\bj.ai\s+(?:d[eé]j[aà]\s+)?r[eé]serv[eé]\b|\bheb\s+(?:al\s+)?(?:[\w\s]{0,20}\s)?geboekt\b))(?=[\s\S]*\b(?:angebot|gesamtangebot|offerte|offer\b|quote|quotation|devis|price|prices|preis\w*|prix|prezzo|precio|kost\w*|tarif\w*|how\s+much|wie\s+viel|combien|rate\b|rates\b|gruppenrabatt|group\s+discount|rabatt|discount|r[eé]duction|fr[uü]hbuch\w*|early\s*[- ]?book\w*)\b)(?=[\s\S]*(?:\b\d{1,3}\s*(?:erwachsene\w*|adults?|personen|persons?|people|pax|personnes|adultes|skifahrer|skiers?|kinder|children)\b|\b(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie)\b|\b\d{1,2}\s*(?:skitage|days?|tage|jours?|giorni|d[ií]as)\b|\b(?:from|vom|du|dal|desde)\s+\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b(?:angebot|gesamtangebot|offerte|offer|quote|quotation|devis|offre)\b))(?=[\s\S]*\b(?:ausleihen|leihen|mieten|verleih|ausr[uü]stung|rent|renting|rental|hire|hiring|louer|location|noleggi\w*|alquil\w*|skiausr[uü]stung|skis?\b|ski\b|snowboards?|equipment|mat[eé]riel|attrezzatura|equipo)\b)/i },
 
       // A DOWNGRADE IS A PARTIAL CANCELLATION, NOT A QUOTE AND NOT A MODEL CHANGE.
       //
@@ -318,7 +331,7 @@ const KEYWORDS = [
       // flow. Dates and equipment are excluded: those are DATE_CHANGE / REQUOTE.
       { topic: 'PERSONAL_INFO',
         re: /(?=[\s\S]*\b(?:height|weight|shoe\s*size|boot\s*size|foot\s*size|taille|poids|pointure|gr[oö][sß]e|gewicht|schuhgr[oö][sß]e|altezza|peso|numero\s+di\s+scarpe|estatura|talla|skier\s+details|skier\s+information|personal\s+(?:details|information|data)|donn[eé]es\s+personnelles|pers[oö]nliche\s+(?:daten|angaben)|(?:ski\s+)?level|niveau|(?:ski)?niveau|date\s+of\s+birth|birth\s*date|date\s+de\s+naissance|geburtsdatum|\d{2,3}\s*cm\b|\d{2,3}\s*kg\b|\d{2,3}\s*lbs?\b))(?=[\s\S]*(?:^|[^a-zA-Z])(?:updat\w*|chang\w*|correct\w*|modif\w*|adjust\w*|fix\b|wrong|mistake|error|typo|grown|grew|mettre\s+[aà]\s+jour|changer|corriger|rectifier|erreur|grandi|[aä]ndern|aktualisier\w*|korrigier\w*|falsch|fehler|gewachsen|aggiorn\w*|cambiar|corregir|actualizar|is\s+now\b|are\s+now\b|now\s+\d|fait\s+maintenant|mesure\s+maintenant|ist\s+jetzt|misst\s+jetzt))(?![\s\S]*\b(?:cancel\w*|annul\w*|stornier\w*|refund\w*|rembours\w*))/i },
-      { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|add\s+(?:a\s+|an\s+|the\s+|another\s+|one\s+|\d+\s+)?(?:more\s+)?(?:skis?|snowboards?|persons?|people|adults?|child(?:ren)?|skiers?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
+      { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|(?:verleih|buchung|reservierung|miete|mietdauer)\s+(?:gerne\s+)?(?:um\s+\S+\s+tage?\s+)?verl[aä]ngern|verl[aä]ngern|(?:einen|zwei|drei|vier|\d+)\s+tage?\s+(?:mehr|l[aä]nger|zus[aä]tzlich)|(?:boeking|reservering|huur)\s+(?:met\s+\S+\s+dag(?:en)?\s+)?verlengen|verlengen|prolungare|(?:un|due|tre|\d+)\s+giorn[oi]\s+in\s+pi[uù]|(?:one|two|three|\d+)\s+(?:more|extra|additional)\s+days?|add\s+(?:a\s+|an\s+|the\s+|another\s+|one\s+|\d+\s+)?(?:more\s+)?(?:skis?|snowboards?|persons?|people|adults?|child(?:ren)?|skiers?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
       // Helmets, boots and protections added to an EXISTING booking: the General
       // questions flow rebuilds the cart with the addon and answers the customer
       // with the link (ticket 581843). REQUOTE would only leave an internal note.
@@ -332,7 +345,7 @@ const KEYWORDS = [
       // always separated by whatever the customer is collecting.
       { topic: 'GENERAL_QUESTION',
         re: /\b(alpinflexi|snowflexi|alpinguaranty|alpinsafety(\s+plus)?)\b[\s\S]{0,60}\b(cover\w*|include\w*|couvre|comprend|inclut|what\s+is|c.est\s+quoi|price|prix|co[uû]te|cost)\b|\b(cover\w*|couvre|price|prix|co[uû]te|cost|what\s+is)\b[\s\S]{0,60}\b(alpinflexi|snowflexi|alpinguaranty|alpinsafety(\s+plus)?)\b/i },
-      { topic: 'QUOTE',         re: /\b(quote|devis|how\s+much\s+would|combien\s+co[uû]te|price\s+for\s+\d|offre\s+de\s+prix)\b/i },
+      { topic: 'QUOTE', not: /\b(?:[Bb]ooking|[Bb]uchung|[Rr][eé]servation|[Rr]eservierung|[Rr]eservering|[Bb]oeking|[Rr]eference|[Rr]eferenz|[Pp]renotazione|[Rr]eserva)\b[\s\S]{0,40}\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/, re: /\b(quote|devis|how\s+much\s+would|combien\s+co[uû]te|price\s+for\s+\d|offre\s+de\s+prix)\b/i },
       // TICKET 581888. "We are a group of 7 skiing in Bad Hofgastein from 10th
       // to 15th January 2027 - do you have a discount code?" matched NOTHING,
       // and the ticket died with "No capability matches this message". Yet it is
@@ -346,10 +359,8 @@ const KEYWORDS = [
       // date change, requote - so "we are a group of 7 and we need to cancel"
       // is still a cancellation. That ordering is what makes them safe to write
       // this broadly.
-      { topic: 'QUOTE',
-        re: /\b(?:we\s+are|we.re|nous\s+sommes|on\s+est|wir\s+sind|siamo|somos)\s+(?:a\s+|un\s+|une\s+|eine\s+)?(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie|party)?\s*(?:of\s+|de\s+|von\s+|di\s+)?\d{1,3}\b[\s\S]{0,200}\b(ski\w*|snowboard\w*|surf|louer|location|mieten|noleggi\w*|alquil\w*)\b|\b(?:group|groupe|gruppe|gruppo|grupo|party)\s+(?:of|de|von|di)\s+\d{1,3}\b[\s\S]{0,200}\b(ski\w*|snowboard\w*|surf|louer|location|mieten)\b/i },
-      { topic: 'QUOTE',
-        re: /\b(?:need|needing|looking\s+for|would\s+like|want\s+to|wish\s+to|interested\s+in|cherch\w*|souhait\w*|voudrai\w*|aimerai\w*|besoin\s+de|m[oö]chte\w*|brauche\w*|suche\w*|interessiert)\b[\s\S]{0,80}\b(?:rent(?:al|ing)?|hire|hiring|louer|location\s+de|mieten|verleih|noleggi\w*|alquil\w*)\b[\s\S]{0,80}\b(?:skis?|snowboards?|equipment|mat[eé]riel|ausr[uü]stung|attrezzatura|equipo)\b|\b(?:rent|hire|louer|mieten|noleggiare|alquilar)\b[\s\S]{0,60}\b(?:skis?|snowboards?|equipment|mat[eé]riel)\b[\s\S]{0,120}\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:to|-|au|bis|al)\s+\d{1,2}|from\s+\d{1,2}|du\s+\d{1,2}|vom\s+\d{1,2})\b/i },
+      { topic: 'QUOTE', not: /\b(?:[Bb]ooking|[Bb]uchung|[Rr][eé]servation|[Rr]eservierung|[Rr]eservering|[Bb]oeking|[Rr]eference|[Rr]eferenz|[Pp]renotazione|[Rr]eserva)\b[\s\S]{0,40}\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/, re: /\b(?:we\s+are|we.re|nous\s+sommes|on\s+est|wir\s+sind|siamo|somos)\s+(?:a\s+|un\s+|une\s+|eine\s+)?(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie|party)?\s*(?:of\s+|de\s+|von\s+|di\s+)?\d{1,3}\b[\s\S]{0,200}\b(ski\w*|snowboard\w*|surf|louer|location|mieten|noleggi\w*|alquil\w*)\b|\b(?:group|groupe|gruppe|gruppo|grupo|party)\s+(?:of|de|von|di)\s+\d{1,3}\b[\s\S]{0,200}\b(ski\w*|snowboard\w*|surf|louer|location|mieten)\b/i },
+      { topic: 'QUOTE', not: /\b(?:[Bb]ooking|[Bb]uchung|[Rr][eé]servation|[Rr]eservierung|[Rr]eservering|[Bb]oeking|[Rr]eference|[Rr]eferenz|[Pp]renotazione|[Rr]eserva)\b[\s\S]{0,40}\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/, re: /\b(?:need|needing|looking\s+for|would\s+like|want\s+to|wish\s+to|interested\s+in|cherch\w*|souhait\w*|voudrai\w*|aimerai\w*|besoin\s+de|m[oö]chte\w*|brauche\w*|suche\w*|interessiert)\b[\s\S]{0,80}\b(?:rent(?:al|ing)?|hire|hiring|louer|location\s+de|mieten|verleih|noleggi\w*|alquil\w*)\b[\s\S]{0,80}\b(?:skis?|snowboards?|equipment|mat[eé]riel|ausr[uü]stung|attrezzatura|equipo)\b|\b(?:rent|hire|louer|mieten|noleggiare|alquilar)\b[\s\S]{0,60}\b(?:skis?|snowboards?|equipment|mat[eé]riel)\b[\s\S]{0,120}\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:to|-|au|bis|al)\s+\d{1,2}|from\s+\d{1,2}|du\s+\d{1,2}|vom\s+\d{1,2})\b/i },
       // LAST, always. Everything above is a request that changes something; what
       // is left is a question, and a question has an answer written down.
       //
@@ -527,6 +538,10 @@ function detectFromKeywords(message) {
       const m = stripQuotedAndSignature(String(message || ''));
       if (m.trim().length < 3) return null;
       for (const k of KEYWORDS) {
+              // `not` is tested case-SENSITIVELY, on purpose: it is how a rule
+              // can say "unless a booking reference is present" without the /i
+              // flag turning "before" and "Buchen" into references.
+              if (k.not && k.not.test(m)) continue;
               if (k.re.test(m)) return { topic: k.topic, source: 'keyword', blocked: false };
       }
       return null;
@@ -554,6 +569,7 @@ function mutatingTopicsIn(message, llmTopic) {
       for (const k of KEYWORDS) {
               if (MUTATING_TOPICS.indexOf(k.topic) === -1) continue;
               if (found.indexOf(k.topic) > -1) continue;
+              if (k.not && k.not.test(m)) continue;
               if (k.re.test(m)) found.push(k.topic);
       }
       return collapseSameRequest(found, llmTopic);
@@ -1262,6 +1278,90 @@ async function fetchBookingHistory(ref) {
       return bits.join('');
 }
 
+/**
+ * THE MOST RECENT BOOKING IS NOT "THE" BOOKING (D-52).
+ *
+ * 582115: "I booked ski hire for Chamonix from 27 January to 2 February, the
+ * payment went through, but I never received the confirmation." The email
+ * lookup found five bookings under that address and the flow took the most
+ * recent one - a rental in Soelden in April - and sent that voucher, addressed
+ * to the name on THAT booking. Everything the customer had written pointed at
+ * a different one, and nothing read it.
+ *
+ * Families book several times a season; a repeat customer has last year's
+ * bookings too. So when the note lists more than one reference, the message is
+ * matched against each booking's town, shop and dates. One clear match wins.
+ * When nothing in the message tells them apart, the customer is asked which
+ * one - with the list in front of them - instead of being served a guess.
+ */
+async function fetchBookingBrief(ref) {
+      const code = String(ref || '').trim().toUpperCase();
+      if (!/^[A-Z0-9]{4,12}$/.test(code)) return null;
+      try {
+              const ctrl = new AbortController();
+              const t = setTimeout(() => ctrl.abort(), 4000);
+              const r = await fetch(ODIN_BASE + '/api/v2/booking/' + encodeURIComponent(code),
+                                    { headers: { Accept: 'application/json' }, signal: ctrl.signal });
+              clearTimeout(t);
+              if (!r.ok) return null;
+              const b = await r.json();
+              const day = v => { const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v || '')); return m ? m[1] : ''; };
+              const st = String((b && (b.bookingStatus || b.status)) || '').toUpperCase();
+              return {
+                ref: code,
+                status: st,
+                active: st.indexOf('CANCEL') === -1 && st.indexOf('EXPIR') === -1,
+                shop: String((b.shop && b.shop.name) || ''),
+                town: String((b.shop && (b.shop.town || '')) || ''),
+                address: String((b.shop && b.shop.address) || ''),
+                from: day(b.rentalPeriod && b.rentalPeriod.from),
+                to: day(b.rentalPeriod && b.rentalPeriod.to),
+                customer: String((b.customer && b.customer.name) || ''),
+              };
+      } catch { return null; }
+}
+
+const MONTHS_ANY = ['january|janvier|januar|gennaio|enero|januari|jan', 'february|f[eé]vrier|februar|febbraio|febrero|februari|feb', 'march|mars|m[aä]rz|marzo|maart|mar', 'april|avril|aprile|abril|apr', 'may|mai|maggio|mayo|mei', 'june|juin|juni|giugno|junio|jun', 'july|juillet|juli|luglio|julio|jul', 'august|ao[uû]t|agosto|augustus|aug', 'september|septembre|settembre|septiembre|sept?', 'october|octobre|oktober|ottobre|octubre|okt|oct', 'november|novembre|noviembre|nov', 'december|d[eé]cembre|dezember|dicembre|diciembre|dec|dez'];
+
+function bookingClueScore(brief, text) {
+      const hay = ' ' + deaccent(String(text || '').toLowerCase()) + ' ';
+      let score = 0;
+      const words = deaccent((brief.shop + ' ' + brief.town + ' ' + brief.address).toLowerCase())
+        .split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !/^(sport|sports|shop|rent|rental|ski|skis|location|verleih|magasin|centre|center|station|strasse|street|route|avenue|dorf)$/.test(w));
+      for (const w of words) if (hay.indexOf(' ' + w) > -1 || hay.indexOf(w) > -1) score += 2;
+      for (const d of [brief.from, brief.to]) {
+              const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || '');
+              if (!m) continue;
+              const monthRe = new RegExp('\\b(?:' + MONTHS_ANY[parseInt(m[2], 10) - 1] + ')\\b', 'i');
+              const dayNum = String(parseInt(m[3], 10));
+              const monthNum = String(parseInt(m[2], 10));
+              if (monthRe.test(hay)) score += 1;
+              if (new RegExp('\\b' + dayNum + '(?:st|nd|rd|th|er|\\.)?\\s*(?:' + MONTHS_ANY[parseInt(m[2], 10) - 1] + ')', 'i').test(hay)) score += 3;
+              if (new RegExp('\\b' + dayNum + '[./-]' + monthNum.padStart(2, '0') + '\\b|\\b' + dayNum + '[./-]' + monthNum + '\\b').test(hay)) score += 3;
+              if (hay.indexOf(m[1]) > -1) score += 0.5;
+      }
+      return score;
+}
+
+async function pickBookingFromHistory(refs, text) {
+      const list = (refs || []).filter(Boolean).slice(0, 8);
+      if (list.length <= 1) return { ref: list[0] || '', reason: list.length ? 'only_one' : 'none', candidates: [] };
+      const briefs = (await Promise.all(list.map(fetchBookingBrief))).filter(Boolean);
+      const active = briefs.filter(b => b.active);
+      if (active.length === 1) return { ref: active[0].ref, reason: 'only_active', candidates: active };
+      if (!active.length) return { ref: '', reason: 'none_active', candidates: briefs };
+      const scored = active.map(b => ({ b, s: bookingClueScore(b, text) })).sort((x, y) => y.s - x.s);
+      if (scored[0].s > 0 && (scored.length === 1 || scored[0].s > scored[1].s)) {
+              return { ref: scored[0].b.ref, reason: 'matched_clues', candidates: active };
+      }
+      return { ref: '', reason: 'ambiguous', candidates: active };
+}
+
+function describeBookings(briefs) {
+      const fmt = d => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; };
+      return briefs.map(b => b.ref + ' (' + (b.town || b.shop) + (b.town && b.shop ? ', ' + b.shop : '') + ', ' + fmt(b.from) + ' - ' + fmt(b.to) + ')').join('; ');
+}
+
 async function fetchCustomerThread(ticketId) {
       // Why the memory is off is operational information, not debug output. A
       // silent null was enough to spend an afternoon guessing between "no token",
@@ -1358,15 +1458,22 @@ async function fetchCustomerThread(ticketId) {
               // REF_FROM_HISTORY_IS_SAFE_FOR below for the topics allowed to act
               // on a reference the customer never typed.
               let knownRef = '';
+              let knownRefs = [];
               for (const c of comments) {
                         const body = String((c && (c.plain_body || c.body)) || '');
                         if (body.indexOf('SKIBOT - this customer has booked with us before') === -1) continue;
                         const m = body.match(/Most recent booking reference:\s*([A-Z0-9]{4,12})/);
                         if (m) knownRef = m[1];
+                        // The same note lists the OTHER bookings under this email. Read
+                        // them too: "most recent" is the wrong one as often as not (D-52).
+                        const e = body.match(/Earlier bookings:\s*([A-Z0-9,\s]+)/);
+                        knownRefs = [knownRef].concat(e ? e[1].split(/[,\s]+/) : [])
+                          .map(x => String(x || '').trim().toUpperCase())
+                          .filter((x, i, arr) => /^[A-Z0-9]{4,12}$/.test(x) && arr.indexOf(x) === i);
               }
 
               return { turns: mine, text: mine.join('\n\n'), count: mine.length,
-                       subject, knownRef,
+                       subject, knownRef, knownRefs,
                        agentReplied: !!humanReply,
                        agentRepliedAt: humanReply ? humanReply.created_at : null,
                        status: 'ok:' + comments.length + '_comments' +
@@ -1886,13 +1993,49 @@ export default async function handler(req, res) {
 
       let topic = decision.topic;
 
+      // AN INJURY BEFORE THE RENTAL STARTS IS AN ORDINARY CANCELLATION (D-53).
+      //
+      // 582132: "test test broke his leg last week... cancel his skis and refund
+      // them. The booking for test2 test stays as it is" - three weeks before
+      // the first rental day. The injury words routed it to Cancellation after
+      // start, which read Odin, saw the rental had not begun, said so in an
+      // internal note and handed over. Correct diagnosis, wrong ending: the
+      // customer is owed a partial cancellation, and we have a flow for it.
+      //
+      // In the season corpus one cancellation in ten mentions illness or injury,
+      // and most of those come BEFORE the trip (517194, 533506, 557190, 546543,
+      // 564167). So when the reference is known and the booking has not started,
+      // the topic is re-routed here: to Partial cancellation when one person or
+      // one item is named, to Cancellation otherwise. The medical story stays in
+      // the transcript; the flow that runs is the one that can act.
+      if (topic === 'CANCELLATION_AFTER' && slots.booking_ref) {
+              const brief = await fetchBookingBrief(slots.booking_ref);
+              const todayIso = new Date().toISOString().slice(0, 10);
+              if (brief && brief.active && brief.from && brief.from > todayIso) {
+                        const own = stripQuotedAndSignature(String(message || ''));
+                        const PARTIAL_SHAPE = /\b(?:his|her|their|son|sa|ses|seine|ihre|zijn|haar)\s+(?:skis?|snowboard|board|equipment|mat[eé]riel|ausr[uü]stung|boots?|helmet|casque|chaussures|schuhe|helm|ski.s)\b|\b(?:skis?|snowboard|equipment|mat[eé]riel|ausr[uü]stung|r[eé]servation|reservierung|buchung|booking)\s+(?:for|of|pour|de|f[uü]r|von|voor|van)\s+[A-Z][a-z]+\b|\b(?:one|1|une|eine|een)\s+(?:person|personne|persoon)\b|\b(?:stays?|remains?|reste\w*|bleib\w*|blijf\w*|unchanged|inchang[eé]e?s?|unver[aä]ndert|ongewijzigd)\b|\b(?:only|just|seulement|nur|alleen)\s+(?:his|her|the|for|pour|f[uü]r)\b/i;
+                        const partialRule = KEYWORDS.find(k => k.topic === 'PARTIAL_CANCELLATION' && /remove|removing/.test(k.re.source));
+                        const isPartial = (llmTopic === 'PARTIAL_CANCELLATION') || PARTIAL_SHAPE.test(own) || (partialRule && partialRule.re.test(own));
+                        topic = isPartial ? 'PARTIAL_CANCELLATION' : 'CANCELLATION';
+                        decision = { topic, source: 'after_start_rerouted_not_started', blocked: false };
+              }
+      }
+
       // Apply the history reference, but only where it is safe (see above).
       // Done here rather than earlier because the rule depends on the topic, and
       // the topic is only decided on the line above.
       let usedRefFromHistory = false;
+      let historyPick = null;
       if (refFromHistory && REF_FROM_HISTORY_IS_SAFE_FOR.includes(topic)) {
-              slots.booking_ref = refFromHistory;
-              usedRefFromHistory = true;
+              const candidates = (thread.knownRefs && thread.knownRefs.length) ? thread.knownRefs : [refFromHistory];
+              historyPick = await pickBookingFromHistory(candidates, [thread.subject, message].concat(thread.turns || []).join('\n'));
+              if (historyPick.ref) {
+                        slots.booking_ref = historyPick.ref;
+                        usedRefFromHistory = true;
+              }
+              // Several live bookings and nothing in the message to tell them
+              // apart: do not guess. The reference stays missing, so the flow
+              // asks - and the fact below gives it the list to ask with.
       }
 
       // ── What they booked last time ───────────────────────────────────────────
@@ -1960,6 +2103,32 @@ export default async function handler(req, res) {
               }
       }
 
+      // ONE NEW DATE IS ENOUGH WHEN WE HOLD THE BOOKING (D-53).
+      //
+      // 582123: "verlaengern bis zum 7. Januar 2027 (Buchung BCJ2MU)". The
+      // customer gave the reference and the day that changes; the flow asked for
+      // "the first day of your current rental" - a date printed on the booking it
+      // was holding. When a date change names the booking and exactly one of the
+      // two dates, the other one is the booking's own, and it is read from Odin
+      // here instead of asked for. Read-only, and stated in the transcript so the
+      // flow's confirmation shows the full period the customer is agreeing to.
+      if (topic === 'DATE_CHANGE' && slots.booking_ref && !usedRefFromHistory) {
+              const okStart = SLOTS.start_date && SLOTS.start_date.looksValid(slots.start_date);
+              const okEnd = SLOTS.end_date && SLOTS.end_date.looksValid(slots.end_date);
+              if (okStart !== okEnd) {
+                        const brief = await fetchBookingBrief(slots.booking_ref);
+                        if (brief && brief.active && brief.from && brief.to) {
+                                  if (!okStart && brief.from <= String(slots.end_date)) {
+                                            slots.start_date = brief.from;
+                                            historyApplied.push('start_date_from_booking');
+                                  } else if (!okEnd && brief.to >= String(slots.start_date)) {
+                                            slots.end_date = brief.to;
+                                            historyApplied.push('end_date_from_booking');
+                                  }
+                        }
+              }
+      }
+
       // Not const: a second pass over an unanswered paid option rewrites this.
       // See the declineUnstatedExtras block below.
       let check = checkSlots(topic, slots);
@@ -2011,6 +2180,20 @@ export default async function handler(req, res) {
                           'No booking exists under the reference ' + String(slots.booking_ref).toUpperCase() +
                           '. Ask them to check it against their confirmation email - do not act on it.' });
               }
+      }
+
+      if (historyPick && !historyPick.ref && historyPick.candidates.length > 1) {
+              bookingFacts.push({ slot: 'booking_ref', fact:
+                'We hold ' + historyPick.candidates.length + ' current bookings under this email address: ' +
+                describeBookings(historyPick.candidates) + '. Nothing in the message says which one is ' +
+                'meant, so ask the customer which booking they are writing about - list them exactly as ' +
+                'above so they only have to pick one. Do not act on any of them until they answer.' });
+      } else if (historyPick && historyPick.ref && historyPick.reason === 'matched_clues') {
+              bookingFacts.push({ slot: '_booking_pick', fact:
+                'The customer did not quote a reference. ' + historyPick.ref + ' was chosen among ' +
+                historyPick.candidates.length + ' bookings under their email because its resort or dates ' +
+                'match what they wrote (' + describeBookings(historyPick.candidates.filter(b => b.ref === historyPick.ref)) +
+                '). Name the booking and its dates in the reply so a wrong pick is visible at once.' });
       }
 
       const productQuestions = mergeFacts(bookingFacts, mergeFacts(askedQuestions, mergeFacts(factsForMissing(check.missing), unstatedExtras)));
