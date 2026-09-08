@@ -2006,7 +2006,11 @@ export default async function handler(req, res) {
       const DICT_MAY_OVERRIDE = new Set(['OTHER', 'GENERAL_QUESTION', 'QUOTE', 'REQUOTE']);
       const dictText = stripQuotedAndSignature(String(message || ''));
       const dictRes = dictDecide(dictText, null, { hasRef: !!(slots.booking_ref) || refRegexAny.test(dictText) });
-      const dict = dictRes.topic ? { topic: dictRes.topic, source: 'dictionary', blocked: false } : null;
+      // Two dictionary topics have no flow of their own: a shop change is answered
+      // by General questions (D-56, requote at the new shop), a payment question
+      // by General questions too (which hands over anything about money paid).
+      const DICT_TO_ROUTE = { CHANGE_OF_SHOP: 'GENERAL_QUESTION', PAYMENT: 'GENERAL_QUESTION' };
+      const dict = dictRes.topic ? { topic: DICT_TO_ROUTE[dictRes.topic] || dictRes.topic, source: 'dictionary', blocked: false } : null;
       const dictStrong = dict && DICT_STRONG.has(dict.topic) && dict.topic !== 'QUOTE' ? dict
                        : (dict && dict.topic === 'QUOTE' && !slots.booking_ref && !refRegexAny.test(dictText)) ? dict : null;
 

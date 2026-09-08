@@ -18,6 +18,13 @@
  *   startDate         optional YYYY-MM-DD, defaults to the booking's own start
  *   endDate           optional YYYY-MM-DD, defaults to the booking's own end
  *   lang              optional, defaults to "en"
+ *   newShop           optional (D-56): the resort, village or shop the customer wants
+ *                     INSTEAD of the booking's own shop. Free text, resolved by
+ *                     generate-quote exactly like a quote request ("Les Arcs 1950",
+ *                     "Intersport Val Thorens"). newShopId (Odin core id) also works.
+ *                     A booking cannot be moved between shops: the cart is built at
+ *                     the new shop, the customer books it, and the original booking
+ *                     is cancelled - the note says what that cancellation costs.
  *
  * Returns everything /api/generate-quote returns, plus:
  *   requote.sourceBooking     reference, status, shop, original period
@@ -269,6 +276,9 @@ function buildInternalNote(o) {
     lines.push('The original booking is cancelled and STAYS cancelled. This is a re-book, not a re-price.');
   }
   lines.push('');
+  if (o.shopChangeFrom) {
+    lines.push('SHOP CHANGE: from ' + o.shopChangeFrom + ' to ' + o.shopName + ' (' + o.resort + ').');
+  }
   lines.push('Shop: ' + o.shopName + ' (' + o.resort + ')');
   if (o.siteLabel) lines.push('Brand / site the link opens on: ' + o.siteLabel);
   lines.push('Original period: ' + o.originalFrom + ' to ' + o.originalTo);
@@ -463,6 +473,47 @@ function cancellationCost(booking, ref, startDay) {
  * So every refusal comes back 200, with an empty cart URL and an internal note
  * that says why. Callers test `found` / `carturl`, never the HTTP status.
  */
+/**
+ * D-56 - A SHOP CHANGE WRITTEN IN PROSE.
+ *
+ * "Could we move our booking to Arcs 1950", "wir mochten lieber in Solden
+ * abholen", "changer de magasin pour Intersport Val Thorens", "een winkel dichter
+ * bij ons hotel in Saalbach". Returns the place named after the request, or
+ * null when the message is not about changing shop. The place is resolved (and,
+ * when ambiguous or unknown, turned into a question) by generate-quote, exactly
+ * as for a quote request - so a rough cut is enough here.
+ */
+const SHOP_CHANGE_RE = new RegExp(
+  '(?:' +
+  // en
+  '(?:change|switch|move|transfer|swap)\\s+(?:the\\s+|my\\s+|our\\s+|this\\s+)?(?:booking|reservation|rental|hire|pick[- ]?up|collection)?\\s*(?:to\\s+(?:a|the|another|a different)\\s+)?(?:shop|store|location|resort|village|rental shop)?\\s*(?:in|at|to|near|closer to)\\s+' +
+  '|(?:a\\s+)?(?:different|another|other|new)\\s+(?:shop|store|rental shop|pick[- ]?up (?:point|location))\\s*(?:in|at|near|closer to)?\\s+' +
+  '|(?:pick(?:ing)?\\s*up|collect(?:ing)?)\\s+(?:the\\s+|our\\s+|my\\s+)?(?:skis?|equipment|gear)?\\s*(?:in|at|from)\\s+(?:a\\s+)?(?:different|another|other)\\s+(?:shop|store|place|resort)\\s*(?:in|at|near)?\\s+' +
+  // de
+  '|(?:anderen|anderes|andere)\\s+(?:shop|geschaft|laden|verleih|station|abholort)\\s+(?:in|bei|nahe)\\s+' +
+  '|(?:shop|geschaft|laden|verleih|abholort|buchung)\\s+(?:nach|auf|in)\\s+(?:einen?\\s+)?(?:anderen?\\s+)?(?:shop\\s+in\\s+)?' +
+  '|lieber\\s+in\\s+' +
+  // fr
+  '|(?:changer|transferer|deplacer)\\s+(?:de\\s+|la\\s+|ma\\s+|notre\\s+)?(?:magasin|reservation|boutique)?\\s*(?:pour|vers|a|au|aux|sur)\\s+(?:un\\s+autre\\s+magasin\\s+(?:a|de)\\s+)?' +
+  '|(?:un\\s+)?autre\\s+magasin\\s+(?:a|de|au|aux|sur|pres de)\\s+' +
+  // nl
+  '|(?:andere|verkeerde)\\s+(?:winkel|verhuurder|shop|locatie|afhaalpunt)\\s+(?:in|bij|te)\\s+' +
+  '|(?:winkel|boeking|reservering)\\s+(?:verplaatsen|wijzigen|veranderen)\\s+naar\\s+' +
+  ')([A-Za-z][A-Za-z0-9\'’ .\\-]{2,60}?)(?=[,.;:!?\\n)]|\\s+(?:because|as|since|so|which|where|instead|please|thanks|da|weil|denn|parce|car|omdat|want)\\b|$)',
+  'i');
+
+function detectShopChange(text) {
+  const t = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const m = SHOP_CHANGE_RE.exec(t);
+  if (!m || !m[1]) return null;
+  const place = m[1].replace(/\s+/g, ' ').replace(/^(?:the|le|la|les|der|die|das|de|het)\s+/i, '')
+    .replace(/\s+(?:abholen|abzuholen|ausleihen|mieten|ophalen|afhalen|huren|instead|please|bitte|svp)\b.*$/i, '').trim();
+  // A place name, not a sentence: at most five words and no booking word in it.
+  if (!place || place.split(' ').length > 5) return null;
+  if (/\b(?:booking|reservation|buchung|reservering|hotel|apartment|appartement|accommodation|unterkunft|hebergement)\b/i.test(place)) return null;
+  return place;
+}
+
 function refuse(res, ref, why) {
   return res.status(200).json({
     found: false,
@@ -506,6 +557,10 @@ export default async function handler(req, res) {
                  : (refRaw.match(REF_IN_TEXT) || [''])[0];
   const ref = refFound;
   const lang = String(params.lang || 'en').slice(0, 2).toLowerCase();
+  // D-56: a shop change is a requote at another shop.
+  const newShopText = String(params.newShop || params.new_shop || params.newshop ||
+                             params.newResort || params.new_resort || params.newresort || '').trim();
+  const newShopId = parseInt(params.newShopId || params.new_shop_id || params.newshopid, 10);
 
   // Rebuild the cart WITH the damage & theft protection.
   //
@@ -557,6 +612,15 @@ export default async function handler(req, res) {
     }
     return s.slice(0, cut);
   };
+  // The general-questions flow cannot name the new shop for us: its only free
+  // input is the customer's message (it arrives as `addons`). So when no explicit
+  // newShop is given, read a shop-change request out of the prose itself.
+  const shopFromProse = (!newShopText && !Number.isFinite(newShopId))
+    ? detectShopChange(ownWords([].concat(params.addons || params.addonsText || params.addonstext || params.message || [])
+                                 .map(x => String(x || '')).join(' ')))
+    : null;
+  const newShopEff = newShopText || shopFromProse || '';
+  const shopChangeRequested = !!newShopEff || Number.isFinite(newShopId);
   const addonsRaw = ownWords([].concat(params.addons || params.addon || params.extras || [])
                       .concat(params.addonsText || params.addonstext || [])
                       .map(x => String(x || '')).join(' '));
@@ -749,6 +813,13 @@ export default async function handler(req, res) {
                           ', which the original booking does not carry. The two totals are ' +
                           'therefore not comparable line for line - the difference is what was added.');
     }
+    if (shopChangeRequested) {
+      approximations.push('THIS CART IS AT A DIFFERENT SHOP than the booking (' +
+                          String((booking.shop && booking.shop.name) || 'original shop') +
+                          '). A booking cannot be moved from one shop to another: the customer books this ' +
+                          'cart at the new shop, then the original booking is cancelled - see the cancellation ' +
+                          'cost below. Prices differ between shops, so the two totals are not comparable.');
+    }
     if ((booking.coupons || []).length) {
       approximations.push('The original booking used a coupon. Any new coupon is sized by the quote itself and may differ.');
     }
@@ -756,8 +827,15 @@ export default async function handler(req, res) {
     // ── 3. Price it with the one and only pricing implementation we trust. ───
     const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
     const host = req.headers['x-forwarded-host'] || req.headers.host;
+    // D-56: at the customer's new shop when they asked for one, else at the booking's.
+    // generate-quote resolves the resort text itself and, when the name is
+    // ambiguous ("Courchevel" is three resorts) or unknown, answers with the ONE
+    // question to put to the customer - which we pass on below instead of a cart.
+    const shopTarget = shopChangeRequested
+      ? (Number.isFinite(newShopId) ? { shopId: newShopId } : { resort: newShopEff })
+      : { shopId };
     const quoteBody = JSON.stringify({
-      shopId,
+      ...shopTarget,
       startDate,
       endDate,
       lang,
@@ -814,6 +892,21 @@ export default async function handler(req, res) {
         body: quoteBody,
       });
       const parsed = await quoteRes.json().catch(() => null);
+      if (shopChangeRequested && parsed && parsed.action === 'ASK' && parsed.question) {
+        // The new shop could not be pinned down. Not a failure: a question.
+        const q = String(parsed.question);
+        return res.status(200).json({
+          found: false,
+          ask: true,
+          shopChange: true,
+          question: q,
+          candidates: parsed.candidates || [],
+          cartUrl: '', carturl: '',
+          cartOnlinePrice: null, cartonlineprice: null,
+          internalNote: 'SHOP CHANGE FOR ' + ref + ' - QUESTION FOR THE CUSTOMER, no cart yet: ' + q,
+          internalnote: 'SHOP CHANGE FOR ' + ref + ' - QUESTION FOR THE CUSTOMER, no cart yet: ' + q,
+        });
+      }
       if (quoteRes.ok && parsed && parsed.cartUrl) quote = parsed;
       else if (attempt === 0) console.warn('[requote-booking] generate-quote attempt 1 unusable, retrying', quoteRes.status);
     }
@@ -828,6 +921,7 @@ export default async function handler(req, res) {
     const internalNote = buildInternalNote({
       reference: ref,
       shopName: quote.shopName,
+      shopChangeFrom: shopChangeRequested ? String((booking.shop && booking.shop.name) || 'original shop') : null,
       siteLabel,
       resort: quote.resort,
       originalFrom,
@@ -910,6 +1004,9 @@ export default async function handler(req, res) {
       platformLabel: siteLabel,
       platformlabel: siteLabel,
       requote: {
+        shopChange: shopChangeRequested
+          ? { requested: newShopEff || String(newShopId), fromProse: !!shopFromProse, from: (booking.shop && booking.shop.name) || null, to: quote.shopName }
+          : null,
         sourceBooking: {
           bookingReference: booking.bookingReference || ref,
           bookingId: booking.id || null,
