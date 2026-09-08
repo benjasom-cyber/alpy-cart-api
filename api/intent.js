@@ -66,6 +66,22 @@ const NEVER_ANSWER = [
 // Alpy's own vocabulary. Order matters: the first match wins, so the most
 // specific patterns come first.
 const KEYWORDS = [
+      // A QUESTION ABOUT WHAT WOULD HAPPEN IS NOT A REQUEST FOR IT TO HAPPEN (D-51).
+      //
+      // 546560: "we would like to rent skis from 28 February... what happens if
+      // we have to cancel?" - routed CANCELLATION, because "stornieren" is in
+      // the sentence. 563978: "if I take AlpinSafety Plus, would I be refunded if
+      // I break my leg?" - routed CANCELLATION_AFTER, because injury and refund
+      // are both there. Neither customer has a booking; both are deciding
+      // whether to make one. A cancellation flow asking them for a reference is
+      // the wrong answer to the right question, given at the worst moment.
+      //
+      // Three things must all be true: a conditional ("what if", "wenn wir",
+      // "si je"), a cancellation/injury/refund word, and NO booking - no
+      // reference and no "my booking". A customer with a booking who asks "what
+      // if I cancel" is still asking about a policy, but their case can be
+      // answered on their booking and is left to the rules below.
+      { topic: 'GENERAL_QUESTION', re: /^(?![\s\S]*\bB(?=[123456789A-Z]{5}\b)[A-Z]*\d[123456789A-Z]*\b)(?=[\s\S]*\b(?:what\s+(?:happens?|would\s+happen)\b[^.?!]{0,20}\bif|what\s+if|in\s+(?:the\s+)?case\s+(?:of|we|i)\b|was\s+passiert\b[^.?!]{0,20}\b(?:wenn|falls)|was\s+(?:ist|w[aä]re)\s+wenn|falls\s+(?:wir|ich|man)\b|wenn\s+(?:wir|ich|man)\b[\s\S]{0,50}\b(?:m[uü]ss(?:en|te|ten)|sollte|k[oö]nnte)\b|que\s+se\s+passe|qu.arrive|si\s+(?:je|nous|on)\b[\s\S]{0,50}\b(?:devions|devais|devions|dois|doit|devait|serais?|serions|pourrais?|pourrions)\b|au\s+cas\s+o[uù]|je\s+serais\s+rembours|serais-je|serions-nous|si\s+en\s+prenant|would\s+(?:i|we)\s+(?:be\s+)?(?:get\s+)?(?:refunded|reimbursed|entitled)|is\s+(?:it|this|that)\s+refundable|refundable|remboursable|erstattungsf[aä]hig|wat\s+(?:gebeurt|als)\b|cosa\s+succede\s+se|qu[eé]\s+pasa\s+si)\b)(?=[\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|annuler\w*|bless\w*|injur\w*|verletz\w*|krank\w*|\bill\b|sick|malad\w*|refund\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|terugbetal\w*|rimbors\w*)\b)/i },
       // THE SAME BOOKING MADE TWICE (582032).
       //
       // "I have accidentally made a duplicate booking when making payment for
@@ -128,7 +144,7 @@ const KEYWORDS = [
       // Excluded: anyone who already has a booking (a reference, "my booking",
       // "meine Buchung") - for them the depot question is a real depot request.
       { topic: 'QUOTE',
-        re: /^(?![\s\S]*(?:\b[Bb][0-9A-Za-z]{5}\b[\s\S]{0,40}\b(?:booking|buchung|r[eé]servation|prenotazione|reserva)\b|\b(?:my|our|meine?|unsere?|ma|notre|mon)\s+(?:booking|buchung|r[eé]servation|reservierung|prenotazione|reserva)\b|\bbooking\s+(?:reference|number|code)\b|\bbuchungsnummer\b|\bnum[eé]ro\s+de\s+r[eé]servation\b))(?=[\s\S]*\b(?:angebot|gesamtangebot|offerte|offer\b|quote|quotation|devis|price|prices|preis\w*|prix|prezzo|precio|kost\w*|tarif\w*|how\s+much|wie\s+viel|combien|rate\b|rates\b|gruppenrabatt|group\s+discount|rabatt|discount|r[eé]duction|fr[uü]hbuch\w*|early\s*[- ]?book\w*)\b)(?=[\s\S]*(?:\b\d{1,3}\s*(?:erwachsene\w*|adults?|personen|persons?|people|pax|personnes|adultes|skifahrer|skiers?|kinder|children)\b|\b(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie)\b|\b\d{1,2}\s*(?:skitage|days?|tage|jours?|giorni|d[ií]as)\b|\b(?:from|vom|du|dal|desde)\s+\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b(?:angebot|gesamtangebot|offerte|offer|quote|quotation|devis|offre)\b))(?=[\s\S]*\b(?:ausleihen|leihen|mieten|verleih|ausr[uü]stung|rent|renting|rental|hire|hiring|louer|location|noleggi\w*|alquil\w*|skiausr[uü]stung|skis?\b|ski\b|snowboards?|equipment|mat[eé]riel|attrezzatura|equipo)\b)/i },
+        re: /^(?![\s\S]*(?:\b[Bb][0-9A-Za-z]{5}\b[\s\S]{0,40}\b(?:booking|buchung|r[eé]servation|prenotazione|reserva)\b|\b(?:booking|buchung|r[eé]servation|reservation|reservering|boeking|reference|referenz|prenotazione|reserva)\b[\s\S]{0,40}\bB(?=[123456789A-Z]{5}\b)[A-Z]*\d[123456789A-Z]*\b|\b(?:my|our|meine?|unsere?|ma|notre|mon|current|existing|the\s+below|below|bestehende|aktuelle|onderstaande|mijn|onze)\s+(?:online\s+)?(?:booking|buchung|r[eé]servation|reservation|reservierung|reservering|boeking|prenotazione|reserva)\b|\bbooking\s+(?:reference|number|code)\b|\bbuchungsnummer\b|\bboekingsnummer\b|\breserveringsnummer\b|\bnum[eé]ro\s+de\s+r[eé]servation\b|\b(?:have\s+|already\s+)?(?:made|placed)\s+(?:a\s+|the\s+)?(?:group\s+|online\s+)?(?:booking|reservation)\b|\bbooked\s+(?:with|through|via|on)\s+(?:you|alpy|your)|\bhabe\w*\s+(?:bereits\s+|schon\s+)?(?:[\w\s]{0,30}\s)?gebucht\b|\bj.ai\s+(?:d[eé]j[aà]\s+)?r[eé]serv[eé]\b|\bheb\s+(?:al\s+)?(?:[\w\s]{0,20}\s)?geboekt\b))(?=[\s\S]*\b(?:angebot|gesamtangebot|offerte|offer\b|quote|quotation|devis|price|prices|preis\w*|prix|prezzo|precio|kost\w*|tarif\w*|how\s+much|wie\s+viel|combien|rate\b|rates\b|gruppenrabatt|group\s+discount|rabatt|discount|r[eé]duction|fr[uü]hbuch\w*|early\s*[- ]?book\w*)\b)(?=[\s\S]*(?:\b\d{1,3}\s*(?:erwachsene\w*|adults?|personen|persons?|people|pax|personnes|adultes|skifahrer|skiers?|kinder|children)\b|\b(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie)\b|\b\d{1,2}\s*(?:skitage|days?|tage|jours?|giorni|d[ií]as)\b|\b(?:from|vom|du|dal|desde)\s+\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b(?:angebot|gesamtangebot|offerte|offer|quote|quotation|devis|offre)\b))(?=[\s\S]*\b(?:ausleihen|leihen|mieten|verleih|ausr[uü]stung|rent|renting|rental|hire|hiring|louer|location|noleggi\w*|alquil\w*|skiausr[uü]stung|skis?\b|ski\b|snowboards?|equipment|mat[eé]riel|attrezzatura|equipo)\b)/i },
 
       // A DOWNGRADE IS A PARTIAL CANCELLATION, NOT A QUOTE AND NOT A MODEL CHANGE.
       //
@@ -263,8 +279,8 @@ const KEYWORDS = [
       // decided before the whole-booking rule gets a look. A message that says
       // "whole", "entire", "toute la", "ganze" steps aside and stays full.
       { topic: 'PARTIAL_CANCELLATION',
-        re: /^(?![\s\S]*\b(?:cover\w*|couvre|couvert|include\w*|inclu\w*|what\s+is|what\s+does|c.est\s+quoi|was\s+deckt|abgedeckt|kostet|co[uû]te|cost\w*)\b)(?![\s\S]*\b(?:whole|entire|complete|toute\s+la|toute\s+ma|enti[eè]re|ganze|gesamte|komplette|intera|completa|toda\s+la)\s+(?:booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b)(?![\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*)\s+(?:of\s+)?(?:my|the|our|this|ma|la|notre|cette|meine|die|unsere|la\s+mia|mi)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b[\s\S]{0,60}\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b|\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b[\s\S]{0,40}\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b))/i },
-      { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|these|those|this|that|both|all)?\s*(?:\w+\s+){0,2}(bookings?|reservations?|orders?|rentals?)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation|ations|[eé]e?s?)\s+(?:de\s+)?(?:ma|mes|la|les|notre|nos|cette|ces|deux)?\s*(?:\w+\s+){0,2}r[eé]servations?|storno\w*|stornier\w*)\b/i },
+        re: /^(?![\s\S]*\b(?:cover\w*|couvre|couvert|include\w*|inclu\w*|what\s+is|what\s+does|c.est\s+quoi|was\s+deckt|abgedeckt|kostet|co[uû]te|cost\w*)\b)(?![\s\S]*\b(?:whole|entire|complete|toute\s+la|toute\s+ma|enti[eè]re|ganze|gesamte|komplette|intera|completa|toda\s+la)\s+(?:booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b)(?![\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*)\s+(?:of\s+)?(?:my|the|our|this|ma|la|notre|cette|meine|die|unsere|la\s+mia|mi)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar|uithalen|verwijder\w*|afzeggen|annuler(?:en|ing)|no\s+longer\s+(?:need|require|want)\w*|don.?t\s+need|hoef\w*\s+geen|niet\s+meer\s+nodig|brauch\w*\s+(?:wir|ich)?\s*(?:keine?|nicht\s+mehr)|nicht\s+mehr\s+ben[oö]tig\w*|n.avons\s+plus\s+besoin|n.ai\s+plus\s+besoin)\b[\s\S]{0,60}\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|schoenen|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b|\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|schoenen|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b[\s\S]{0,40}\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar|uithalen|verwijder\w*|afzeggen|any\s*more|anymore|nicht\s+mehr|plus\s+besoin)\b))/i },
+      { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|these|those|this|that|both|all)?\s*(?:\w+\s+){0,2}(bookings?|reservations?|orders?|rentals?)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation|ations|[eé]e?s?)\s+(?:de\s+)?(?:ma|mes|la|les|notre|nos|cette|ces|deux)?\s*(?:\w+\s+){0,2}r[eé]servations?|storno\w*|stornier\w*|stonier\w*|annuler(?:en|ing)\b|annulering|geannuleerd|cancelen|annulla(?:re|zione)|cancellare|disdire|disdetta)\b/i },
       // A double booking IS a cancellation request, and it is one of the most
       // common ones: the payment page errored, the customer tried again, and now
       // they hold two. Nothing about that sentence says "cancel my booking" in
@@ -402,6 +418,16 @@ const INTERNAL_DOMAINS = [
       /@2begroup/i,
       /@alpinresorts/i,
       /@skirent-booking/i,
+      // Partner chains. Measured on the 2025-26 season mail: a shop writing from
+      // its chain address is asking about ITS bookings, its opening hours or its
+      // back office (517143, 563961, 564190), never about a rental of its own.
+      // No customer writes from these domains.
+      /@hervis\./i,
+      /@intersport\./i,
+      /@sport2000\./i,
+      /@skiset\./i,
+      /@skimium\./i,
+      /@sportbrugger\./i,
 ];
 
 /**
@@ -412,6 +438,12 @@ const INTERNAL_DOMAINS = [
  * quotation of an older message and proves nothing about this sender.
  */
 const FORWARD_PREFIX = /^\s*(WG|TR|FW|FWD)\s*:/i;
+
+// The subjects of the emails WE send to a customer after a booking, as the
+// customer's mail client re-labels them when forwarding. Read from the season
+// corpus, one per platform language: alpy.com, pistenfuchs, slopefox,
+// skidiscount, snowbrainer all use the same templates.
+const OWN_CONFIRMATION_SUBJECT = /(ski\s+rental\s+booking\s+confirmation|skiverleih-?\s*buchungsbest[aä]tigung|boekingsbevestiging\s+van\s+je\s+skiverhuur|bevestiging\s+van\s+de\s+skiverhuur|confirmation\s+de\s+(?:votre\s+)?r[eé]servation\s+de\s+location\s+de\s+ski|conferma\s+(?:della\s+)?prenotazione|confirmaci[oó]n\s+de\s+(?:tu\s+|su\s+)?reserva|your\s+gear\s+is\s+booked|je\s+uitrusting\s+is\s+geboekt|deine\s+ausr[uü]stung\s+ist\s+gebucht|ton\s+[eé]quipement\s+est\s+r[eé]serv[eé]|coupon\s+has\s+been\s+updated|\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b)/i;
 
 function detectInternalSender(message, senderEmail, subject) {
       const from = String(senderEmail || '').trim();
@@ -428,14 +460,30 @@ function detectInternalSender(message, senderEmail, subject) {
       // booking by name. The booking was not theirs to cancel.
       //
       // The subject is the one place a forward always announces itself.
-      if (FORWARD_PREFIX.test(String(subject || ''))) {
+      //
+      // BUT A CUSTOMER FORWARDING OUR OWN CONFIRMATION IS THE CUSTOMER (D-51).
+      //
+      // Measured on 586 mails of the 2025-26 season: 45 carried a forward
+      // prefix, and 40 of them were customers forwarding "Your ski rental
+      // booking confirmation: BXXXXX" with their request written on top -
+      // "please cancel this booking", "I made it from the 20th until the 27th
+      // but our last day is the 26th". Blocking every forward silenced SKIBOT
+      // on about one mail in twelve, and on the very mails where the customer
+      // had done us the favour of quoting their reference.
+      //
+      // The subject of our own confirmation email is unmistakable, in every
+      // language we send it in. A forward of THAT is answered like any reply;
+      // a forward of anything else is still left to a person.
+      const subj = String(subject || '');
+      const isOwnConfirmation = OWN_CONFIRMATION_SUBJECT.test(subj);
+      if (FORWARD_PREFIX.test(subj) && !isOwnConfirmation) {
               return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
       }
 
       // Only the first line of the body is eligible - a forward prefix lives
       // there or nowhere. Scanning the whole body would match every quoted thread.
       const firstLine = String(message || '').split(/\r?\n/).find(l => l.trim() !== '') || '';
-      if (FORWARD_PREFIX.test(firstLine)) {
+      if (FORWARD_PREFIX.test(firstLine) && !isOwnConfirmation) {
               return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
       }
 
@@ -499,7 +547,7 @@ function detectFromKeywords(message) {
  */
 const MUTATING_TOPICS = ['CANCELLATION', 'PARTIAL_CANCELLATION', 'DATE_CHANGE', 'PERSONAL_INFO', 'DEPOT_SWITCH', 'DUPLICATE_BOOKING'];
 
-function mutatingTopicsIn(message) {
+function mutatingTopicsIn(message, llmTopic) {
       const m = stripQuotedAndSignature(String(message || ''));
       if (m.trim().length < 3) return [];
       const found = [];
@@ -508,6 +556,40 @@ function mutatingTopicsIn(message) {
               if (found.indexOf(k.topic) > -1) continue;
               if (k.re.test(m)) found.push(k.topic);
       }
+      return collapseSameRequest(found, llmTopic);
+}
+
+/**
+ * TWO KEYWORD HITS ARE NOT ALWAYS TWO REQUESTS (D-51).
+ *
+ * Measured on the 2025-26 season corpus: 21 of 521 customer mails lit two
+ * mutating topics at once, and in 17 of them it was one request said with the
+ * vocabulary of two rules. "Please cancel the duplicate booking BY1ELT" is a
+ * DUPLICATE_BOOKING, and it says "cancel" because that is what one does with a
+ * duplicate. "Remove the boots for Andreas from the reservation" is a
+ * PARTIAL_CANCELLATION, and it says "reservation" because that is where the
+ * boots are. Every one of those was handed over as "two different changes" -
+ * the guard built for 582063 firing on messages that asked for one thing.
+ *
+ * So the pairs that are one request collapse to the one topic:
+ *   DUPLICATE_BOOKING + CANCELLATION          -> DUPLICATE_BOOKING
+ *   PARTIAL_CANCELLATION + CANCELLATION       -> PARTIAL_CANCELLATION
+ *   CANCELLATION + DATE_CHANGE                -> whichever the model read, when
+ *                                                it read one of the two. "I
+ *                                                chose the wrong dates - change
+ *                                                them or cancel" is one request
+ *                                                with two acceptable outcomes,
+ *                                                and the model sees the whole
+ *                                                sentence; the keywords see two
+ *                                                verbs.
+ * Anything else stays as found, and the two-change guard keeps its job.
+ */
+function collapseSameRequest(found, llmTopic) {
+      if (found.length !== 2) return found;
+      const has = t => found.indexOf(t) > -1;
+      if (has('DUPLICATE_BOOKING') && has('CANCELLATION')) return ['DUPLICATE_BOOKING'];
+      if (has('PARTIAL_CANCELLATION') && has('CANCELLATION')) return ['PARTIAL_CANCELLATION'];
+      if (has('CANCELLATION') && has('DATE_CHANGE') && (llmTopic === 'CANCELLATION' || llmTopic === 'DATE_CHANGE')) return [llmTopic];
       return found;
 }
 
@@ -1338,6 +1420,12 @@ function stripQuotedAndSignature(body) {
               const m = t.match(re);
               if (m && m.index > 0) t = t.slice(0, m.index);
       }
+      // The line items of OUR confirmation, when the customer pastes them in
+      // (523428: "Black/Gold (5*) Ski + DEPOT, MODEL_CHANGE"). Those capitals
+      // are addon codes, not a request for a depot or a model change - the
+      // customer was correcting a height. Removed here, so no keyword rule
+      // reads them; the reference extraction never needed them.
+      t = t.replace(/\+\s*DEPOT\b|\bMODEL_CHANGE\b|\bDEPOT\s*(?=,\s*MODEL_CHANGE)/g, ' ');
       return t.trim();
 }
 
@@ -1996,7 +2084,7 @@ export default async function handler(req, res) {
                            'designated - do not ask them which. Only cancellation runs on ' +
                            'several bookings at once, so handle these by hand, together, ' +
                            'and reply once.';
-      } else if (mutatingTopicsIn(message).length > 1) {
+      } else if (mutatingTopicsIn(message, llmTopic).length > 1) {
               // ONE MESSAGE, TWO CHANGES TO THE SAME BOOKING (582063).
               //
               // "Cancel person 1: test test AND shift the dates by one day" went
@@ -2009,7 +2097,7 @@ export default async function handler(req, res) {
               // So when a message asks for two different changes, nobody runs.
               // Only booking-changing topics count - a quote next to a question is
               // read-only and stays automatic.
-              const both = mutatingTopicsIn(message);
+              const both = mutatingTopicsIn(message, llmTopic);
 
               // ONE PAIR IS CHAINED. EVERY OTHER PAIR STILL STOPS.
               //
@@ -2076,6 +2164,30 @@ export default async function handler(req, res) {
       }
 
       // PAID, AND NOTHING RECEIVED (582095). A person, and quickly.
+      // A "P" CODE IS A PAYMENT, NOT A BOOKING (D-51).
+      //
+      // 517123 "Bestellnummer PDHF75 ... Geld abgebucht, keine Bestaetigung",
+      // 517129 "Vorgang Nr. PAB1J2 ... Paypal belastet", 546241 "Fehlende
+      // Buchungsbestaetigung PGHUPC". Three customers of the 2025-26 season
+      // quoted a six-character code starting with P, and none of the three
+      // exists in Odin as a booking: the code is the reference of the PAYMENT
+      // the checkout gave them, and the booking behind it was never created.
+      // Every one of them had been charged. Asking such a customer for "the
+      // booking reference" - the only thing a flow could do - sends them back
+      // the same P code and round again.
+      const pCode = (stripQuotedAndSignature(String(message || '')) + ' ' + String(thread.subject || ''))
+        .match(/\bP[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/);
+      if (pCode && !slots.booking_ref) {
+              action = 'HANDOVER';
+              escalation = 'THE CUSTOMER QUOTES ' + pCode[0] + ', WHICH IS A PAYMENT REFERENCE, NOT A ' +
+                           'BOOKING REFERENCE: no booking with that code exists. The checkout took a ' +
+                           'payment and the booking behind it was never created (or its confirmation ' +
+                           'never went out). Look the customer up by email in Odin; if there is no ' +
+                           'booking, the payment has to be traced and refunded or the booking created ' +
+                           'by hand. Do not ask them for a booking reference - this is the only one ' +
+                           'they have.' + (escalation ? ' Also relevant: ' + escalation : '');
+      }
+
       if (paidButNoBooking(message)) {
               action = 'HANDOVER';
               escalation = 'THE CUSTOMER SAYS THEY WERE CHARGED BUT HAVE NO BOOKING REFERENCE AND ' +
