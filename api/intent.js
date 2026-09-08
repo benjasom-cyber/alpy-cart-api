@@ -37,6 +37,11 @@
  */
 
 import { SLOTS, ROUTES, TOPICS, checkSlots } from './_slots.js';
+import { decideIntent as dictDecide, STRONG_TOPICS as DICT_STRONG } from './_intents.js';
+
+// A booking reference anywhere in a text, case-sensitive (D-53: BWMWYY has no digit, and
+// the Dutch word BEDRAG is not a reference). Shared by the dictionary layer.
+const refRegexAny = /\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/;
 
 const CORS = {
       'Access-Control-Allow-Origin': '*',
@@ -1980,13 +1985,40 @@ export default async function handler(req, res) {
                                 'DUPLICATE_BOOKING'];
       const modelSwitches = (base) => llm && llm.topic !== base.topic && SWITCHES_SUBJECT.includes(llm.topic);
 
+      // THE INTENT DICTIONARY (D-55) - api/_intents.js.
+      //
+      // Half of the mail reaches no KEYWORDS rule and rests on the model alone.
+      // The dictionary is the vocabulary of two seasons of customer mail, per
+      // topic and per language, scored on the message. It sits between the
+      // keywords (incident-born, always first) and the model:
+      //   - a STRONG topic (measured >= 84 % precision on the labelled corpus:
+      //     cancellation, cancellation after start, voucher, quote) wins over the
+      //     model when the dictionary is sure (score and margin thresholds);
+      //   - any other topic only breaks a tie: it decides when the model is
+      //     silent or says OTHER, and is otherwise handed to the transcript as a
+      //     hint for whoever reads the ticket.
+      // The dictionary never sees a pending or offered topic: an answer to our
+      // own question keeps its place exactly as before.
+      // The dictionary corrects the model's VAGUENESS, never its specific action
+      // calls: a model that says PARTIAL_CANCELLATION or DATE_CHANGE has read
+      // something the word "cancel" alone does not carry, and cancelling a whole
+      // booking on a dictionary score is the one mistake this layer must never make.
+      const DICT_MAY_OVERRIDE = new Set(['OTHER', 'GENERAL_QUESTION', 'QUOTE', 'REQUOTE']);
+      const dictText = stripQuotedAndSignature(String(message || ''));
+      const dictRes = dictDecide(dictText, null, { hasRef: !!(slots.booking_ref) || refRegexAny.test(dictText) });
+      const dict = dictRes.topic ? { topic: dictRes.topic, source: 'dictionary', blocked: false } : null;
+      const dictStrong = dict && DICT_STRONG.has(dict.topic) && dict.topic !== 'QUOTE' ? dict
+                       : (dict && dict.topic === 'QUOTE' && !slots.booking_ref && !refRegexAny.test(dictText)) ? dict : null;
+
       let decision;
       if (kw) decision = kw;
       else if (pend && modelSwitches(pend)) decision = { topic: llm.topic, source: 'llm_over_pending', blocked: false };
       else if (pend) decision = pend;
       else if (off && modelSwitches(off)) decision = { topic: llm.topic, source: 'llm_over_offered', blocked: false };
       else if (off) decision = off;
+      else if (dictStrong && (!llm || (llm.topic !== dictStrong.topic && DICT_MAY_OVERRIDE.has(llm.topic)))) decision = { ...dictStrong, source: llm ? 'dictionary_over_llm' : 'dictionary' };
       else if (llm && llm.topic !== 'OTHER') decision = llm;
+      else if (dict) decision = dict;
       else if (nativeTopic && firstTurn) decision = nativeTopic;
       else if (llm) decision = llm;
       else decision = { topic: 'OTHER', source: 'none', blocked: false };
@@ -2450,6 +2482,7 @@ export default async function handler(req, res) {
               topic,
               route: ROUTES[topic] ? ROUTES[topic].flow : null,
               source: decision.source,
+              dictionary: (dictRes.scores || []).slice(0, 3).map(x => x.topic + ':' + x.score),
               slots,
               ready: check.ready,
               missing: check.missing,
