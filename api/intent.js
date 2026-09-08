@@ -79,8 +79,23 @@ const KEYWORDS = [
       // Both halves are required: the idea of doubling AND the idea of a
       // booking or a payment. "I paid twice for the boots" is a billing
       // question, not two bookings, so the second half names the booking.
+      // TWICE MUST MEAN TWICE BOOKED, NOT TWICE ASKED (582095).
+      //
+      // "I have already enquired about this using the chat bot which assured me
+      // a ticket had been raised with the support team TWICE but heard nothing"
+      // - a customer who paid and never got a confirmation, and the flow that
+      // cancels and refunds a duplicate booking started up. Three separate
+      // lookaheads, each satisfied by a different sentence: twice (the chatbot),
+      // booking reference (the thing he never received), payment (taken). None
+      // of them were about each other.
+      //
+      // So the doubling word and the booking word must now be NEAR each other -
+      // 120 characters, either order - and two shapes are excluded outright:
+      // a doubling word that counts how often they CONTACTED us, and a message
+      // that says a confirmation was NOT received, which is the opposite of
+      // holding two of them.
       { topic: 'DUPLICATE_BOOKING',
-        re: /(?=[\s\S]*\b(?:duplicate|duplicated|duplicat\w*|doubl\w*|twice|two\s+times|2\s+times|deux\s+fois|en\s+double|doppelt|zweimal|due\s+volte|dos\s+veces|same\s+booking\s+again|by\s+mistake|par\s+erreur|aus\s+versehen|versehentlich|accidentally|accidentellement)\b)(?=[\s\S]*\b(?:booking|bookings|reservation|reservations|r[eé]servations?|buchung\w*|prenotazion\w*|reservas?|order|commande|bestellung)\b)(?=[\s\S]*\b(?:refund\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|rimbors\w*|reembols\w*|cancel\w*|annul\w*|stornier\w*|charged|d[eé]bit[eé]\w*|abgebucht|paid|pay[eé]\w*|payment|paiement|zahlung)\b)/i },
+        re: /^(?![\s\S]*\b(?:twice|two\s+times|2\s+times|deux\s+fois|zweimal|due\s+volte|dos\s+veces)\b[\s\S]{0,70}\b(?:ticket\w*|chat\w*|bot|e-?mail\w*|contact\w*|call\w*|phon\w*|rais\w*|ask\w*|enquir\w*|wrote|writ\w*|messag\w*|reminder\w*|relanc\w*|appel\w*|[eé]crit|demand\w*|support\s+team)\b)(?![\s\S]*\b(?:ticket\w*|chat\w*|bot|e-?mail\w*|contact\w*|call\w*|phon\w*|rais\w*|ask\w*|enquir\w*|wrote|writ\w*|messag\w*|reminder\w*|relanc\w*|appel\w*|[eé]crit|demand\w*)\b[\s\S]{0,40}\b(?:twice|two\s+times|2\s+times|deux\s+fois|zweimal|due\s+volte|dos\s+veces)\b)(?![\s\S]*\b(?:not|never|no|n.ai\s+pas|jamais|nicht|kein\w*|aucun\w*)\b[\s\S]{0,50}\b(?:received|receiv\w*|re[cç]u\w*|erhalten|got|bekommen)\b[\s\S]{0,80}\b(?:confirmation|booking\s+reference|voucher|buchungsnummer|num[eé]ro\s+de\s+r[eé]servation)\b)(?=[\s\S]*(?:\b(?:duplicate|duplicated|duplicat\w*|doubl\w*|twice|two\s+times|2\s+times|deux\s+fois|en\s+double|doppelt|zweimal|due\s+volte|dos\s+veces|same\s+booking\s+again|by\s+mistake|par\s+erreur|aus\s+versehen|versehentlich|accidentally|accidentellement)\b[\s\S]{0,120}\b(?:booking|bookings|reservation|reservations|r[eé]servations?|buchung\w*|prenotazion\w*|reservas?|order|commande|bestellung)\b|\b(?:booking|bookings|reservation|reservations|r[eé]servations?|buchung\w*|prenotazion\w*|reservas?|order|commande|bestellung)\b[\s\S]{0,120}\b(?:duplicate|duplicated|duplicat\w*|doubl\w*|twice|two\s+times|2\s+times|deux\s+fois|en\s+double|doppelt|zweimal|due\s+volte|dos\s+veces|same\s+booking\s+again|by\s+mistake|par\s+erreur|aus\s+versehen|versehentlich|accidentally|accidentellement)\b))(?=[\s\S]*\b(?:refund\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|rimbors\w*|reembols\w*|cancel\w*|annul\w*|stornier\w*|charged|d[eé]bit[eé]\w*|abgebucht|paid|pay[eé]\w*|payment|paiement|zahlung)\b)/i },
 
       // STOLEN OR DAMAGED EQUIPMENT IS A CLAIM, NOT A LOCKER QUESTION.
       //
@@ -139,12 +154,12 @@ const KEYWORDS = [
 
       // The depot rule must never fire on a theft that merely happened in a
       // locker: the rule above already took those.
-      { topic: 'DEPOT_SWITCH', re: /^(?![\s\S]*\b(?:stolen|theft|thie(?:f|ves)|vol[eé]e?s?\b|gestohlen|diebstahl|damaged|cass[eé]e?s?\b|besch[aä]digt|claim\b|sinistre)\b)[\s\S]*\b(d[eé]p[oô]t|consigne|overnight storage|locker|garde\s+du\s+mat[eé]riel|store\s+(my|the)\s+(skis|equipment)|laisser\s+(les|mes)\s+skis)\b/i },
+      { topic: 'DEPOT_SWITCH', re: /^(?![\s\S]*\b(?:stolen|theft|thie(?:f|ves)|vol[eé]e?s?\b|gestohlen|diebstahl|damaged|cass[eé]e?s?\b|besch[aä]digt|claim\b|sinistre)\b)[\s\S]*\b(d[eé]p[oô]t|consigne|casier|bagagerie|overnight storage|locker|ski\s?room|local\s+[aà]\s+skis|garde\s+du\s+mat[eé]riel|store\s+(?:our|my|the)\s+(?:skis|equipment|gear)|leave\s+(?:our|my|the)\s+(?:skis|equipment|gear)|laisser\s+(?:les|mes|le|mon|notre|nos)\s+(?:skis|mat[eé]riel|[eé]quipement|affaires))\b/i },
       // "change the model of skis" is a model change too. The rule used to
       // require the two words welded together ("model change") or "switch my
       // skis", so a customer writing the sentence the natural way matched
       // nothing at all.
-      { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|change\s+(?:the\s+|my\s+)?model|changement\s+d.?[eé]quipement|changer\s+(?:le\s+)?mod[eè]le|modell\s*(?:wechsel|tausch)|modell\s+(?:zu\s+)?[aä]ndern|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard))\b/i },
+      { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|change\s+(?:the\s+|my\s+)?model|changement\s+d.?[eé]quipement|changer\s+(?:le\s+)?mod[eè]le|modell\s*(?:wechsel|tausch)|modell\s+(?:zu\s+)?[aä]ndern|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard)|changer\s+de\s+(?:skis?|mat[eé]riel|[eé]quipement|snowboard|planche)|change\s+(?:our|my|the)\s+(?:skis|equipment|gear)|mod[eè]le\s+ne\s+(?:nous\s+|me\s+)?convient\s+pas)\b/i },
       { topic: 'VOUCHER_RESEND', re: /\b(voucher|bon\s+de\s+r[eé]servation|renvoyer\s+le\s+voucher|resend\s+(the\s+)?voucher|confirmation\s+email\s+again)\b/i },
       // THE DOCUMENTS OF A PROTECTION ARE VOUCHERS TOO (581968).
       //
@@ -497,6 +512,82 @@ function mutatingTopicsIn(message) {
 }
 
 /**
+ * A BIG GROUP IN FRANCE IS NEVER QUOTED BY US (582110).
+ *
+ * Benjamin's rule: more than fifty people in France goes to Skitruck
+ * (alpy@skitruck.fr, Fabien in copy), never to an automatic quote. The rule was
+ * implemented, but in the wrong place - inside the Quote Generator, which only
+ * runs once the gatekeeper has everything it needs. A request for 68 people in
+ * Val Thorens arrived with dates missing, so the gatekeeper asked its slot
+ * question first and answered about boots, helmets and damage cover. The group
+ * rule never got a turn.
+ *
+ * So it moves here, in front of the ASK. The country comes from the shop table
+ * we already download for place resolution, matched on the town the customer
+ * named - and the town lookup only happens once a headcount above fifty has
+ * been found, so a loose town match can never affect an ordinary message.
+ */
+const BIG_GROUP_MIN = 50;
+
+/** The largest headcount the customer states next to a word for people. */
+function statedGroupSize(message) {
+  const m = deaccent(stripQuotedAndSignature(String(message || '')));
+  const WORD = 'personnes?|people|persons?|pax|adultes?|adults?|skieurs?|skiers?|participants?|teilnehmer|personen|erwachsene|persone|personas';
+  let best = 0;
+  const forward = new RegExp('\\b(\\d{2,4})\\s*(?:' + WORD + ')\\b', 'gi');
+  const backward = new RegExp('\\b(?:groupe|group|gruppe|gruppo|grupo)\\s+(?:de\\s+|of\\s+|von\\s+)?(\\d{2,4})\\b', 'gi');
+  for (const re of [forward, backward]) {
+    let hit;
+    while ((hit = re.exec(m)) !== null) {
+      const n = parseInt(hit[1], 10);
+      if (Number.isFinite(n) && n > best && n < 5000) best = n;
+    }
+  }
+  return best;
+}
+
+async function franceBigGroup(message) {
+  const size = statedGroupSize(message);
+  if (size <= BIG_GROUP_MIN) return null;
+  await loadShopPlaces();
+  if (!_shopTowns || !_shopTowns.size) return { size, town: '', country: '' };
+  const hay = deaccent(stripQuotedAndSignature(String(message || '')));
+  let found = null;
+  for (const [town, country] of _shopTowns) {
+    const at = hay.indexOf(town);
+    if (at < 0) continue;
+    const before = at === 0 ? ' ' : hay.charAt(at - 1);
+    const after = hay.charAt(at + town.length) || ' ';
+    if (/[a-z0-9]/.test(before) || /[a-z0-9]/.test(after)) continue;
+    // Longest town name wins: "val thorens" over a shorter town inside it.
+    if (!found || town.length > found.town.length) found = { town, country };
+  }
+  return { size, town: found ? found.town : '', country: found ? found.country : '' };
+}
+
+/**
+ * MONEY TAKEN, NOTHING TO SHOW FOR IT (582095).
+ *
+ * "I booked a snowboard... and have not received any payment or booking
+ * reference or confirmation yet payment has been taken." There is no capability
+ * for this, and there should not be one: either the booking exists and someone
+ * has to find out why its confirmation never went out, or it does not exist and
+ * a customer has been charged for nothing. Both are a person's job, and both
+ * are urgent in a way a queue position does not capture.
+ *
+ * Before this rule the message matched the duplicate-booking keywords instead,
+ * and the flow that cancels and refunds a duplicate started up on a customer
+ * who had no booking at all. Recognising the shape explicitly is what stops it
+ * being read as something else again.
+ */
+const PAID_NO_BOOKING_RE = /(?=[\s\S]*\b(?:paid|payment|paiement|pay[eé]\w*|charged|d[eé]bit[eé]\w*|abgebucht|zahlung|bezahlt|pagato|pagado)\b)(?=[\s\S]*\b(?:not|never|no|n.ai\s+pas|jamais|nicht|kein\w*|aucun\w*|senza|sin)\b[\s\S]{0,60}\b(?:received|receiv\w*|re[cç]u\w*|erhalten|bekommen|got|arriv\w*)\b[\s\S]{0,90}\b(?:confirmation|booking\s+reference|booking\s+number|voucher|buchungsnummer|best[aä]tigung|num[eé]ro\s+de\s+r[eé]servation|conferma|confirmaci[oó]n)\b)/i;
+
+function paidButNoBooking(message) {
+  const m = stripQuotedAndSignature(String(message || ''));
+  return PAID_NO_BOOKING_RE.test(m);
+}
+
+/**
  * "COULD I PLEASE SPEAK TO A COLLEAGUE" - and nothing else matters.
  *
  * 582070. The first reply was wrong, so the customer wrote back with the whole
@@ -826,6 +917,8 @@ function deaccent(x) {
   return String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
+let _shopTowns = null;
+
 async function loadShopPlaces() {
   if (_shopPlaces) return _shopPlaces;
   try {
@@ -841,6 +934,14 @@ async function loadShopPlaces() {
       tokens: deaccent(row.name).split(/[^a-z0-9]+/)
         .filter(w => w.length >= 5 && !GENERIC_SHOP_WORDS.has(w)),
     })).filter(x => x.tokens.length);
+    // The same rows also carry the town and its country, which is the only way
+    // to know whether a big group is a FRENCH big group. Built here so the
+    // large-group check below costs no second request.
+    _shopTowns = new Map();
+    for (const row of (Array.isArray(rows) ? rows : [])) {
+      const t = deaccent(String(row.town || '')).trim();
+      if (t.length >= 4 && !_shopTowns.has(t)) _shopTowns.set(t, String(row.country || '').toLowerCase());
+    }
     return _shopPlaces;
   } catch {
     // No table, no resolution, and the flow behaves exactly as it did before.
@@ -1958,6 +2059,31 @@ export default async function handler(req, res) {
                            multipleRefs.join(', ') + ') without saying, in a sentence we can ' +
                            'read, which of them to act on. Handle it manually - and do not ask ' +
                            'for "the" booking reference, it has already been given.';
+      }
+
+      // MORE THAN FIFTY IN FRANCE (582110). Skitruck, never a quote.
+      const bigGroup = await franceBigGroup(message);
+      if (bigGroup && bigGroup.size > BIG_GROUP_MIN && bigGroup.country === 'france') {
+              action = 'HANDOVER';
+              escalation = 'GROUP OF ' + bigGroup.size + ' IN FRANCE (' +
+                           (bigGroup.town || 'destination stated in the message') + '). ' +
+                           'We never quote a French group of more than fifty automatically. Send the ' +
+                           'destination, the customer contact details and the approximate headcount to ' +
+                           'alpy@skitruck.fr with Fabien (fg@alpy.com) in copy, and acknowledge to the ' +
+                           'customer that our groups team will come back to them. Do not ask them about ' +
+                           'boots, helmets or cover.' +
+                           (escalation ? ' Also relevant: ' + escalation : '');
+      }
+
+      // PAID, AND NOTHING RECEIVED (582095). A person, and quickly.
+      if (paidButNoBooking(message)) {
+              action = 'HANDOVER';
+              escalation = 'THE CUSTOMER SAYS THEY WERE CHARGED BUT HAVE NO BOOKING REFERENCE AND ' +
+                           'NO CONFIRMATION. Check first whether a booking exists on their email: if ' +
+                           'it does, resend the confirmation and find out why it never went out; if it ' +
+                           'does not, a payment was taken for nothing and it has to be traced and ' +
+                           'refunded. Do not let this sit in a queue.' +
+                           (escalation ? ' Also relevant: ' + escalation : '');
       }
 
       // AND ABOVE ALL OF IT: the customer asked for a person (582070).
