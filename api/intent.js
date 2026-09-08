@@ -1695,7 +1695,7 @@ export default async function handler(req, res) {
       else if (llm) decision = llm;
       else decision = { topic: 'OTHER', source: 'none', blocked: false };
 
-      const topic = decision.topic;
+      let topic = decision.topic;
 
       // Apply the history reference, but only where it is safe (see above).
       // Done here rather than earlier because the rule depends on the topic, and
@@ -1839,6 +1839,11 @@ export default async function handler(req, res) {
       // Two ways a correct-looking ASK is the wrong answer.
       let escalation = null;
 
+      // The second change to make, when a message asks for two we can chain.
+      // Empty for every other message - a Zendesk branch compares strings, and
+      // null renders as the word "null".
+      let secondTopic = '';
+
       // One: the request spans several bookings. No capability we have edits
       // five bookings at once, so asking for "the" reference can only loop.
       let targets = [];
@@ -1904,11 +1909,49 @@ export default async function handler(req, res) {
               // Only booking-changing topics count - a quote next to a question is
               // read-only and stays automatic.
               const both = mutatingTopicsIn(message);
-              action = 'HANDOVER';
-              escalation = 'This message asks for TWO different changes to the booking (' +
-                           both.join(' + ') + '), and each of our capabilities performs only one. ' +
-                           'Doing half of it and answering would leave the rest undone on a ticket ' +
-                           'marked as handled. Make both changes together, then reply once.';
+
+              // ONE PAIR IS CHAINED. EVERY OTHER PAIR STILL STOPS.
+              //
+              // 582089: "annulez la personne 1 : test test ET decalez les dates
+              // d'une journee". The guard read both correctly and did nothing,
+              // which is what it was built to do (582063, same booking) - but
+              // the customer still had to be served by hand. So this pair now
+              // runs both capabilities, one after the other.
+              //
+              // The ORDER is not a convenience. Removing the person first means
+              // the date-change price comparison runs on the booking as it will
+              // actually be, instead of on one that still carries a line about
+              // to disappear. It also happens to be the only possible order:
+              // Date Change sits at the 60-step ceiling and cannot carry the
+              // step that would hand over to a successor.
+              //
+              // Only this pair. Any other combination keeps handing over, and
+              // deliberately so: chaining is only safe where the second flow's
+              // view of the booking after the first one has been reasoned
+              // through, and that has been done here and nowhere else.
+              const CHAIN_FIRST = 'PARTIAL_CANCELLATION';
+              const CHAIN_SECOND = 'DATE_CHANGE';
+              const chainable = both.length === 2 &&
+                                both.indexOf(CHAIN_FIRST) > -1 &&
+                                both.indexOf(CHAIN_SECOND) > -1;
+
+              if (chainable) {
+                        topic = CHAIN_FIRST;
+                        secondTopic = CHAIN_SECOND;
+                        // The slots were checked against whatever topic the
+                        // keywords picked first. Re-check them against the one
+                        // we are actually about to run, or a ready request looks
+                        // incomplete and a missing reference goes unnoticed.
+                        check = checkSlots(topic, slots);
+                        action = check.ready ? 'RUN' : 'ASK';
+                        escalation = null;
+              } else {
+                        action = 'HANDOVER';
+                        escalation = 'This message asks for TWO different changes to the booking (' +
+                                     both.join(' + ') + '), and each of our capabilities performs only one. ' +
+                                     'Doing half of it and answering would leave the rest undone on a ticket ' +
+                                     'marked as handled. Make both changes together, then reply once.';
+              }
       } else if (multipleRefs.length > 1 && topic !== 'OTHER') {
               action = 'HANDOVER';
               escalation = 'The customer named ' + multipleRefs.length + ' bookings (' +
@@ -2030,6 +2073,12 @@ export default async function handler(req, res) {
               // Empty string, never null: a Zendesk Branch on a Text variable
               // compares strings, and null renders as the word "null".
               run_topic: action === 'RUN' ? topic : '',
+              // The change to make AFTER the one that is about to run. Only
+              // ever set when both were asked for in the same message and the
+              // pair is one we chain - see the branch above. The gatekeeper
+              // turns this into a tag, and the first flow reads that tag to
+              // start the second. Empty on every other message.
+              second_topic: action === 'RUN' ? secondTopic : '',
               // Facts the reply must state before asking for anything else.
               answers: productQuestions.length ? productQuestions.map(a => a.fact).join(' ') : '',
               // How much of the conversation we could read. 0 means we are back
@@ -2081,11 +2130,27 @@ export default async function handler(req, res) {
       targetrefstext: targets.join(', '),
       // Named by the customer, deliberately NOT acted on.
       refsNotActedOn: targets.length ? multipleRefs.filter(r => targets.indexOf(r) === -1) : [],
-              agentNote: escalation ? escalation : (action === 'HANDOVER'
+              // A CHAINED RUN CARRIES ITS PLAN IN THE AGENT NOTE.
+              //
+              // agentNote is the internal channel already exposed to the
+              // gatekeeper, and on a RUN with nothing to escalate it is empty.
+              // So the plan travels here rather than through a new output on the
+              // custom action: adding one mints a new revision and every step
+              // that uses the action has to be re-pinned by hand, which is a
+              // real risk for a value only one code step reads.
+              //
+              // The marker is on the first line, machine-readable, and the
+              // sentence after it is for the human who opens the ticket.
+              agentNote: secondTopic ? ('PLAN_THEN: ' + secondTopic + String.fromCharCode(10) +
+                'Two changes were asked for in one message. ' + topic + ' runs now; ' +
+                secondTopic + ' is started automatically as soon as it has finished. ' +
+                'The customer gets one reply for each - do not redo either by hand ' +
+                'unless a note says it failed.')
+                : (escalation ? escalation : (action === 'HANDOVER'
                 ? 'No capability matches this message. Read it and answer manually.'
                 : (action === 'ASK'
                     ? 'We know what the customer wants but not enough to act. Missing: ' + missingLabels.join(', ') + '.'
-                    : null)),
+                    : null))),
               // next_question is a suggestion, never an instruction to send.
               // The flow must still pass its own gate before asking a customer
               // anything in public.
