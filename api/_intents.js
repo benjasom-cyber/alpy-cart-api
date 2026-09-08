@@ -107,7 +107,7 @@ const D = {
   DATE_CHANGE: {
     en: [
       [/\bchange (?:the |my |our )?(?:booking |rental |reservation )?dates?\b/, 3], [/\bdates? (?:are|is) (?:wrong|incorrect)\b/, 3],
-      [/\bwrong (?:dates?|week|day)\b/, 3], [/\b(?:move|shift|postpone|bring forward|extend|shorten) (?:the |my |our )?(?:booking|reservation|rental|dates?|holiday)\b/, 3],
+      [/\bwrong (?:dates?|week|day)\b/, 3], [/\b(?:move|shift|postpone|bring forward|extend|shorten) (?:the |my |our )?(?:booking|reservation|rental|dates?|holiday)\b(?![^.!?]{0,50}\b(?:shop|store|resort|village|location|town)\b)(?! to (?!(?:the )?\d|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|mon|tue|wed|thu|fri|sat|sun|next|another|a |the |one |two ))[a-z])/, 3],
       [/\b(?:a|one) day (?:later|earlier|too (?:long|many|much))\b/, 3], [/\bdate change\b/, 3], [/\bchange (?:of )?dates?\b/, 3],
       [/\b(?:should|need to|ought to) (?:be|start|end|run) (?:from |on |the )?\d/, 2], [/\binstead of (?:the )?\d/, 2], [/\bnew dates?\b/, 2],
       [/\b(?:start|end|first|last) (?:date|day) (?:should|needs to|has to|must) be\b/, 3], [/\bone day (?:less|more|shorter|longer)\b/, 3],
@@ -238,10 +238,19 @@ const D = {
   },
 
   CHANGE_OF_SHOP: {
-    en: [[/\b(?:change|switch|move|transfer|swap) (?:to |the |my |our |a )?(?:different |another |other |new )?(?:shop|store|rental shop|pick-?up (?:point|location)|location)\b/, 3], [/\b(?:wrong|different|another|other) (?:shop|store|resort|village|town)\b/, 3], [/\bcloser to (?:our|my|the) (?:hotel|apartment|accommodation|chalet)\b/, 3], [/\bpick(?: |-)?up (?:from|at|in) (?:a |the )?(?:different|other|another)\b/, 3], [/\bshop\b/, 1]],
-    de: [[/\b(?:anderen|anderes|andere) (?:shop|geschaft|laden|verleih|station|abholort|abholstation)\b/, 3], [/\b(?:shop|geschaft|laden|verleih|abholort) (?:wechseln|andern|tauschen)\b/, 3], [/\b(?:falschen|falsches|falsche) (?:shop|geschaft|laden|ort|verleih)\b/, 3], [/\bnaher (?:an|bei|zu) (?:unserem|unserer|der|dem) (?:hotel|unterkunft|apartment)\b/, 3], [/\bumbuchen auf\b/, 2]],
-    fr: [[/\btransfer\w+ (?:la |les |ma |notre )?reservations?\b/, 3], [/\btransfert\b/, 3], [/\bchang\w+ de magasin\b/, 3], [/\b(?:autre|mauvais) magasin\b/, 3], [/\bplus proche de (?:notre|l'|mon|la|du) (?:hotel|hebergement|residence|appartement|chalet)\b/, 3], [/\bmagasin\b/, 1]],
-    nl: [[/\b(?:andere|verkeerde) (?:winkel|verhuurder|shop|locatie|afhaalpunt)\b/, 3], [/\b(?:winkel|shop|locatie) (?:wijzigen|veranderen|aanpassen|wisselen)\b/, 3], [/\bdichter bij (?:ons|onze|het) (?:hotel|appartement|accommodatie|verblijf)\b/, 3]],
+    en: [[/\b(?:move|transfer|change|switch|swap)\b[^.!?]{0,40}\bto (?:a |an |another |the )?(?:different |other |new |nearer |closer )?(?:shop|store|rental shop|location|resort|village|pick-?up (?:point|location))\b/, 3],
+         [/\b(?:change|switch|move|transfer|swap) (?:the |my |our |a )?(?:different |another |other |new )?(?:shop|store|rental shop|pick-?up (?:point|location)|location)\b/, 3],
+         [/\b(?:wrong|different|another|other) (?:shop|store|resort|village|town)\b/, 3], [/\bcloser to (?:our|my|the) (?:hotel|apartment|accommodation|chalet|place)\b/, 3],
+         [/\bpick(?: |-)?up (?:from|at|in) (?:a |the )?(?:different|other|another)\b/, 3],
+         [/\b(?:move|transfer) (?:the |my |our )?(?:booking|reservation) to (?!(?:the )?\d|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|mon|tue|wed|thu|fri|sat|sun|next|another|a |the |one |two ))[a-z]/, 3], [/\b(?:a |the )?shop (?:in|at|near|closer to)\b/, 1], [/\bshop\b/, 1]],
+    de: [[/\b(?:buchung|reservierung|abholung)\b[^.!?]{0,40}\b(?:zu|in|nach|auf) (?:einem |einen |ein |dem |den )?(?:anderen? |neuen? )?(?:shop|geschaft|laden|verleih|verleiher|station|ort|abholort)\b/, 3],
+         [/\b(?:anderen|anderes|andere) (?:shop|geschaft|laden|verleih|station|abholort|abholstation)\b/, 3], [/\b(?:shop|geschaft|laden|verleih|abholort) (?:wechseln|andern|tauschen)\b/, 3],
+         [/\b(?:falschen|falsches|falsche) (?:shop|geschaft|laden|ort|verleih)\b/, 3], [/\bnaher (?:an|bei|zu) (?:unserem|unserer|der|dem) (?:hotel|unterkunft|apartment)\b/, 3], [/\blieber in [a-z' -]{2,30}? (?:abholen|abzuholen|ausleihen|mieten|leihen)\b/, 3], [/\blieber in\b/, 1], [/\bumbuchen auf\b/, 2]],
+    fr: [[/\b(?:deplacer|transferer|changer|basculer|transfert)\b[^.!?]{0,40}\b(?:vers|a|au|dans|pour) (?:un |une |le |la )?(?:autre |nouveau |nouvelle )?(?:magasin|boutique|station|loueur|point de retrait)\b/, 3],
+         [/\btransfer\w+ (?:la |les |ma |notre )?reservations?\b/, 3], [/\btransfert\b/, 3], [/\bchang\w+ de magasin\b/, 3], [/\b(?:autre|mauvais) magasin\b/, 3],
+         [/\bplus proche de (?:notre|l'|mon|la|du) (?:hotel|hebergement|residence|appartement|chalet)\b/, 3], [/\bmagasin\b/, 1]],
+    nl: [[/\b(?:verplaatsen|verhuizen|wijzigen|veranderen|omzetten)\b[^.!?]{0,40}\bnaar (?:een |de )?(?:andere |nieuwe )?(?:winkel|verhuurder|locatie|plaats|afhaalpunt)\b/, 3],
+         [/\b(?:andere|verkeerde) (?:winkel|verhuurder|shop|locatie|afhaalpunt)\b/, 3], [/\b(?:winkel|shop|locatie) (?:wijzigen|veranderen|aanpassen|wisselen)\b/, 3], [/\bdichter bij (?:ons|onze|het) (?:hotel|appartement|accommodatie|verblijf)\b/, 3]],
     it: [[/\b(?:altro|diverso|sbagliato) negozio\b/, 3], [/\bcambiare negozio\b/, 3], [/\bpiu vicino (?:al|all'|alla) (?:hotel|albergo|appartamento)\b/, 3]],
     es: [[/\b(?:otra|otro|diferente|equivocad\w+) (?:tienda|local|punto de recogida)\b/, 3], [/\bcambiar de tienda\b/, 3], [/\bmas cerca (?:del|de la|de nuestro) (?:hotel|apartamento|alojamiento)\b/, 3]],
   },
