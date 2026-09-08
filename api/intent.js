@@ -2360,7 +2360,10 @@ export default async function handler(req, res) {
       // the same P code and round again.
       const pCode = (stripQuotedAndSignature(String(message || '')) + ' ' + String(thread.subject || ''))
         .match(/\bP[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/);
-      if (pCode && !slots.booking_ref) {
+      // A reference found by the EMAIL lookup does not count: 582138 quoted PAB1J2,
+      // the lookup supplied the customer's other booking, and the voucher of that
+      // other booking was about to be sent instead of a person being told.
+      if (pCode && (!slots.booking_ref || usedRefFromHistory)) {
               action = 'HANDOVER';
               escalation = 'THE CUSTOMER QUOTES ' + pCode[0] + ', WHICH IS A PAYMENT REFERENCE, NOT A ' +
                            'BOOKING REFERENCE: no booking with that code exists. The checkout took a ' +
