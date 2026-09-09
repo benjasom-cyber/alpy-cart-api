@@ -44,6 +44,7 @@ import { handler as phoneIndex } from './_phone-index.js';
 import { handler as scoreboard } from './_scoreboard.js';
 import { handler as review } from './_review.js';
 import { handler as training } from './_training.js';
+import { handler as flowsim } from './_flowsim.js';
 
 const HANDLERS = {
   'check-date-change': checkDateChange,
@@ -80,6 +81,10 @@ const HANDLERS = {
   // it reads what people in training wrote, and it never writes to a customer.
   'training-run': training,
   'training-digest': training,
+
+  // The flow simulator (D-63). It runs a flow against a mail without Zendesk and
+  // without mail, and writes nothing anywhere - see _flowsim.js.
+  'flow-sim': flowsim,
   // One or several bookings, checked together, cancelled together.
 };
 
