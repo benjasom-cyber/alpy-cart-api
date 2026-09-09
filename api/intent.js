@@ -175,6 +175,23 @@ const KEYWORDS = [
         not: /\b(?:[Bb]ooking|[Bb]uchung|[Rr][eé]servation|[Rr]eservierung|[Rr]eservering|[Bb]oeking|[Rr]eference|[Rr]eferenz|[Pp]renotazione|[Rr]eserva)\b[\s\S]{0,40}\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b/,
         re: /^(?![\s\S]*(?:\b[Bb][0-9A-Za-z]{5}\b[\s\S]{0,40}\b(?:booking|buchung|r[eé]servation|prenotazione|reserva)\b|\b(?:my|our|meine?|unsere?|ma|notre|mon|current|existing|the\s+below|below|bestehende|aktuelle|onderstaande|mijn|onze)\s+(?:online\s+)?(?:booking|buchung|r[eé]servation|reservation|reservierung|reservering|boeking|prenotazione|reserva)\b|\bbooking\s+(?:reference|number|code)\b|\bbuchungsnummer\b|\bboekingsnummer\b|\breserveringsnummer\b|\bnum[eé]ro\s+de\s+r[eé]servation\b|\b(?:have\s+|already\s+)?(?:made|placed)\s+(?:a\s+|the\s+)?(?:group\s+|online\s+)?(?:booking|reservation)\b|\bbooked\s+(?:with|through|via|on)\s+(?:you|alpy|your)|\bhabe\w*\s+(?:bereits\s+|schon\s+)?(?:[\w\s]{0,30}\s)?gebucht\b|\bj.ai\s+(?:d[eé]j[aà]\s+)?r[eé]serv[eé]\b|\bheb\s+(?:al\s+)?(?:[\w\s]{0,20}\s)?geboekt\b))(?=[\s\S]*\b(?:angebot|gesamtangebot|offerte|offer\b|quote|quotation|devis|price|prices|preis\w*|prix|prezzo|precio|kost\w*|tarif\w*|how\s+much|wie\s+viel|combien|rate\b|rates\b|gruppenrabatt|group\s+discount|rabatt|discount|r[eé]duction|fr[uü]hbuch\w*|early\s*[- ]?book\w*)\b)(?=[\s\S]*(?:\b\d{1,3}\s*(?:erwachsene\w*|adults?|personen|persons?|people|pax|personnes|adultes|skifahrer|skiers?|kinder|children)\b|\b(?:group|groupe|gruppe|gruppo|grupo|family|famille|familie)\b|\b\d{1,2}\s*(?:skitage|days?|tage|jours?|giorni|d[ií]as)\b|\b(?:from|vom|du|dal|desde)\s+\d{1,2}\b|\b\d{1,2}[./]\d{1,2}\b|\b(?:angebot|gesamtangebot|offerte|offer|quote|quotation|devis|offre)\b))(?=[\s\S]*\b(?:ausleihen|leihen|mieten|verleih|ausr[uü]stung|rent|renting|rental|hire|hiring|louer|location|noleggi\w*|alquil\w*|skiausr[uü]stung|skis?\b|ski\b|snowboards?|equipment|mat[eé]riel|attrezzatura|equipo)\b)/i },
 
+      // D-61: AN UPGRADE IS A REQUOTE + A CHOICE, HANDLED BY GENERAL QUESTIONS.
+      //
+      // 582185-type: "can I upgrade the skis to the Diamond range?" on an
+      // existing booking. Benjamin's rule: requote at the higher tier, offer to
+      // cancel either only that person's item or the whole booking, and wait for
+      // the customer. General questions does that (requote-booking reads the tier
+      // out of the message and writes an UPGRADE line; the prompt turns it into
+      // the offer). This rule sits BEFORE the downgrade rule below because a
+      // downgrade and an upgrade share the same change verbs and tier words: what
+      // tells them apart is an explicit "up" word (upgrade, hoeherwertig, gamme
+      // superieure, better, higher), or a move TO one of the top tiers (diamond,
+      // black/gold, platinum). A refund of a difference is never an upgrade and
+      // stays with the downgrade rule.
+      { topic: 'GENERAL_QUESTION',
+        not: /\b(?:refund\w*|rembours\w*|erstatt\w*|rimbors\w*|reembols\w*|terugbetal\w*)\b|\bdowngrad\w*|\br[eé]trograder\b|\b(?:dates?|date\s+change|p[eé]riode|zeitraum|termin)\b|periode\b|\b(?:surgery|injur\w*|accident|hospital|bless\w*|verletz\w*|krank\w*|unfall|malade|sick|ill)\b/i,
+        re: /^(?=[\s\S]*(?:\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b|\b(?:my|our|the|ma|mes|notre|nos|la|meine?|unsere?|mijn|onze)\s+(?:booking|reservation|r[eé]servation|order|buchung|reservierung|boeking|prenotazione|reserva)\b|\bi\s+(?:have\s+)?booked\b|\bwe\s+(?:have\s+)?booked\b|\bj.ai\s+r[eé]serv[eé]\b|\bich\s+habe\s+gebucht\b|\bwir\s+haben\s+gebucht\b))(?=[\s\S]*(?:\bupgrad\w*|\bh[öo]herwertig\w*|\bh[öo]here[sn]?\s+(?:kategorie|modell|niveau|klasse|stufe)\b|\bmont(?:er|[ée]e?)\s+en\s+gamme\b|\bgamme\s+sup[ée]rieure\b|\bcat[ée]gorie\s+sup[ée]rieure\b|\bhaut\s+de\s+gamme\b|\bun\s+cran\s+au[- ]dessus\b|\b(?:better|higher|superior|upper)\s+(?:skis?|snowboard|board|model|category|level|range|tier|class|quality|end|pair|equipment)\b|\bmeilleur\w*\s+(?:skis?|snowboard|mod[èe]le|cat[ée]gorie|gamme|qualit[ée]|mat[ée]riel)\b|\bbesser\w*\s+(?:ski|snowboard|modell|kategorie|qualit[äa]t|ausr[üu]stung)\b|\bmiglior\w*\s+(?:sci|snowboard|modello|categoria)\b|\bmejor\w*\s+(?:esqu[íi]s?|snowboard|modelo|categor[íi]a)\b|\bbeter\w*\s+(?:ski|snowboard|model|categorie)\b|\b(?:change\w*|swap\w*|replace\w*|switch\w*|amend\w*|modif\w*|adjust\w*|upgrade\w*|changer|remplacer|passer|(?:ae|[aä])ndern|umge?[aä]ndert|wechseln|tauschen|umbuchen|cambiare|sostituire|cambiar|wijzigen|omruilen|gewijzigd)\b[\s\S]{0,120}?\b(?:to|into|zu|zum|zur|auf|nach|en|au|aux|vers|à|per|al|alla|naar)\s+(?:the\s+|a\s+|des\s+|du\s+|le\s+|la\s+|les\s+|den\s+|die\s+|das\s+|dem\s+|der\s+|el\s+|il\s+|de\s+|het\s+)?(?:(?:ski|snowboard|board|model|modell|mod[èe]le|category|kategorie|cat[ée]gorie|gamme|tier|level|niveau|classe|class)\s+)?(?:diamond|diamant\w*|platin\w*|black|noir\w?|schwarz\w*|nero|gold|[5-7]\s*(?:\*|★|stars?|[ée]toiles?|sterne?|stelle|estrellas?|sterren))\b))/i },
+
       // A DOWNGRADE IS A PARTIAL CANCELLATION, NOT A QUOTE AND NOT A MODEL CHANGE.
       //
       // 582070: "Please change the Diamond skis Lady skis to Red skis Lady...
@@ -2093,7 +2110,11 @@ export default async function handler(req, res) {
       // something the word "cancel" alone does not carry, and cancelling a whole
       // booking on a dictionary score is the one mistake this layer must never make.
       const DICT_MAY_OVERRIDE = new Set(['OTHER', 'GENERAL_QUESTION', 'QUOTE', 'REQUOTE']);
-      const dictText = stripQuotedAndSignature(String(message || ''));
+      // D-60: the subject line joins the text the dictionary reads. Measured on the
+      // 284 hand-labelled mails of 26/01: body alone 85.7 % precision, subject + body
+      // 87.9 % - "Annulation - réf. BW377Q" above a body that only says "erreur de
+      // date" is what turns a date change back into the cancellation it is.
+      const dictText = (thread.subject ? String(thread.subject) + '\n' : '') + stripQuotedAndSignature(String(message || ''));
       const dictRes = dictDecide(dictText, null, { hasRef: !!(slots.booking_ref) || refRegexAny.test(dictText) });
       // Two dictionary topics have no flow of their own: a shop change is answered
       // by General questions (D-56, requote at the new shop), a payment question

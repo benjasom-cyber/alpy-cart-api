@@ -55,6 +55,9 @@
 import { resolveDomain, brandLabel } from './_platform.js';
 
 const ODIN_BASE = 'https://odin.alpy.com';
+// The shop's own catalogue (same source generate-quote prices from) - D-61
+// reads the tiers a shop actually stocks out of it.
+const PRODUCTS_INFO_URL = 'https://core.alpy.com/core/cart/products-information';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -227,6 +230,9 @@ function buildPersons(equipment, includeCancelled) {
       equipment: spec.equipment,
       sourceName: item.name || null,
       sourceDefinitionId: item.definitionId != null ? item.definitionId : null,
+      // D-61: the name the customer typed on the booking form, so "upgrade
+      // Paul's skis" can be pinned to one person.
+      sourcePersonName: (item.personalInfo && item.personalInfo.name) || null,
       skillResolvedFrom: known ? 'definitionId' : 'product name (definitionId unknown)',
     });
     const me = persons.length - 1;
@@ -278,6 +284,13 @@ function buildInternalNote(o) {
   lines.push('');
   if (o.shopChangeFrom) {
     lines.push('SHOP CHANGE: from ' + o.shopChangeFrom + ' to ' + o.shopName + ' (' + o.resort + ').');
+  }
+  if (o.upgrade) {
+    // D-61: the line the General questions prompt keys its UPGRADE section on.
+    // One line, the persons and the from -> to products, nothing else.
+    lines.push('UPGRADE: ' + o.upgrade.applied.join('; ') + '.');
+    if (o.upgrade.everyone) lines.push('UPGRADE APPLIED TO EVERYONE: the message names no person.');
+    if (o.upgrade.impossible.length) lines.push('UPGRADE NOT APPLIED TO: ' + o.upgrade.impossible.join('; ') + '.');
   }
   lines.push('Shop: ' + o.shopName + ' (' + o.resort + ')');
   if (o.siteLabel) lines.push('Brand / site the link opens on: ' + o.siteLabel);
@@ -514,6 +527,128 @@ function detectShopChange(text) {
   return place;
 }
 
+/**
+ * D-61 — UPGRADE ("montée en gamme").
+ *
+ * A booked item cannot be swapped for a higher tier in place: Odin has no
+ * "change product" on a paid booking. Benjamin's rule: requote the same basket
+ * with the requested tier, then offer the customer to cancel EITHER only that
+ * person's current item (partial) OR the whole booking, and wait for the
+ * answer. This block does the requote part; the General questions prompt
+ * writes the offer from the UPGRADE line in the internal note.
+ *
+ * The tier is read out of the customer's own words (the tier names our shops
+ * use, a star count, or a bare "upgrade" = one star up), the person out of the
+ * names on the booking when one is written, and the target definitionId out
+ * of the SHOP'S OWN catalogue (same discipline, same age band, requested
+ * stars; Lady stays Lady). The catalogue names differ per shop ("PLATIN" is
+ * 6* at Sestriere, "Black/Gold" 5* elsewhere), so stars are the only common
+ * scale, and the target is looked up, never assumed.
+ */
+const TIER_WORDS = [
+  [/\b(?:economy|[ée]conomi\w*|\beco)\b/i, 2],
+  [/\b(?:blue|bleu\w?|blau\w*|bronze|basic|initiation|novice)\b/i, 3],
+  [/\b(?:red|rouge\w?|rot\w?|silver|argent|silber|intermediate|interm[ée]diaire)\b/i, 4],
+  [/\b(?:black|noir\w?|schwarz\w*|nero|gold|advanced|avanc[ée]\w?|expert\w*|champion)\b/i, 5],
+  [/\b(?:diamond|diamant\w*|diamante|platin(?:um|e|o)?)\b/i, 6],
+  [/\b(?:performance|top of the range|top[- ]range)\b/i, 6],
+];
+const STARS_RE = /\b([2-7])\s*(?:\*|★|stars?|[ée]toiles?|sterne?|stelle|estrellas?|sterren)\b/i;
+const UPGRADE_VERB = /\bupgrad\w*|\bh[öo]herwertig\w*|\bh[öo]here[sn]?\s+(?:kategorie|modell|niveau|klasse|stufe)|mont(?:er|[ée]e?)\s+en\s+gamme|\bhaut\s+de\s+gamme|\bmeilleur\w*\s+(?:ski|snowboard|mod[èe]le|cat[ée]gorie|gamme|qualit)|\bbesser\w*\s+(?:ski|snowboard|modell|kategorie|qualit)|\bbetter\s+(?:skis?|snowboard|model|category|level|range|tier|quality|pair)|\b(?:higher|superior|upper)\s+(?:category|level|range|tier|class|model|quality|end)|\bnext\s+(?:level|tier|category)\s+up|\bun\s+cran\s+au[- ]dessus|\bcat[ée]gorie\s+sup[ée]rieure|\bgamme\s+sup[ée]rieure|\bmiglior\w*\s+(?:sci|snowboard|modello|categoria)|\bmejor\w*\s+(?:esqu[íi]s?|snowboard|modelo|categor[íi]a)|\bbeter\w*\s+(?:ski|snowboard|model|categorie)/i;
+const CHANGE_VERB = /\b(?:change|switch|swap|replace|exchange|modif\w*|changer|remplacer|passer|wechseln|tauschen|umtauschen|[äa]ndern|cambiar|cambiare|sostituire|wijzigen|omruilen|veranderen|upgrade|upgraden|move|go)\w*|\binstead\b|\brather\b|\b[àa] la place\b|\bplut[ôo]t\b|\bstatt\b|\banstelle\b|\bstattdessen\b|\binvece\b|\ben lugar\b/i;
+const TO_TIER_RE = /\b(?:to|into|onto|for|zu|zum|zur|auf|in|en|au|aux|vers|à|a|per|al|alla|naar)\s+(?:the\s+|a\s+|an\s+|des\s+|du\s+|le\s+|la\s+|les\s+|den\s+|die\s+|das\s+|dem\s+|der\s+|el\s+|los\s+|il\s+|i\s+|de\s+|het\s+)?(?:(?:ski|snowboard|board|model|modell|mod[èe]le|category|kategorie|cat[ée]gorie|gamme|tier|level|niveau|classe|class)\s+)?/i;
+
+function tierAt(text, from) {
+  const s = String(text || '').slice(from);
+  let best = null;
+  const st = STARS_RE.exec(s);
+  if (st) best = { stars: parseInt(st[1], 10), index: from + st.index, word: st[0] };
+  for (const [re, stars] of TIER_WORDS) {
+    const m = re.exec(s);
+    if (m && (!best || m.index < best.index)) best = { stars, index: from + m.index, word: m[0] };
+  }
+  return best;
+}
+
+function detectUpgrade(text) {
+  const t = String(text || '');
+  if (!t.trim()) return null;
+  const verb = UPGRADE_VERB.test(t);
+  const change = CHANGE_VERB.test(t);
+  // The tier the customer is moving TO: the one written after "to / en / zu /
+  // auf ...", else the first tier word in the text.
+  let target = null;
+  const re = new RegExp(TO_TIER_RE.source, 'gi');
+  let m;
+  while ((m = re.exec(t)) && !target) {
+    const cand = tierAt(t, m.index + m[0].length);
+    if (cand && cand.index === m.index + m[0].length) target = cand;
+  }
+  const anyTier = tierAt(t, 0);
+  if (!target && anyTier && (verb || change)) target = anyTier;
+  if (!target && !verb) return null;                 // no tier, no upgrade word: not an upgrade
+  if (!target && verb) return { relative: 1, word: (UPGRADE_VERB.exec(t) || [''])[0] };
+  return { stars: target.stars, word: target.word, relative: 0 };
+}
+
+async function fetchShopCatalogue(shopId) {
+  try {
+    const r = await fetch(PRODUCTS_INFO_URL + '?shopId=' + encodeURIComponent(shopId), { headers: { Accept: 'application/json' } });
+    if (!r.ok) return [];
+    const grid = await r.json();
+    const out = [];
+    for (const g of (grid && grid.products) || []) {
+      for (const p of (g && g.products) || []) {
+        if (!p || p.definitionId == null) continue;
+        const name = (p.nameWithMerchantForAcceptedLanguages && p.nameWithMerchantForAcceptedLanguages.en) || '';
+        out.push({
+          def: p.definitionId,
+          cat: p.productCategoryId,
+          age: p.ageCategoryId,
+          stars: parseInt(String(p.qualityCategoryAbbreviation || '').replace('*', ''), 10) || 0,
+          name,
+          lady: /\b(?:lady|ladies|woman|women|femme|damen|donna)\b/i.test(name),
+          mini: /\bmini\b/i.test(name),
+        });
+      }
+    }
+    return out;
+  } catch (e) {
+    console.error('[requote-booking] catalogue fetch failed for shop ' + shopId, e);
+    return [];
+  }
+}
+
+// The product at `stars` in the same discipline and age band as `src`, Lady
+// staying Lady and Mini staying Mini. When the shop stocks nothing at exactly
+// that level, the nearest HIGHER tier it does stock; null when nothing higher.
+function pickTier(catalogue, src, stars, word) {
+  const same = catalogue.filter(e => e.cat === src.cat && e.age === src.age && e.def !== src.def &&
+                                     (e.cat === 1 || e.cat === 3));
+  const pref = list => list.find(e => e.lady === src.lady && e.mini === src.mini) ||
+                       list.find(e => e.lady === src.lady && !e.mini) ||
+                       list.find(e => !e.lady && !e.mini) || list[0] || null;
+  // The customer's word IS a product name at this shop ("Diamond" at a shop
+  // whose 7* is called Diamond while its 6* is PLATIN): the name wins over the
+  // star table, as long as it is a step up.
+  const w = String(word || '').trim();
+  if (w && !/^\d/.test(w)) {
+    const byName = same.filter(e => e.stars > (src.stars || 0) && new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(e.name));
+    if (byName.length) return { hit: pref(byName), exact: true };
+  }
+  const exact = same.filter(e => e.stars === stars);
+  if (exact.length) return { hit: pref(exact), exact: true };
+  const higher = same.filter(e => e.stars > stars).sort((a, b) => a.stars - b.stars);
+  if (!higher.length) return { hit: null, exact: false };
+  const top = higher.filter(e => e.stars === higher[0].stars);
+  return { hit: pref(top), exact: false };
+}
+
+function firstNameOf(full) {
+  const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+  return parts.length ? parts[0] : '';
+}
+
 function refuse(res, ref, why) {
   return res.status(200).json({
     found: false,
@@ -739,6 +874,65 @@ export default async function handler(req, res) {
         equipmentAddedFor.push(p.age + 'yr');
       });
     }
+    // ── 2b. D-61 UPGRADE: the same basket, one tier (or the named tier) up. ──
+    //
+    // 582185-type tickets: "can I upgrade my skis to the Diamond range?". The
+    // item cannot be changed on the booking, so the answer is a new cart with
+    // the higher product for the person(s) concerned, and the choice - cancel
+    // just that item, or the whole booking - put to the customer. Everything
+    // else in the basket travels unchanged, so the price difference IS the
+    // upgrade.
+    const upgradeAsk = shopChangeRequested ? null : detectUpgrade(addonsRaw);
+    const upgrade = { requested: !!upgradeAsk, applied: [], impossible: [], persons: [], everyone: false, word: upgradeAsk ? upgradeAsk.word : '' };
+    if (upgradeAsk) {
+      const catalogue = await fetchShopCatalogue(shopId);
+      const eligible = persons.map((p, i) => ({ p, i })).filter(({ p }) => !!DEF_TO_SPEC[p.sourceDefinitionId]);
+      // Who: the persons whose first name is written in the message; nobody
+      // named means everybody who has skis or a snowboard.
+      const named = eligible.filter(({ p }) => {
+        const fn = firstNameOf(p.sourcePersonName);
+        return fn.length >= 3 && new RegExp('(^|[^\\p{L}\\p{N}])' + fn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}])', 'iu').test(addonsRaw);
+      });
+      const targets = named.length ? named : eligible;
+      upgrade.everyone = !named.length && eligible.length > 1;
+      for (const { p, i } of targets) {
+        const srcEntry = catalogue.find(e => e.def === p.sourceDefinitionId) || null;
+        const srcStars = srcEntry ? srcEntry.stars : (parseInt((String(p.sourceName || '').match(/([2-7])\s*\*/) || [])[1], 10) || 0);
+        const src = srcEntry || {
+          def: p.sourceDefinitionId, cat: p.equipment === 'snowboard' ? 3 : 1, age: null, stars: srcStars,
+          name: p.sourceName || '', lady: /lady|woman|femme|damen|donna/i.test(String(p.sourceName || '')), mini: /\bmini\b/i.test(String(p.sourceName || '')),
+        };
+        const wanted = upgradeAsk.relative ? srcStars + upgradeAsk.relative : upgradeAsk.stars;
+        const label = (p.sourcePersonName || (p.age + 'yr')) + ': ' + (p.sourceName || ('definitionId ' + p.sourceDefinitionId)).trim();
+        if (!catalogue.length || src.age == null) {
+          upgrade.impossible.push(label + ' - the shop catalogue could not be read, so the higher product cannot be identified');
+          continue;
+        }
+        if (srcStars && wanted <= srcStars) {
+          upgrade.impossible.push(label + ' - the requested level (' + wanted + '*) is not above the current one (' + srcStars + '*); this is not an upgrade');
+          continue;
+        }
+        const pick = pickTier(catalogue, src, wanted, upgradeAsk.relative ? '' : upgradeAsk.word);
+        if (!pick.hit) {
+          upgrade.impossible.push(label + ' - the shop stocks nothing above ' + srcStars + '* in this discipline and age band' +
+                                  (wanted !== srcStars + 1 ? ' (asked: ' + wanted + '*)' : ''));
+          continue;
+        }
+        const to = pick.hit;
+        p.sourceDefinitionId = to.def;
+        p.skill = (DEF_TO_SPEC[to.def] && DEF_TO_SPEC[to.def].skill) || 'expert';
+        p.upgradedFrom = { definitionId: src.def, name: src.name, stars: srcStars };
+        p.upgradedTo = { definitionId: to.def, name: to.name, stars: to.stars, exactTier: pick.exact };
+        upgrade.applied.push(label + ' -> ' + to.name.trim() + ' (' + to.stars + '*)' +
+                             (pick.exact ? '' : ' [the shop has no ' + wanted + '* here; ' + to.stars + '* is the next level it stocks]'));
+        upgrade.persons.push(p.sourcePersonName || (p.age + 'yr'));
+      }
+      if (!upgrade.applied.length) {
+        return refuse(res, ref, 'UPGRADE NOT POSSIBLE. ' + (upgrade.impossible.join('; ') || 'no ski or snowboard item to upgrade') +
+                      '. Answer the customer yourself.');
+      }
+    }
+
     const anyBoots = wantBoots.some(Boolean);
     const anyHelmet = wantHelmet.some(Boolean);
     const bootsUniform = wantBoots.every(v => v === anyBoots);
@@ -819,6 +1013,13 @@ export default async function handler(req, res) {
                           '). A booking cannot be moved from one shop to another: the customer books this ' +
                           'cart at the new shop, then the original booking is cancelled - see the cancellation ' +
                           'cost below. Prices differ between shops, so the two totals are not comparable.');
+    }
+    if (upgrade.applied.length) {
+      approximations.push('UPGRADE: this cart holds a HIGHER product for ' + upgrade.persons.join(', ') +
+                          ' (' + upgrade.applied.join('; ') + '). Everything else is the booking as it stands, so the ' +
+                          'difference between the two totals is the upgrade itself.' +
+                          (upgrade.everyone ? ' The message names nobody, so the upgrade was applied to EVERY skier - confirm with the customer who it concerns.' : '') +
+                          (upgrade.impossible.length ? ' Not upgraded: ' + upgrade.impossible.join('; ') + '.' : ''));
     }
     if ((booking.coupons || []).length) {
       approximations.push('The original booking used a coupon. Any new coupon is sized by the quote itself and may differ.');
@@ -922,6 +1123,7 @@ export default async function handler(req, res) {
       reference: ref,
       shopName: quote.shopName,
       shopChangeFrom: shopChangeRequested ? String((booking.shop && booking.shop.name) || 'original shop') : null,
+      upgrade: upgrade.applied.length ? upgrade : null,
       siteLabel,
       resort: quote.resort,
       originalFrom,
@@ -992,6 +1194,11 @@ export default async function handler(req, res) {
       cartonlineprice: quote.cartOnlinePrice,
       cartinstoreprice: quote.cartInStorePrice,
       addedonrequest: addedOnRequest.join(', '),
+      // D-61: flat and lowercase, so the flow can branch on it in one click.
+      upgradeRequested: upgrade.requested,
+      upgraderequested: upgrade.requested,
+      upgradeApplied: upgrade.applied.join('; '),
+      upgradeapplied: upgrade.applied.join('; '),
       // Whether the ORIGINAL booking carries the damage & theft protection, read
       // off Odin. General questions uses it for a claim; the customer's own claim
       // to have bought it is not evidence.
@@ -1022,6 +1229,7 @@ export default async function handler(req, res) {
           customerName: (booking.customer && booking.customer.name) || null,
           customerEmail: (booking.customer && booking.customer.email) || null,
         },
+        upgrade: upgrade.requested ? upgrade : null,
         quotedPeriod: { startDate, endDate, days },
         datesSource: (isDay(params.startDate) && isDay(params.endDate)) ? 'caller' : 'booking',
         insuranceIncluded: withInsurance,
