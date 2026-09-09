@@ -83,6 +83,10 @@
       "destination": "/api/support?action=review-report"
     },
     {
+      "source": "/api/flow-sim",
+      "destination": "/api/support?action=flow-sim"
+    },
+    {
       "source": "/api/training-run",
       "destination": "/api/support?action=training-run"
     },
