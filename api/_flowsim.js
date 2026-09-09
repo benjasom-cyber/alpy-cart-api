@@ -460,6 +460,25 @@ async function runFlow(wf, mail, opts) {
 export async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
+  // THIS ENDPOINT IS CALLED FROM A BROWSER TAB, ON PURPOSE.
+  //
+  // The flow definition can only be read by the Zendesk session, which lives in
+  // the browser - so the request that carries it comes from a Zendesk page, and
+  // a cross-origin POST with a custom header is preflighted. Without these
+  // headers the call fails as "Failed to fetch" before it ever reaches us.
+  //
+  // Opening it to any origin is safe here and nowhere near as broad as it looks:
+  // there is no cookie and no session to ride on, the secret travels in a header
+  // a page must set deliberately, and the endpoint holds no Zendesk credentials,
+  // so the worst a caller can do with the secret is spend model tokens.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-review-secret, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  // Answered before the secret is checked: a preflight carries no custom header,
+  // so demanding one here would reject every browser call on its first hop.
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
   if (!authorised(req)) {
     return res.status(401).json({
       error: 'Unauthorised.',
