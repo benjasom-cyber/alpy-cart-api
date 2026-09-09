@@ -71,6 +71,17 @@ const NEVER_ANSWER = [
 // Alpy's own vocabulary. Order matters: the first match wins, so the most
 // specific patterns come first.
 const KEYWORDS = [
+      // OUR OWN QUOTE FORM IS A QUOTE REQUEST, WHATEVER ITS BOXES SAY (D-58, 582173).
+      //
+      // The alpy.com quote form asks "DO YOU WANT TO BE COVERED AGAINST DAMAGE AND
+      // THEFT? (YES/NO)" - and the theft-claim rule below read a filled-in form as an
+      // insurance claim. Three skiers in Tignes with dates and levels were answered
+      // with a lecture on protections and no quote. The form's field labels are
+      // ours, in every language we print it in; a message carrying two of them is a
+      // quote request before anything else is read.
+      { topic: 'QUOTE',
+        re: /(?=[\s\S]*\b(?:SKI RESORT NAME|PREFERRED SHOP|FIRST DAY OF RENTAL|LAST DAY OF RENTAL|NUMBER OF PEOPLE|EQUIPMENT NEEDED FOR EACH PERSON|Skigebiet|Bevorzugter Shop|Erster (?:Miet)?tag|Letzter (?:Miet)?tag|Anzahl (?:der )?Personen|Nom de la station|Magasin pr[eé]f[eé]r[eé]|Premier jour de location|Dernier jour de location|Nombre de personnes|Skigebied|Voorkeurswinkel|Eerste (?:huur)?dag|Laatste (?:huur)?dag|Aantal personen)\s*:)(?=[\s\S]*\b(?:SKI RESORT NAME|PREFERRED SHOP|FIRST DAY OF RENTAL|LAST DAY OF RENTAL|NUMBER OF PEOPLE|EQUIPMENT NEEDED FOR EACH PERSON|AGE, NAME AND SKI LEVEL|Skigebiet|Bevorzugter Shop|Erster (?:Miet)?tag|Letzter (?:Miet)?tag|Anzahl (?:der )?Personen|Alter, Name und (?:Ski)?(?:level|niveau)|Nom de la station|Magasin pr[eé]f[eé]r[eé]|Premier jour de location|Dernier jour de location|Nombre de personnes|Skigebied|Voorkeurswinkel|Eerste (?:huur)?dag|Laatste (?:huur)?dag|Aantal personen|Leeftijd, naam en)\s*:[\s\S]*\b(?:SKI RESORT NAME|PREFERRED SHOP|FIRST DAY OF RENTAL|LAST DAY OF RENTAL|NUMBER OF PEOPLE|EQUIPMENT NEEDED|Skigebiet|Erster (?:Miet)?tag|Letzter (?:Miet)?tag|Anzahl (?:der )?Personen|Nom de la station|Premier jour|Dernier jour|Nombre de personnes|Skigebied|Eerste (?:huur)?dag|Laatste (?:huur)?dag|Aantal personen)\s*:)/i },
+
       // A QUESTION ABOUT WHAT WOULD HAPPEN IS NOT A REQUEST FOR IT TO HAPPEN (D-51).
       //
       // 546560: "we would like to rent skis from 28 February... what happens if
@@ -297,7 +308,7 @@ const KEYWORDS = [
       // decided before the whole-booking rule gets a look. A message that says
       // "whole", "entire", "toute la", "ganze" steps aside and stays full.
       { topic: 'PARTIAL_CANCELLATION',
-        re: /^(?![\s\S]*\b(?:cover\w*|couvre|couvert|include\w*|inclu\w*|what\s+is|what\s+does|c.est\s+quoi|was\s+deckt|abgedeckt|kostet|co[uû]te|cost\w*)\b)(?![\s\S]*\b(?:whole|entire|complete|toute\s+la|toute\s+ma|enti[eè]re|ganze|gesamte|komplette|intera|completa|toda\s+la)\s+(?:booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b)(?![\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*)\s+(?:of\s+)?(?:my|the|our|this|ma|la|notre|cette|meine|die|unsere|la\s+mia|mi)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar|uithalen|verwijder\w*|afzeggen|annuler(?:en|ing)|no\s+longer\s+(?:need|require|want)\w*|don.?t\s+need|hoef\w*\s+geen|niet\s+meer\s+nodig|brauch\w*\s+(?:wir|ich)?\s*(?:keine?|nicht\s+mehr)|nicht\s+mehr\s+ben[oö]tig\w*|n.avons\s+plus\s+besoin|n.ai\s+plus\s+besoin)\b[\s\S]{0,60}\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|(?:ski)?schuhe|skistiefel|scarponi|botas|(?:ski)?schoenen|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b|\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|(?:ski)?schuhe|skistiefel|scarponi|botas|(?:ski)?schoenen|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b[\s\S]{0,40}\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar|uithalen|verwijder\w*|afzeggen|any\s*more|anymore|nicht\s+mehr|plus\s+besoin)\b))/i },
+        re: /^(?![\s\S]*\b(?:cover\w*|couvre|couvert|include\w*|inclu\w*|what\s+is|what\s+does|c.est\s+quoi|was\s+deckt|abgedeckt|kostet|co[uû]te|cost\w*)\b)(?![\s\S]*\b(?:whole|entire|complete|toute\s+la|toute\s+ma|enti[eè]re|ganze|gesamte|komplette|intera|completa|toda\s+la)\s+(?:booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b)(?![\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*)\s+(?:of\s+)?(?:my|the|our|this|ma|la|notre|cette|meine|die|unsere|la\s+mia|mi)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar|uithalen|verwijder\w*|afzeggen|annuler(?:en|ing)|no\s+longer\s+(?:need|require|want)\w*|don.?t\s+need|hoef\w*\s+geen|niet\s+meer\s+nodig|brauch\w*\s+(?:wir|ich)?\s*(?:keine?|nicht\s+mehr)|nicht\s+mehr\s+ben[oö]tig\w*|n.avons\s+plus\s+besoin|n.ai\s+plus\s+besoin)\b[\s\S]{0,60}\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|(?:ski)?schuhe|skistiefel|scarponi|botas|(?:ski)?schoenen|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?|materials?|equipment|gear|items?|articles?|mat[eé]riel|ausr[uü]stung|material|materiaal|spullen|uitrusting)\s+(?:for|of|de|pour|von|f[uü]r|van|voor)\s+\w+)\b|\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|(?:ski)?schuhe|skistiefel|scarponi|botas|(?:ski)?schoenen|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?|materials?|equipment|gear|items?|articles?|mat[eé]riel|ausr[uü]stung|material|materiaal|spullen|uitrusting)\s+(?:for|of|de|pour|von|f[uü]r|van|voor)\s+\w+)\b[\s\S]{0,40}\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar|uithalen|verwijder\w*|afzeggen|any\s*more|anymore|nicht\s+mehr|plus\s+besoin)\b))/i },
       { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|these|those|this|that|both|all)?\s*(?:\w+\s+){0,2}(bookings?|reservations?|orders?|rentals?)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation|ations|[eé]e?s?)\s+(?:de\s+)?(?:ma|mes|la|les|notre|nos|cette|ces|deux)?\s*(?:\w+\s+){0,2}r[eé]servations?|storno\w*|stornier\w*|stonier\w*|annuler(?:en|ing)\b|annulering|geannuleerd|cancelen|annulla(?:re|zione)|cancellare|disdire|disdetta)\b/i },
       // A double booking IS a cancellation request, and it is one of the most
       // common ones: the payment page errored, the customer tried again, and now
@@ -461,7 +472,7 @@ const FORWARD_PREFIX = /^\s*(WG|TR|FW|FWD)\s*:/i;
 // skidiscount, snowbrainer all use the same templates.
 const OWN_CONFIRMATION_SUBJECT = /(ski\s+rental\s+booking\s+confirmation|skiverleih-?\s*buchungsbest[aä]tigung|boekingsbevestiging\s+van\s+je\s+skiverhuur|bevestiging\s+van\s+de\s+skiverhuur|confirmation\s+de\s+(?:votre\s+)?r[eé]servation\s+de\s+location\s+de\s+ski|conferma\s+(?:della\s+)?prenotazione|confirmaci[oó]n\s+de\s+(?:tu\s+|su\s+)?reserva|your\s+gear\s+is\s+booked|je\s+uitrusting\s+is\s+geboekt|deine\s+ausr[uü]stung\s+ist\s+gebucht|ton\s+[eé]quipement\s+est\s+r[eé]serv[eé]|coupon\s+has\s+been\s+updated|\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b)/i;
 
-function detectInternalSender(message, senderEmail, subject) {
+function detectInternalSender(message, senderEmail, subject, selfForward) {
       const from = String(senderEmail || '').trim();
       if (from && INTERNAL_DOMAINS.some(re => re.test(from))) {
               return { topic: 'OTHER', source: 'internal_sender', blocked: true };
@@ -491,7 +502,7 @@ function detectInternalSender(message, senderEmail, subject) {
       // language we send it in. A forward of THAT is answered like any reply;
       // a forward of anything else is still left to a person.
       const subj = String(subject || '');
-      const isOwnConfirmation = OWN_CONFIRMATION_SUBJECT.test(subj);
+      const isOwnConfirmation = OWN_CONFIRMATION_SUBJECT.test(subj) || selfForward === true;
       if (FORWARD_PREFIX.test(subj) && !isOwnConfirmation) {
               return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
       }
@@ -1500,14 +1511,59 @@ async function fetchCustomerThread(ticketId) {
  * like a colleague, and our own question about children's ages could be mistaken
  * for their answer.
  */
+function unwrapSelfForward(body, senderEmail) {
+      const t = String(body || '');
+      const who = String(senderEmail || '').trim().toLowerCase();
+      if (!who) return t;
+      // The forwarded header: separator or "Forwarded message" line, then From/Von/Van/De.
+      const m = /(?:-{3,}\s*(?:Forwarded message|Doorgestuurd bericht|Weitergeleitete Nachricht|Message transf[eé]r[eé]|Messaggio inoltrato|Mensaje reenviado)\s*-{0,}|(?:^|\n)\s*(?:Begin forwarded message|D[eé]but du message r[eé]exp[eé]di[eé]|Anfang der weitergeleiteten Nachricht|Begin doorgestuurd bericht)\s*:?)[ \t]*\n?([\s\S]{0,600}?)(?=\n[ \t]*\n|(?![\s\S]))/i.exec(t);
+      if (!m) return t;
+      const header = m[1] || '';
+      const from = /(?:From|Von|Van|De|Da)\s*:\s*[^\n<]{0,80}?<?\s*([\w.+-]+@[\w.-]+)/i.exec(header);
+      if (!from || from[1].toLowerCase() !== who) return t;
+      // Her own forward: drop the separator and the header lines, keep everything else.
+      let rest = t.slice(m.index + m[0].length - header.length);
+      if (/\n/.test(header)) {
+              rest = rest.replace(/^\s*(?:From|Von|Van|De|Da|To|An|Aan|[AÀ]|Cc|Date|Datum|Sent|Gesendet|Envoy[eé]|Verzonden|Subject|Betreff|Onderwerp|Objet|Oggetto)\s*:.*$/gim, '');
+      } else {
+              // Flattened onto one line by the mail client: cut each field by its own shape.
+              rest = rest
+                      .replace(/\b(?:Subject|Betreff|Onderwerp|Objet|Oggetto)\s*:\s*[^\n]{0,80}?(?=\s+(?:Date|Datum|Sent|Gesendet|Envoy[eé]|Verzonden|Von|From|Van|De|Da|To|An|Aan|Cc)\s*:)/i, ' ')
+                      .replace(/\b(?:Date|Datum|Sent|Gesendet|Envoy[eé]|Verzonden)\s*:\s*[^\n]{0,40}?\d{4}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?(?:\s+[+-]\d{4})?/i, ' ')
+                      .replace(/\b(?:From|Von|Van|De|Da|To|An|Aan|Cc)\s*:\s*(?:[^<\n]{0,60}?<[^>]+>|[^\s<]+@[^\s>]+)/gi, ' ');
+      }
+      let out = t.slice(0, m.index) + '\n' + rest;
+      return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function stripQuotedAndSignature(body) {
       let t = body.replace(/\r/g, '');
       const cuts = [
               /^\s*-{2,}\s*$/m,                       // -- signature delimiter
               /^\s*_{5,}\s*$/m,
               /^\s*>/m,                               // quoted block
-              /^\s*(On|Le|Am|El)\b.{0,80}\b(wrote|a [eé]crit|schrieb|escribi[oó])\s*:/mi,
-              /^\s*(De|From|Von|Da)\s*:/mi,
+              /^\s*(On|Le|Am|El|Op|Il giorno)\b.{0,80}\b(wrote|a [eé]crit|schrieb|escribi[oó]|schreef|het volgende geschreven|ha scritto)\s*:/mi,
+              /^\s*(De|From|Von|Da|Van)\s*:/mi,
+              // Forward separators, any language, anywhere on the line (D-58, 582172:
+              // "---------- Forwarded message --------- Van: Alpy.com" flattened on one
+              // line, our Dutch confirmation kept, "annuleren" in it read as a cancellation
+              // into a payment question).
+              /-{3,}\s*(?:Forwarded message|Doorgestuurd bericht|Weitergeleitete Nachricht|Message transf[eé]r[eé]|Messaggio inoltrato|Mensaje reenviado|Original Message|Message d'origine|Urspr[uü]ngliche Nachricht|Oorspronkelijk bericht)\s*-{0,}/i,
+              // The same reply header, NOT at the start of a line (D-58, 582170).
+              //
+              // Apple Mail in Dutch writes "Op 8 sep 2026 om 14:21 heeft Skirent-booking.com
+              // <web@...> het volgende geschreven:" and the client flattened the mail onto
+              // one line, so the anchored rule above missed it. Our own confirmation
+              // ("it is possible to change or cancel the booking until...") then stayed in
+              // the text and a KEYWORD rule read a full cancellation into a request that
+              // only concerned one skier's equipment. A date right after the opening word
+              // is what makes this safe to cut mid-line.
+              /\b(?:Op|On|Am|Le|El|Il giorno)\s+(?:\w+\.?\s+)?\d{1,2}[./ -]?\s*\w*\.?\s*\d{2,4}[^\n]{0,80}?\b(?:het volgende geschreven|schreef|wrote|schrieb|a [eé]crit|ha scritto|escribi[oó])\s*:/i,
+              // Our own confirmation mail, quoted without any header at all.
+              /\bYour booking reference:\s*\S{4,8}\s+Ski rental booking confirmation\b/i,
+              /\b(?:Ihre|Deine) Buchungsreferenz:\s*\S{4,8}\s+Skiverleih[- ]Buchungsbest[aä]tigung\b/i,
+              /\bVotre r[eé]f[eé]rence de r[eé]servation\s*:\s*\S{4,8}\s+Confirmation de r[eé]servation\b/i,
+              /\b(?:Je|Uw) boekingsreferentie:\s*\S{4,8}\s+(?:Boekingsbevestiging|Reserveringsbevestiging|Bevestiging van de reservering)\b/i,
               // The same header, but NOT at the start of a line.
               //
               // 581870: the customer forwarded our own confirmation email, and her
@@ -1521,7 +1577,7 @@ function stripQuotedAndSignature(body) {
               // The signal has to be strong enough to never cut a customer's own
               // sentence, so the header must be followed by an address or by the
               // next header of a forwarded block.
-              /\b(De|From|Von|Da)\s*:\s*[^\n]{0,80}?[<(]?[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/i,
+              /\b(De|From|Von|Da|Van)\s*:\s*[^\n]{0,80}?[<(]?[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/i,
               /\b(Envoy[eé]|Sent|Gesendet|Inviato|Enviado)\s*:\s*\w/i,
               /\b(Objet|Subject|Betreff|Oggetto|Asunto)\s*:\s*[^\n]{0,80}\b(confirmation|booking|r[eé]servation|voucher)\b/i,
               /The information transmitted in this e-?mail/i,
@@ -1780,7 +1836,17 @@ export default async function handler(req, res) {
       if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
       if (!params || typeof params !== 'object' || Array.isArray(params)) params = {};
 
-      const message = params.message ?? params.comment ?? '';
+      const rawMessage = params.message ?? params.comment ?? '';
+      // A CUSTOMER FORWARDING HER OWN MAIL IS THE CUSTOMER (D-58, 582163).
+      //
+      // "Fwd: Anfrage - ich bitte um Beachtung u.a. Mail" wrapping the quote request
+      // she had first sent to a partner shop. The forward rule (D-51) left it to a
+      // person, and the quoted-text cutter would have thrown away the request
+      // itself. When the forwarded block's From address is the requester's own,
+      // the block is her words: the headers are removed and the text is kept.
+      const message = unwrapSelfForward(rawMessage,
+              params.sender_email ?? params.senderemail ?? params.requester_email ?? params.requesteremail ?? '');
+      const selfForwarded = message !== rawMessage;
       const tags = params.tags ?? [];
       const llmTopic = normaliseTopic(params.llm_topic ?? params.llmtopic ?? params.topic);
 
@@ -1900,7 +1966,7 @@ export default async function handler(req, res) {
       // Layer 0 - internal or partner sender. Layer 1 - native tags.
       // Either one stops the whole thing, before any topic is considered.
       const fromTags = detectFromTags(tags);
-      const blocked = detectInternalSender(message, senderEmail, thread.subject) || (fromTags && fromTags.blocked ? fromTags : null);
+      const blocked = detectInternalSender(message, senderEmail, thread.subject, selfForwarded) || (fromTags && fromTags.blocked ? fromTags : null);
       if (blocked) {
               const note = blocked.source === 'internal_sender'
                 ? 'This is internal or partner mail, not a customer request. Route it to the right team - no flow should answer it.'

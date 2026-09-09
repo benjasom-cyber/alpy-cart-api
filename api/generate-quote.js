@@ -819,9 +819,13 @@ function norm(s) {
 // becomes a question to the customer, which is what a human would have asked.
 //
 // Returns { shop } | { ambiguous: true, candidates: [town, ...] } | {}.
+// Spellings that are not a town but mean exactly one (D-58). A name that covers several
+// villages (Les Arcs, La Plagne, Courchevel) is NOT here: that is a question for the customer.
+const RESORT_ALIASES = { 'les 2 alpes': 'les deux alpes', '2 alpes': 'les deux alpes', 'deux alpes': 'les deux alpes', 'val claret': 'tignes val claret', 'les arcs': 'arc', 'arcs': 'arc' };
 function resolveShop(shops, resort) {
       if (!resort) return {};
-      const q   = norm(resort);
+      let q   = norm(resort);
+      if (RESORT_ALIASES[q]) q = RESORT_ALIASES[q];
       const qNS = q.replace(/\s/g, '');
       if (!q) return {};
 
@@ -875,7 +879,64 @@ function resolveShop(shops, resort) {
               if (byName) return byName;
       }
 
+      // 5. A misspelt town (D-58, 582173: "Val Calret" for Tignes Val Claret, from
+      //    our own quote form). Damerau-Levenshtein distance against every town and
+      //    against every word-suffix of a town ("val claret" inside "tignes val
+      //    claret"), one edit allowed per six characters, two at most. Several
+      //    distinct towns at the same best distance is a question for the customer,
+      //    never a guess.
+      if (qNS.length >= 5) {
+              const budget = Math.min(2, Math.max(1, Math.floor(qNS.length / 6)));
+              // The query too, with its leading article or word dropped: "Les Arc 1950",
+              // "Station de Val Thorens".
+              const qWords = q.split(' ');
+              const qForms = [qNS];
+              for (let i = 1; i < Math.min(qWords.length, 3); i++) { const f = qWords.slice(i).join(''); if (f.length >= 5) qForms.push(f); }
+              let best = budget + 1, hits = [];
+              for (const s of shops) {
+                        const t = norm(s.town);
+                        const words = t.split(' ');
+                        const forms = [t.replace(/\s/g, '')];
+                        for (let i = 1; i < words.length; i++) forms.push(words.slice(i).join(''));
+                        let d = Infinity;
+                        for (const f of forms) for (const qf of qForms) {
+                                  if (Math.abs(f.length - qf.length) > budget) continue;
+                                  d = Math.min(d, editDistance(qf, f, budget));
+                        }
+                        if (d < best) { best = d; hits = [s]; }
+                        else if (d === best) hits.push(s);
+              }
+              if (best <= budget) {
+                        const byFuzzy = decide(hits);
+                        if (byFuzzy) return byFuzzy;
+              }
+      }
+
       return {};
+}
+
+// Damerau-Levenshtein (adjacent transposition counts one), capped: anything above
+// `max` returns max + 1, so the loop above can stop caring early.
+function editDistance(a, b, max) {
+      if (a === b) return 0;
+      const la = a.length, lb = b.length;
+      if (Math.abs(la - lb) > max) return max + 1;
+      let prev2 = null, prev = [], cur = [];
+      for (let j = 0; j <= lb; j++) prev[j] = j;
+      for (let i = 1; i <= la; i++) {
+              cur = [i];
+              let rowMin = i;
+              for (let j = 1; j <= lb; j++) {
+                        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                        let v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+                        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2] + 1);
+                        cur[j] = v;
+                        if (v < rowMin) rowMin = v;
+              }
+              if (rowMin > max) return max + 1;
+              prev2 = prev; prev = cur;
+      }
+      return prev[lb] > max ? max + 1 : prev[lb];
 }
 
 // Kept for callers that only want a shop or nothing.
