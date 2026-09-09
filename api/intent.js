@@ -346,7 +346,7 @@ const KEYWORDS = [
       // next to a change verb (or a stated new value), is the Skier details
       // flow. Dates and equipment are excluded: those are DATE_CHANGE / REQUOTE.
       { topic: 'PERSONAL_INFO',
-        re: /(?=[\s\S]*\b(?:height|weight|shoe\s*size|boot\s*size|foot\s*size|taille|poids|pointure|gr[oö][sß]e|gewicht|schuhgr[oö][sß]e|altezza|peso|numero\s+di\s+scarpe|estatura|talla|skier\s+details|skier\s+information|personal\s+(?:details|information|data)|donn[eé]es\s+personnelles|pers[oö]nliche\s+(?:daten|angaben)|(?:ski\s+)?level|niveau|(?:ski)?niveau|date\s+of\s+birth|birth\s*date|date\s+de\s+naissance|geburtsdatum|\d{2,3}\s*cm\b|\d{2,3}\s*kg\b|\d{2,3}\s*lbs?\b))(?=[\s\S]*(?:^|[^a-zA-Z])(?:updat\w*|chang\w*|correct\w*|modif\w*|adjust\w*|fix\b|wrong|mistake|error|typo|grown|grew|mettre\s+[aà]\s+jour|changer|corriger|rectifier|erreur|grandi|[aä]ndern|aktualisier\w*|korrigier\w*|falsch|fehler|gewachsen|aggiorn\w*|cambiar|corregir|actualizar|is\s+now\b|are\s+now\b|now\s+\d|fait\s+maintenant|mesure\s+maintenant|ist\s+jetzt|misst\s+jetzt))(?![\s\S]*\b(?:cancel\w*|annul\w*|stornier\w*|refund\w*|rembours\w*))/i },
+        re: /(?=[\s\S]*\b(?:height|weight|shoe\s*size|boot\s*size|foot\s*size|taille|poids|pointure|gr[oö][sß]e|gewicht|schuhgr[oö][sß]e|altezza|peso|numero\s+di\s+scarpe|estatura|talla|skier\s+details|skier\s+information|personal\s+(?:details|information|data)|donn[eé]es\s+personnelles|pers[oö]nliche\s+(?:daten|angaben)|(?:ski\s+)?level|niveau|(?:ski)?niveau|date\s+of\s+birth|birth\s*date|date\s+de\s+naissance|geburtsdatum|\d{2,3}\s*cm\b|\d{2,3}\s*kg\b|\d{2,3}\s*lbs?\b))(?=[\s\S]*(?:^|[^a-zA-Z])(?:updat\w*|chang\w*|correct\w*|modif\w*|adjust\w*|amend\w*|fix\b|wrong|mistake|error|typo|grown|grew|mettre\s+[aà]\s+jour|changer|corriger|rectifier|erreur|grandi|[aä]ndern|aktualisier\w*|korrigier\w*|falsch|fehler|gewachsen|aggiorn\w*|cambiar|corregir|actualizar|is\s+now\b|are\s+now\b|now\s+\d|fait\s+maintenant|mesure\s+maintenant|ist\s+jetzt|misst\s+jetzt))(?![\s\S]*\b(?:cancel\w*|annul\w*|stornier\w*|refund\w*|rembours\w*))/i },
       { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|(?:verleih|buchung|reservierung|miete|mietdauer)\s+(?:gerne\s+)?(?:um\s+\S+\s+tage?\s+)?verl[aä]ngern|verl[aä]ngern|(?:einen|zwei|drei|vier|\d+)\s+tage?\s+(?:mehr|l[aä]nger|zus[aä]tzlich)|(?:boeking|reservering|huur)\s+(?:met\s+\S+\s+dag(?:en)?\s+)?verlengen|verlengen|prolungare|(?:un|due|tre|\d+)\s+giorn[oi]\s+in\s+pi[uù]|(?:one|two|three|\d+)\s+(?:more|extra|additional)\s+days?|add\s+(?:a\s+|an\s+|the\s+|another\s+|one\s+|\d+\s+)?(?:more\s+)?(?:skis?|snowboards?|persons?|people|adults?|child(?:ren)?|skiers?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
       // Helmets, boots and protections added to an EXISTING booking: the General
       // questions flow rebuilds the cart with the addon and answers the customer
@@ -392,12 +392,12 @@ const KEYWORDS = [
       { topic: 'GENERAL_QUESTION',
         re: /\b(helmets?|casques?|helm\w*)\b[\s\S]{0,40}\b(compulsory|mandatory|obligatoire|obligatorisch|pflicht|required\s+by\s+law)\b|\bhelmpflicht\b/i },
       { topic: 'GENERAL_QUESTION',
-        re: /\b(promo(?:tion)?\s+code|code\s+promo|gutschein\s?code|discount\s+code)\b[\s\S]{0,40}\b(does\s+not|doesn.t|not\s+work\w*|invalid|refus\w*|ne\s+(?:fonctionne|marche)\s+pas|funktioniert\s+nicht)\b/i },
+        re: /\b(promo(?:tion(?:al)?)?\s+code|code\s+promo|gutschein\s?code|discount\s+code)\b[\s\S]{0,40}\b(does\s+not|doesn.t|not\s+work\w*|invalid|refus\w*|ne\s+(?:fonctionne|marche)\s+pas|funktioniert\s+nicht)\b/i },
       // "Do you have a code for next year?" - asking FOR a code, not reporting a
       // broken one. The rule above only knew the broken case, so 581888 fell
       // through here too. We do have a code, and it is already in the quote.
       { topic: 'GENERAL_QUESTION',
-        re: /\b(promo(?:tion)?\s*code|code\s+promo|discount\s+code|voucher\s+code|rabatt\s?code|gutschein\s?code|codice\s+sconto|c[oó]digo\s+(?:de\s+)?descuento)\b|\b(?:discount|r[eé]duction|remise|rabatt|sconto|descuento)\b[\s\S]{0,30}\b(?:code|coupon)\b/i },
+        re: /\b(promo(?:tion(?:al)?)?\s*code|code\s+promo|discount\s+code|voucher\s+code|rabatt\s?code|gutschein\s?code|codice\s+sconto|c[oó]digo\s+(?:de\s+)?descuento)\b|\b(?:discount|r[eé]duction|remise|rabatt|sconto|descuento)\b[\s\S]{0,30}\b(?:code|coupon)\b/i },
       // Delivery, and how the shop types differ.
       //
       // Added once the answer book learned to answer them. Before that these
@@ -1644,7 +1644,7 @@ const PRODUCT_ANSWERS = [
       // une formule d'evitement. Le fait ci-dessous supprime la cause.
       {
               key: 'promo_code',
-              re: /\b(promo(?:tion)?\s*code|code\s+promo|discount\s+code|voucher\s+code|rabatt\s?code|gutschein\s?code|codice\s+sconto|c[oó]digo\s+(?:de\s+)?descuento)\b|\b(discount|r[eé]duction|remise|rabatt|sconto|descuento)\b[\s\S]{0,30}\b(code|coupon)\b/i,
+              re: /\b(promo(?:tion(?:al)?)?\s*code|code\s+promo|discount\s+code|voucher\s+code|rabatt\s?code|gutschein\s?code|codice\s+sconto|c[oó]digo\s+(?:de\s+)?descuento)\b|\b(discount|r[eé]duction|remise|rabatt|sconto|descuento)\b[\s\S]{0,30}\b(code|coupon)\b/i,
               fact: 'Yes, we have a promotion code running: ' + ACTIVE_PROMO_CODE + '. It is applied automatically to every quote we build, so the price shown in the cart link is already the discounted price. Say the code is included in the quote being prepared - never say that discounts cannot be advised on. From eight people a group voucher applies on top, calculated in the quote itself: state that it applies, never a figure.',
       },
       {
