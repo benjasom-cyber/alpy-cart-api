@@ -766,7 +766,26 @@ function extractFromMessage(message) {
       // real message, free to exclude.
       const NOT_A_REF = ['BASKET','BUDGET','BEAUTY','BRANCH','BREATH','BREADS','BEHALF',
                          'BUCKET','BUNDLE','BRAKES','BLANKS','BEARER','BLAZER','BADGES'];
-      const refs = [...new Set(m.match(REF) || [])].filter(t => !NOT_A_REF.includes(t));
+      let refs = [...new Set(m.match(REF) || [])].filter(t => !NOT_A_REF.includes(t));
+      // D-59 — référence écrite en minuscules. Le client la retape au lieu de la copier :
+      // « no B8czdq », « ref bpqs1b », « boeking b8jm6c ». Quarante cas sur les deux
+      // dernières saisons, chacun un client dont la réservation reste invisible au flow.
+      // Le pli de casse n'est admis QUE derrière un mot qui annonce une référence, sinon
+      // « booking bureau » deviendrait une réservation ; les mots courants qui passent
+      // quand même à travers sont listés.
+      if (!refs.length) {
+        const REF_LOWER = /\b(?:booking|reservation|r[eé]servation|reservierung|buchung|boeking|prenotazione|reserva|ref|r[eé]f|reference|referenz|no|nr|n°|number|nummer|num[eé]ro)\.?\s*[:#]?\s*(b[123456789abcdefghjklmnpqrstuvwxyz]{5})\b/gi;
+        const NOT_A_REF_LOWER = ['buenas','buchen','bureau','besoin','billet','bagage','bateau','bedrag','bezoek','bestel','bonnes','bijlage','bericht','begint','buchug'];
+        const low = [];
+        for (const mm of m.matchAll(REF_LOWER)) {
+          const tok = mm[1];
+          if (tok === tok.toUpperCase()) continue;              // déjà pris par REF
+          if (NOT_A_REF_LOWER.includes(tok.toLowerCase())) continue;
+          const up = tok.toUpperCase();
+          if (!low.includes(up)) low.push(up);
+        }
+        refs = low;
+      }
       if (refs.length === 1) found.booking_ref = refs[0];
       // Several references is not "no reference".
       //
@@ -1543,6 +1562,9 @@ function stripQuotedAndSignature(body) {
               /^\s*_{5,}\s*$/m,
               /^\s*>/m,                               // quoted block
               /^\s*(On|Le|Am|El|Op|Il giorno)\b.{0,80}\b(wrote|a [eé]crit|schrieb|escribi[oó]|schreef|het volgende geschreven|ha scritto)\s*:/mi,
+              // scandinave : « lør. 29. nov. 2025, 16.15 skrev Alpy.com <…>: » — pas d'introducteur,
+              // la date ouvre la ligne et le verbe est « skrev » (no/da) ou « skrev/skrev den » (sv).
+              /^\s*\S{0,4}\.?\s*\d{1,2}\.?\s*\w{3,10}\.?\s*\d{4}[^\n]{0,40}\bskrev\b[^\n]{0,80}:/mi,
               /^\s*(De|From|Von|Da|Van)\s*:/mi,
               // Forward separators, any language, anywhere on the line (D-58, 582172:
               // "---------- Forwarded message --------- Van: Alpy.com" flattened on one
@@ -1559,6 +1581,7 @@ function stripQuotedAndSignature(body) {
               // only concerned one skier's equipment. A date right after the opening word
               // is what makes this safe to cut mid-line.
               /\b(?:Op|On|Am|Le|El|Il giorno)\s+(?:\w+\.?\s+)?\d{1,2}[./ -]?\s*\w*\.?\s*\d{2,4}[^\n]{0,80}?\b(?:het volgende geschreven|schreef|wrote|schrieb|a [eé]crit|ha scritto|escribi[oó])\s*:/i,
+              /\b\w{2,4}\.?\s*\d{1,2}\.?\s*\w{3,10}\.?\s*\d{4}[^\n]{0,40}\bskrev\b[^\n]{0,80}?:/i,
               // Our own confirmation mail, quoted without any header at all.
               /\bYour booking reference:\s*\S{4,8}\s+Ski rental booking confirmation\b/i,
               /\b(?:Ihre|Deine) Buchungsreferenz:\s*\S{4,8}\s+Skiverleih[- ]Buchungsbest[aä]tigung\b/i,

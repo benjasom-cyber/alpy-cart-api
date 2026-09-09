@@ -27,6 +27,7 @@ const D = {
       [/\bcan (?:i|we|you) cancel\b/, 2], [/\bcancel and refund\b/, 2],
       [/\bconfirm (?:the|this|my) cancellation\b/, 2], [/\bcancellation (?:request|confirmation)\b/, 2],
       [/\bfull refund\b/, 1], [/\bto cancel\b/, 1], [/\bcancel\b/, 1],
+      [/\b(?:process|issue|give|arrange) (?:a |the )?refund for (?:this|my|our|the) booking\b/, 3],
     ],
     de: [
       [/\b(?:buchung|reservierung) (?:bitte )?(?:zu )?stornieren\b/, 3], [/\bstornieren (?:sie )?bitte\b/, 2],
@@ -34,6 +35,7 @@ const D = {
       [/\bhiermit storniere(?:n)? (?:ich|wir)\b/, 3], [/\bleider muss(?:en)? (?:ich|wir)\b/, 1],
       [/\bdie stornierung\b/, 2], [/\bstornierung der (?:buchung|reservierung)\b/, 3], [/\bbitte um (?:eine )?bestatigung\b/, 1],
       [/\b(?:komplett|vollstandig|ganz) stornieren\b/, 3], [/\bstornier\w*\b/, 1], [/\brucktritt\b/, 1],
+      [/\b(?:kauf|buchung|bestellung) .{0,20}(?:ruckabwickeln|ruckgangig machen)\b/, 3], [/\bruckabwickeln\b/, 2],
     ],
     fr: [
       [/\b(?:je |nous )?(?:souhait\w+|voudr\w+|aimer\w+|dois|devons|veux|voulons) (?:d')?annuler\b/, 3],
@@ -56,11 +58,24 @@ const D = {
       [/\b(?:one|two|\d+) of (?:us|the (?:skiers|persons|people|children)) (?:will not|won't|cannot|can't|isn't|is not)\b/, 3],
       [/\b(?:cancel|remove|drop) (?:the |all )?(?:materials?|equipment|gear|items?|rental|skis?|snowboard|boots?) (?:of|for|booked for) [a-z]/, 3], [/\bpartial(?:ly)? cancel/, 3], [/\bno longer (?:need|require)s? (?:the |a |his |her )?(?:helmet|boots?|poles?|skis?)\b/, 3],
       [/\b(?:keep|leave) the rest\b/, 2], [/\bonly (?:cancel|remove)\b/, 2], [/\b(?:instead of|rather than) (?:two|three|\d+)\b/, 1],
+      // D-59 : « annulez seulement pour X », « les autres viennent quand meme », un seul article ajoute par erreur
+      [/\bcancel (?:the |my |our )?(?:booking|reservation|rental) only for [a-z]/, 3],
+      [/\b(?:the )?(?:others?|rest of us|rest) (?:are|is) still (?:coming|going|skiing|joining)\b/, 3],
+      [/\b(?:theft|damage) protection\b[^.!?]{0,50}\b(?:cancel|remove)\b/, 3], [/\b(?:cancel|remove)\b[^.!?]{0,40}\b(?:theft|damage) protection\b/, 3],
+      [/\b(?:accidentally|by mistake|mistakenly)\b[^.!?]{0,60}\b(?:added|included|booked)\b[^.!?]{0,60}\b(?:cancel|remove)\b/, 3],
+      [/\bpartial refund\b/, 2],
     ],
     de: [
       [/\bteil(?:weise )?storn/, 3], [/\b(?:ausrustung|material|ski|skier|schuhe) (?:von|fur) [a-z]+ .{0,20}stornieren\b/, 3], [/\bstornieren sie (?:die |das )?(?:ausrustung|material|ski|skier|schuhe) (?:von|fur) [a-z]/, 3], [/\bnur (?:den|die|das|ein|eine) .{0,20}(?:helm|schuhe|skischuhe|stocke|ski|snowboard) stornieren\b/, 3],
       [/\b(?:helm|skischuhe|schuhe|stocke) .{0,30}stornieren\b/, 2], [/\b(?:eine|ein|zwei|\d+) person(?:en)? .{0,30}stornieren\b/, 3],
       [/\b(?:der rest|die anderen|die ubrigen) (?:bleibt|bleiben)\b/, 3], [/\bkann (?:leider )?nicht mit(?:fahren|kommen)\b/, 2],
+      // D-59 : « alle anderen behalten », « X reist nicht an », un article ajoute par erreur
+      [/\balle anderen\b[^.!?]{0,40}\b(?:behalten|bleiben|mochten wir)\b/, 3], [/\bnicht an(?:reisen|kommen)\b/, 2],
+      [/\bkann (?:leider )?nicht mit ?skifahren\b/, 3],
+      [/\bfur (?:sie|ihn|meine frau|meinen mann|meine tochter|meinen sohn)\b[^.!?]{0,60}\bstornieren\b/, 3],
+      [/\b(?:die )?(?:skier|ski|boots|skischuhe|schuhe|helm|stocke|ausrustung) fur [a-z]+\b[^.!?]{0,40}\bstornieren\b/, 3],
+      [/\b(?:zusatzlich|versehentlich|aus versehen|ausversehen)\b[\s\S]{0,70}\b(?:gebucht|hinzugefugt|dabei)\b[\s\S]{0,70}\bstornieren\b/, 3],
+      [/\bteilruckerstattung\b/, 2],
     ],
     fr: [
       [/\bannulation partielle\b/, 3], [/\bannuler (?:le |la |les )?(?:materiel|equipement|location|skis?) (?:de|pour) [a-z]/, 3], [/\bannuler (?:uniquement |seulement |juste )?(?:le |la |les |un |une )?(?:casque|chaussures|batons|skis?|snowboard)s?\b/, 3],
@@ -220,8 +235,14 @@ const D = {
   },
 
   DEPOT_SWITCH: {
-    en: [[/\b(?:ski )?(?:depot|storage|lockers?|store (?:the|our|my) skis?|overnight)\b/, 3], [/\b(?:swap|switch|exchange|change) (?:the |my |our )?(?:skis?|model|equipment)\b/, 3], [/\b(?:specific|particular|certain) (?:ski |snowboard )?(?:model|brand)\b/, 3], [/\b(?:atomic|head|rossignol|volkl|salomon|stockli|nordica|fischer|k2|blizzard|elan|dynastar)\b/, 2], [/\b(?:length|size) \d{3} ?cm\b/, 2], [/\bmodel ?change\b/, 3], [/\b(?:leave|keep) (?:the |our |my )?skis? (?:at|in) the shop\b/, 3]],
-    de: [[/\b(?:ski)?depot\b/, 3], [/\b(?:skier|ski) (?:im geschaft|im shop|im laden) (?:lassen|einstellen|lagern|deponieren)\b/, 3], [/\b(?:modell|ski) ?(?:wechsel|tausch|wechseln|tauschen)\b/, 3], [/\bbestimmte[ns]? (?:modell|ski|marke)\b/, 3], [/\b(?:atomic|head|rossignol|volkl|salomon|stockli|nordica|fischer|k2|blizzard|elan|redster|supershape|magnum)\b/, 2], [/\b(?:lange|in) \d{3} ?cm\b/, 2], [/\btesten\b/, 1], [/\bhabt ihr (?:den|die|das)\b/, 1]],
+    en: [[/\b(?:ski )?(?:depot|storage|lockers?|store (?:the|our|my) skis?|overnight)\b/, 3], [/\b(?:swap|switch|exchange|change) (?:the |my |our )?(?:skis?|model|equipment)\b/, 3], [/\b(?:specific|particular|certain) (?:ski |snowboard )?(?:model|brand)\b/, 3], [/\b(?:atomic|head|rossignol|volkl|salomon|stockli|nordica|fischer|k2|blizzard|elan|dynastar)\b/, 2], [/\b(?:length|size) \d{3} ?cm\b/, 2], [/\bmodel ?change\b/, 3], [/\b(?:leave|keep) (?:the |our |my )?skis? (?:at|in) the shop\b/, 3],
+         // D-59 : chaussures douloureuses ou mal ajustees — un echange en magasin, pas une annulation
+         [/\b(?:boots?|shoes)\b[^.!?]{0,50}\b(?:hurt|hurting|painful|pain|blister|too (?:small|big|tight|loose|narrow))\b/, 3],
+         [/\b(?:pain|hurt|blister|uncomfortable)\w*\b[^.!?]{0,50}\b(?:boots?|shoes)\b/, 3],
+         [/\btry (?:a |an )?(?:different|another|other|new) (?:pair|model|size|boots?|skis?)\b/, 3]],
+    de: [[/\b(?:ski)?depot\b/, 3], [/\b(?:skier|ski) (?:im geschaft|im shop|im laden) (?:lassen|einstellen|lagern|deponieren)\b/, 3], [/\b(?:modell|ski) ?(?:wechsel|tausch|wechseln|tauschen)\b/, 3], [/\bbestimmte[ns]? (?:modell|ski|marke)\b/, 3], [/\b(?:atomic|head|rossignol|volkl|salomon|stockli|nordica|fischer|k2|blizzard|elan|redster|supershape|magnum)\b/, 2], [/\b(?:lange|in) \d{3} ?cm\b/, 2], [/\btesten\b/, 1], [/\bhabt ihr (?:den|die|das)\b/, 1],
+         [/\b(?:skischuhe|schuhe|boots)\b[^.!?]{0,50}\b(?:drucken|schmerzen|zu (?:klein|gross|eng|weit))\b/, 3],
+         [/\b(?:skischuhe|schuhe|boots|ski|skier)\b[^.!?]{0,40}\b(?:um)?tauschen\b/, 3]],
     fr: [[/\b(?:consigne|casiers?|depot) (?:a skis?)?\b/, 3], [/\blaisser (?:les|nos|mes) skis? (?:au|dans le) magasin\b/, 3], [/\b(?:changer|echanger) (?:de |les |mes )?(?:skis?|modele)\b/, 3], [/\bmodele (?:precis|particulier|specifique)\b/, 3], [/\b(?:atomic|head|rossignol|volkl|salomon|stockli|nordica|fischer|k2|blizzard|elan|dynastar)\b/, 2], [/\b\d{3} ?cm\b/, 1]],
     nl: [[/\b(?:ski)?depot\b/, 3], [/\b(?:ski'?s|materiaal) (?:in de winkel|achter)? ?(?:laten|opslaan|bewaren|stallen)\b/, 3], [/\b(?:wisselen|omruilen|ruilen) (?:van )?(?:ski'?s|model)\b/, 3], [/\bspecifiek\w* (?:model|merk)\b/, 3], [/\b(?:atomic|head|rossignol|volkl|salomon|stockli|nordica|fischer|k2|blizzard|elan)\b/, 2]],
     it: [[/\bdeposito\b/, 3], [/\bcambi\w+ (?:sci|modello)\b/, 3], [/\bmodello specifico\b/, 3]],
@@ -256,9 +277,9 @@ const D = {
   },
 
   PAYMENT: {
-    en: [[/\bpayment (?:failed|declined|did not go through|didn'?t work|error|problem|issue)\b/, 3], [/\b(?:card|credit card) (?:was )?(?:declined|refused|rejected|charged)\b/, 3], [/\b(?:have|has|had|was|were)? ?(?:not|n'?t) (?:been )?(?:charged|debited|taken|refunded)\b/, 3], [/\b(?:where is|still waiting for|when will i (?:get|receive)|have not received) (?:my |the |our )?refund\b/, 3], [/\brefund (?:has )?(?:not|never) (?:arrived|been received|come through)\b/, 3], [/\b(?:pay|paying) (?:the )?(?:balance|remaining|rest|deposit|down ?payment)\b/, 3], [/\b(?:charged|debited) (?:the )?(?:wrong|full|extra) amount\b/, 3], [/\bpayment link\b/, 3], [/\b(?:pay|payment|paid)\b/, 1], [/\brefund\b/, 1]],
+    en: [[/\bpayment (?:failed|declined|did not go through|didn'?t work|error|problem|issue)\b/, 3], [/\b(?:card|credit card) (?:was )?(?:declined|refused|rejected|charged)\b/, 3], [/\b(?:have|has|had|was|were)? ?(?:not|n'?t) (?:been )?(?:charged|debited|taken|refunded)\b/, 3], [/\b(?:where is|still waiting for|when will i (?:get|receive)|have not received) (?:my |the |our )?refund\b/, 3], [/\brefund (?:has )?(?:not|never) (?:arrived|been received|come through)\b/, 3], [/\b(?:pay|paying) (?:the )?(?:balance|remaining|rest|deposit|down ?payment)\b/, 3], [/\b(?:charged|debited) (?:the )?(?:wrong|full|extra) amount\b/, 3], [/\bpayment link\b/, 3], [/\b(?:amount|price) charged\b[^.!?]{0,40}\bdifferent\b/, 3], [/\bdifference between the (?:price|amount|two)\b/, 3], [/\b(?:pay|payment|paid)\b/, 1], [/\brefund\b/, 1]],
     de: [[/\bzahlung (?:fehlgeschlagen|abgelehnt|nicht (?:moglich|funktioniert|durchgegangen)|problem)\b/, 3], [/\b(?:karte|kreditkarte) (?:wurde )?(?:abgelehnt|nicht akzeptiert|belastet)\b/, 3], [/\b(?:nicht|noch nicht|nie) (?:abgebucht|belastet|erstattet|zuruckerstattet|uberwiesen)\b/, 3], [/\b(?:wo bleibt|warte (?:noch )?auf|wann kommt) (?:die |meine |unsere )?(?:ruckerstattung|erstattung|ruckzahlung|gutschrift)\b/, 3], [/\b(?:rest|anzahlung|restbetrag|restzahlung) (?:bezahlen|zahlen|uberweisen)\b/, 3], [/\bzahlungslink\b/, 3], [/\b(?:doppelt|falsch|zu viel) (?:abgebucht|belastet|berechnet)\b/, 3], [/\b(?:zahlung|bezahl\w+|abgebucht)\b/, 1], [/\b(?:ruck)?erstattung\b/, 1]],
-    fr: [[/\bpaiement (?:refuse|echoue|impossible|bloque|n'?a pas (?:fonctionne|abouti|marche)|probleme)\b/, 3], [/\bcarte (?:refusee|rejetee|debitee|bloquee)\b/, 3], [/\b(?:pas|toujours pas|jamais) (?:ete )?(?:debite|preleve|rembourse)\w*\b/, 3], [/\b(?:ou en est|j'?attends|quand (?:aurai|recevrai)) (?:le |mon |notre )?remboursement\b/, 3], [/\b(?:payer|regler) (?:le |la )?(?:solde|reste|acompte|restant)\b/, 3], [/\blien de paiement\b/, 3], [/\b(?:preleve|debite) (?:deux fois|en trop|un montant)\b/, 3], [/\b(?:paiement|paye|prelevement)\b/, 1], [/\bremboursement\b/, 1]],
+    fr: [[/\bpaiement (?:refuse|echoue|impossible|bloque|n'?a pas (?:fonctionne|abouti|marche)|probleme)\b/, 3], [/\bcarte (?:refusee|rejetee|debitee|bloquee)\b/, 3], [/\b(?:pas|toujours pas|jamais) (?:ete )?(?:debite|preleve|rembourse)\w*\b/, 3], [/\b(?:ou en est|j'?attends|quand (?:aurai|recevrai)) (?:le |mon |notre )?remboursement\b/, 3], [/\b(?:payer|regler) (?:le |la )?(?:solde|reste|acompte|restant)\b/, 3], [/\blien de paiement\b/, 3], [/\b(?:preleve|debite) (?:deux fois|en trop|un montant)\b/, 3], [/\bdifference entre le (?:prix|montant)\b/, 3], [/\brembourser (?:cette|la|moi la) difference\b/, 3], [/\b(?:paiement|paye|prelevement)\b/, 1], [/\bremboursement\b/, 1]],
     nl: [[/\bbetaling (?:mislukt|geweigerd|niet gelukt|niet doorgegaan|probleem)\b/, 3], [/\b(?:kaart|creditcard) (?:geweigerd|afgeschreven|geblokkeerd)\b/, 3], [/\b(?:niet|nog niet|nooit) (?:afgeschreven|terugbetaald|teruggestort|gestort)\b/, 3], [/\b(?:waar blijft|wacht (?:nog )?op|wanneer (?:krijg|ontvang)) (?:ik |wij )?(?:de |mijn |onze )?(?:terugbetaling|restitutie|refund)\b/, 3], [/\b(?:rest|restant|aanbetaling|restbedrag) betalen\b/, 3], [/\bbetaallink\b/, 3], [/\b(?:dubbel|verkeerd|te veel) (?:afgeschreven|betaald|in rekening)\b/, 3], [/\b(?:betaling|betaald|afgeschreven)\b/, 1], [/\b(?:terugbetaling|restitutie|bedrag)\b/, 1]],
     it: [[/\bpagamento (?:rifiutato|fallito|non (?:riuscito|andato))\b/, 3], [/\brimborso\b/, 2], [/\baddebit\w+\b/, 2], [/\bpagamento\b/, 1]],
     es: [[/\bpago (?:rechazado|fallido|no (?:realizado|procesado))\b/, 3], [/\breembolso\b/, 2], [/\bcobr\w+\b/, 2], [/\bpago\b/, 1]],
@@ -275,6 +296,43 @@ const D = {
 };
 
 const TOPICS = Object.keys(D);
+
+// D-59 — arbitrage entre sujets qui se recouvrent.
+//
+// Mesuré sur les 314 mails du 26/01/2026 réétiquetés à la main : la faute la plus
+// fréquente ET la plus coûteuse du dictionnaire était de lire une annulation PARTIELLE
+// (« annulez seulement les chaussures de Sam », « ma femme ne skiera pas ») comme une
+// annulation TOTALE — parce que « annuler », « stornieren », « cancel » s'additionnent
+// dans toute phrase d'annulation, partielle comprise. Six cas sur 288. Une annulation
+// totale déclenchée à tort détruit la réservation ; l'inverse ne fait qu'un aller-retour
+// avec un agent. La règle est donc asymétrique, volontairement.
+//
+// Symétriquement, le MOTIF d'une annulation ne doit pas passer pour la demande :
+// « c'est une erreur de date, annulez » est une annulation, pas un changement de dates.
+const CANCEL_EXPLICIT = [
+  /\b(?:i|we) (?:would like to|want to|need to|have to|wish to|must) cancel\b/,
+  /\bplease cancel\b/, /\bcancel (?:my|our|this|the) (?:booking|reservation|order|rental|hire)\b/,
+  /\bwould like to cancel\b/, /\b(?:process|issue|give|arrange) (?:a |the )?refund for (?:this|my|our|the) booking\b/,
+  // l'objet du mail annonce l'annulation : « Annulation — réf. BW377Q », « Stornierung BDJLAA »
+  /^(?:re: |fwd?: |aw: |tr: )*(?:annulation|annuler|stornierung|stornieren|cancellation|cancelling|cancel|annulering|annuleren|cancellazione|cancelacion)\b/,
+  /\bhiermit storniere/, /\bbitte (?:um )?(?:die )?stornierung\b/, /\b(?:buchung|reservierung) (?:bitte )?(?:zu )?stornieren\b/,
+  /\b(?:mochte|mochten|muss|mussen|will|wollen) (?:ich|wir) .{0,40}stornieren\b/,
+  /\b(?:je |nous )?(?:souhait\w+|voudr\w+|aimer\w+|dois|devons|veux|voulons) (?:d')?annuler\b/,
+  /\bmerci d'annuler\b/, /\bveuillez annuler\b/, /\bdemande d'?annulation\b/, /\bannuler (?:ma|notre|cette|la) (?:reservation|commande|location)\b/,
+  /\b(?:wil|willen|zou|zouden|moet|moeten) (?:ik|wij|we) (?:graag )?.{0,30}annuleren\b/, /\bgraag .{0,20}annuleren\b/,
+];
+// Question de principe, pas demande : « comment puis-je annuler si besoin ? »
+const CANCEL_HYPOTHETICAL = [
+  /\bhow (?:am i able to|can i|do i|would i|to) cancel\b/, /\bif (?:i|we) (?:need|have|had|want) to cancel\b/,
+  /\bin case (?:i|we) (?:need|have) to cancel\b/, /\bis it possible to cancel\b[^.!?]{0,40}\bif\b/,
+  /\bwie kann ich .{0,20}stornieren\b/, /\bfalls (?:ich|wir) .{0,30}stornieren\b/,
+  /\bcomment (?:puis-je|faire pour) annuler\b/, /\bsi (?:je|nous) (?:dois|devions) annuler\b/,
+  /\bhoe kan ik .{0,20}annuleren\b/,
+];
+// Sujets plus spécifiques qu'une annulation totale : s'ils sont sûrs, ils la battent.
+const BEATS_CANCELLATION = ['PARTIAL_CANCELLATION', 'CANCELLATION_AFTER', 'DUPLICATE_BOOKING'];
+// Sujets qui, dans une demande d'annulation explicite, ne sont que le motif invoqué.
+const CANCELLATION_BEATS = ['DATE_CHANGE', 'CHANGE_OF_SHOP', 'VOUCHER_RESEND', 'GENERAL_QUESTION', 'REQUOTE', 'DEPOT_SWITCH', 'PAYMENT'];
 
 function norm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ß/g, 'ss').replace(/\s+/g, ' ');
@@ -308,6 +366,22 @@ function scoreIntents(text, lang, opts) {
   const q = out.find(x => x.topic === 'QUOTE');
   if (!hasRef && q && q.score >= 2) {
     for (const x of out) if (NEEDS_BOOKING.has(x.topic)) x.score *= 0.5;
+  }
+  // --- arbitrage D-59 ---
+  const at = t => { const x = out.find(y => y.topic === t); return x ? x.score : 0; };
+  const cap = (t, v) => { const x = out.find(y => y.topic === t); if (x && x.score > v) x.score = v; };
+  const cancel = out.find(x => x.topic === 'CANCELLATION');
+  if (cancel) {
+    // 1. un sujet plus précis, sûr de lui, passe devant l'annulation totale
+    const best = Math.max(...BEATS_CANCELLATION.map(at));
+    if (best >= MIN_SCORE) cap('CANCELLATION', best - MIN_MARGIN);
+    // 2. question de principe : ce n'est pas une demande d'annulation
+    else if (CANCEL_HYPOTHETICAL.some(re => re.test(t))) cap('CANCELLATION', MIN_SCORE - 1);
+    // 3. demande explicite : ce qui l'accompagne n'est que le motif
+    else if (CANCEL_EXPLICIT.some(re => re.test(t))) {
+      const c = at('CANCELLATION');
+      for (const other of CANCELLATION_BEATS) cap(other, c - MIN_MARGIN);
+    }
   }
   for (const x of out) x.score = Math.round(x.score * 10) / 10;
   out.sort((a, b) => b.score - a.score);
