@@ -123,6 +123,10 @@ function evaluate_conditional(op, a, b) {
     case 'boolean_is_false':  return !(a === true || s(a).toLowerCase() === 'true');
     case 'integer_equals':    return parseInt(s(a), 10) === parseInt(s(b), 10);
     case 'integer_not_equals':return parseInt(s(a), 10) !== parseInt(s(b), 10);
+    // "present" is Zendesk's own name for "this variable carries something".
+    // BLANK stringifies to '', so an unrun step reads as absent, which is right.
+    case 'present':           return s(a).trim() !== '';
+    case 'not_present':       return s(a).trim() === '';
     case 'is_empty':          return s(a).trim() === '';
     case 'is_not_empty':      return s(a).trim() !== '';
     case 'array_intersects':      { const B = arr(b); return arr(a).some(x => B.indexOf(x) > -1); }
@@ -369,6 +373,36 @@ async function runFlow(wf, mail, opts) {
         continue;
       }
 
+      // A DIRECTORY, SUPPLIED BY THE CALLER.
+      //
+      // The step-level stub above answers the same thing for every mail, which
+      // is wrong for a lookup: General questions asks Odin for the shops of the
+      // booking's own town, and each mail has a different town. So the caller
+      // may instead hand in a directory - which setting to read, and what to
+      // answer for each value that setting can take. One map covers a whole
+      // batch, and a value the map does not carry is reported rather than
+      // invented.
+      const dir = opts.stubMaps && (opts.stubMaps[cursor] || opts.stubMaps[type]);
+      if (dir && dir.map) {
+        const raw = settingOf(step, dir.by);
+        const key = String(evalSetting(raw, scope)).trim();
+        const hit = Object.prototype.hasOwnProperty.call(dir.map, key) ? dir.map[key]
+                  : (dir.fallback !== undefined ? dir.fallback : undefined);
+        if (hit === undefined) {
+          halted = 'no directory entry for ' + dir.by + '=' + JSON.stringify(key) + ' at ' + cursor;
+          entry.missingDirectoryKey = key;
+          trace.push(entry);
+          break;
+        }
+        scope[cursor] = { output: withLowercaseMirror(hit && typeof hit === 'object' ? hit : { value: hit }) };
+        entry.stubbed = 'directory ' + dir.by + '=' + key;
+        trace.push(entry);
+        const nx = nextStep(wf, cursor, null);
+        if (!nx) break;
+        cursor = nx;
+        continue;
+      }
+
       if (WRITE_PREFIXES.some(p => type.indexOf(p) === 0)) {
         // Recorded, never executed. This is the whole safety story.
         const body = settingOf(step, 'comment_plain_body') || settingOf(step, 'comment_html_body');
@@ -557,6 +591,7 @@ export async function handler(req, res) {
     maxTokens: parseInt(q.maxTokens, 10) || 2000,
     apiMap: q.apiMap || null,
     stubs: (q.stubs && typeof q.stubs === 'object') ? q.stubs : null,
+    stubMaps: (q.stubMaps && typeof q.stubMaps === 'object') ? q.stubMaps : null,
     apiTimeoutMs: parseInt(q.apiTimeoutMs, 10) || 25000,
     promptOnly: q.promptOnly === true || String(q.promptOnly || '') === '1',
     keepPrompts: q.keepPrompts === true || String(q.keepPrompts || '') === '1',
