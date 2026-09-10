@@ -308,6 +308,21 @@ function nextStep(wf, name, outcome) {
   return w ? w.toName : null;
 }
 
+/**
+ * An object whose missing keys read as BLANK instead of throwing.
+ *
+ * Zendesk hands a flow a far richer ticket than a simulation can rebuild, and a
+ * flow that touches `workflow.input.<something we did not model>.id` must read
+ * as empty, not die. Symbols are passed through untouched so String(), JSON and
+ * iteration keep working.
+ */
+function blankly(o) {
+  return new Proxy(o, {
+    has: () => true,
+    get: (t, k) => (typeof k === 'symbol' || k in t) ? t[k] : BLANK,
+  });
+}
+
 async function runFlow(wf, mail, opts) {
   const base = opts.base;
   const apiMap = Object.assign({}, API_MAP, opts.apiMap || {});
@@ -319,7 +334,14 @@ async function runFlow(wf, mail, opts) {
         // its first line is the gate every topic flow tests. Without it a flow
         // stops at its own front door - which is a true simulation of a
         // mis-routed mail, and a useless one of a correctly routed mail.
-        comment: { value: mail.comment != null ? String(mail.comment) : String(mail.body || '') },
+        comment: {
+          value: mail.comment != null ? String(mail.comment) : String(mail.body || ''),
+          // The gatekeeper's very first test is whether the comment was written
+          // by the requester or by an agent. Without an author the whole flow
+          // died on `comment.author.id` before doing anything at all.
+          author: { id: mail.requester_id || 0, email: String(mail.from || ''), name: String(mail.name || '') },
+          public: mail.public !== false,
+        },
         subject: String(mail.subject || ''),
         brand_id: mail.brand_id != null ? mail.brand_id : 0,
         requester_id: mail.requester_id || 0,
@@ -328,6 +350,9 @@ async function runFlow(wf, mail, opts) {
       },
     },
   };
+  scope.workflow.input.comment = blankly(scope.workflow.input.comment);
+  scope.workflow.input = blankly(scope.workflow.input);
+  scope.workflow = blankly(scope.workflow);
 
   const trace = [];
   const actions = [];
