@@ -479,16 +479,31 @@ export async function handler(req, res) {
   // so demanding one here would reject every browser call on its first hop.
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  if (!authorised(req)) {
+  const body = typeof req.body === 'string' ? safeJson(req.body) : (req.body || {});
+
+  if (!authorised(req, body)) {
+    // Enough to tell a wrong value from a missing one, and nothing more.
+    //
+    // Two afternoons went into a 401 that turned out to be two different
+    // strings on the two sides, with no way to see which. Lengths compare
+    // safely: they cannot reconstruct a secret, and they answer the only
+    // question worth asking - is this the same value or another one.
+    const p = presentedSecret(req, body);
+    const presentedLen = Math.max(p.header.length, p.bearer.length, p.inBody.length);
     return res.status(401).json({
       error: 'Unauthorised.',
-      how: 'Send the review secret as the x-review-secret header, or as an Authorization ' +
-           'bearer token. It lives in the Vercel project environment - never in a Zendesk ' +
-           'field or a chat message.',
+      how: 'Send the secret as the x-review-secret header, as an Authorization bearer ' +
+           'token, or as a "secret" field in the JSON body. Never in the URL.',
+      diagnostic: presentedLen
+        ? ('a secret of ' + presentedLen + ' characters was presented; the one configured ' +
+           'here is ' + REVIEW_SECRET.length + ' characters long' +
+           (presentedLen === REVIEW_SECRET.length
+             ? ' - the same length, so the difference is inside the value: retype it on both sides.'
+             : ' - different lengths, so they are simply not the same value.'))
+        : 'no secret was presented at all - the header did not arrive.',
+      configured: { reviewSecret: REVIEW_SECRET.length > 0, cronSecret: CRON_SECRET.length > 0 },
     });
   }
-
-  const body = typeof req.body === 'string' ? safeJson(req.body) : (req.body || {});
   const q = Object.assign({}, req.query || {}, body);
 
   const wf = q.workflow;
@@ -550,13 +565,28 @@ export async function handler(req, res) {
 
 function safeJson(s) { try { return JSON.parse(s); } catch { return {}; } }
 
-function authorised(req) {
-  if (!REVIEW_SECRET && !CRON_SECRET) return false;
+/**
+ * The secret may travel in a header OR in the JSON body.
+ *
+ * The body is there because a custom header turns a cross-origin POST into a
+ * preflighted request, and a preflight that is answered wrongly fails as a bare
+ * "Failed to fetch" with nothing to debug. A field in the body has none of that
+ * machinery in the way. It is never accepted in the URL: a query string is
+ * logged, kept in history and shared by copy-paste, which a secret must not be.
+ */
+function presentedSecret(req, body) {
   const h = req.headers || {};
   const bearer = String(h.authorization || '').replace(/^Bearer\s+/i, '').trim();
-  const given = String(h['x-review-secret'] || (req.query && req.query.secret) || '').trim();
-  if (REVIEW_SECRET && (given === REVIEW_SECRET || bearer === REVIEW_SECRET)) return true;
-  if (CRON_SECRET && bearer === CRON_SECRET) return true;
+  const header = String(h['x-review-secret'] || '').trim();
+  const inBody = String((body && (body.secret || body.review_secret)) || '').trim();
+  return { header, bearer, inBody };
+}
+
+function authorised(req, body) {
+  if (!REVIEW_SECRET && !CRON_SECRET) return false;
+  const p = presentedSecret(req, body);
+  if (REVIEW_SECRET && (p.header === REVIEW_SECRET || p.bearer === REVIEW_SECRET || p.inBody === REVIEW_SECRET)) return true;
+  if (CRON_SECRET && (p.bearer === CRON_SECRET || p.inBody === CRON_SECRET)) return true;
   return false;
 }
 
