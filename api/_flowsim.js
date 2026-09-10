@@ -94,6 +94,14 @@ const MCP_MAP = {
 // Steps that change the world. Recorded, never run.
 const WRITE_PREFIXES = ['tickets_'];
 
+/**
+ * The Zendesk step types that only READ. They share the tickets_ prefix with
+ * the writes, and recording one as a write is not merely untidy: the step then
+ * produces no output, so every later step that reads the ticket sees nothing
+ * and the flow takes a branch it would never take in production.
+ */
+const TICKET_READ = /^tickets_(get|list|search|find|count)/;
+
 /* -------------------------------------------------------------- expressions */
 
 /**
@@ -227,18 +235,39 @@ async function callOwnApi(base, route, params, timeoutMs) {
   const url = base + route + (route.indexOf('?') > -1 ? '&' : '?') + '_sim=1';
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs || 25000);
+  const read = async (r) => {
+    const text = await r.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+    return { status: r.status, json };
+  };
   try {
-    const r = await fetch(url, {
+    let out = await read(await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params || {}),
       signal: ctrl.signal,
-    });
-    const text = await r.text();
-    let json = null;
-    try { json = text ? JSON.parse(text) : null; } catch { json = null; }
-    if (!json) throw new Error(route + ' answered ' + r.status + ' with no JSON');
-    return json;
+    }));
+    // Some of our own endpoints only answer GET. A POST to one of those comes
+    // back 405 with a JSON error body, which the simulator used to hand to the
+    // flow as if it were data: every booking lookup then read as "no booking"
+    // and every flow took its no-booking branch. Retry the honest way instead.
+    if (out.status === 405 || out.status === 404) {
+      const qs = Object.keys(params || {})
+        .filter(k => params[k] !== undefined && params[k] !== null && params[k] !== '')
+        .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(
+          typeof params[k] === 'object' ? JSON.stringify(params[k]) : String(params[k])))
+        .join('&');
+      out = await read(await fetch(url + (qs ? '&' + qs : ''), { method: 'GET', signal: ctrl.signal }));
+    }
+    if (!out.json) throw new Error(route + ' answered ' + out.status + ' with no JSON');
+    if (out.status >= 400) {
+      // Loud on purpose: in production the connector gets a 200. A 4xx here is
+      // a hole in the simulation, not a fact about the customer.
+      throw new Error(route + ' answered ' + out.status + ': ' +
+        String((out.json && (out.json.error || out.json.message)) || '').slice(0, 120));
+    }
+    return out.json;
   } finally {
     clearTimeout(t);
   }
@@ -428,7 +457,23 @@ async function runFlow(wf, mail, opts) {
         continue;
       }
 
-      if (WRITE_PREFIXES.some(p => type.indexOf(p) === 0)) {
+      if (TICKET_READ.test(type)) {
+        // Supplied by the caller, like the requester: the simulator holds no
+        // Zendesk credentials. `mail.ticket` is the ticket as Zendesk returns
+        // it; without one, the little we do know about the mail.
+        const t = (mail.ticket && typeof mail.ticket === 'object') ? mail.ticket : {
+          id: mail.ticket_id || 0,
+          subject: String(mail.subject || ''),
+          description: String(mail.body || ''),
+          status: mail.status || 'new',
+          tags: mail.tags || [],
+          brand_id: mail.brand_id != null ? mail.brand_id : 0,
+          requester_id: mail.requester_id || 0,
+        };
+        scope[cursor] = { output: withLowercaseMirror(t) };
+        entry.stubbed = mail.ticket ? 'ticket supplied by the caller' : 'ticket rebuilt from the mail';
+
+      } else if (WRITE_PREFIXES.some(p => type.indexOf(p) === 0)) {
         // Recorded, never executed. This is the whole safety story.
         const body = settingOf(step, 'comment_plain_body') || settingOf(step, 'comment_html_body');
         const tags = settingOf(step, 'tags');
