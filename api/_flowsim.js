@@ -102,6 +102,14 @@ const WRITE_PREFIXES = ['tickets_'];
  */
 const TICKET_READ = /^tickets_(get|list|search|find|count)/;
 
+/**
+ * Odin steps that CHANGE something: cancel a booking or an item, refund a
+ * payment, move a rental period. Recorded with their resolved parameters and
+ * never executed - this simulator must stay safe to point at production data.
+ */
+const ODIN_READ = /_(payment_get_[a-z_]+|booking_refund_amount_by_coupon|payment_can_be_refunded|payment_is_refund_within_limit|booking_get_expiration|booking_get_item)$/;
+const ODIN_WRITE = /_(booking_cancel|booking_cancel_item|booking_refund_amount_by_payment|payment_refund|booking_update_rental_period|booking_update_customer_info|booking_update_personal_info|booking_replace_shop|booking_send_update_email|booking_revert_canceled_item)$/;
+
 /* -------------------------------------------------------------- expressions */
 
 /**
@@ -387,6 +395,8 @@ async function runFlow(wf, mail, opts) {
   const actions = [];
   // Booking searches the caller did not feed - reported, never hidden.
   const unfedSearches = [];
+  // Odin reads the simulator cannot perform - same rule: reported, never hidden.
+  const unfedReads = [];
   let cursor = opts.start || firstStep(wf);
   let steps = 0;
   let halted = null;
@@ -494,6 +504,53 @@ async function runFlow(wf, mail, opts) {
         if (act.text && (type === 'tickets_addPublicTicketComment' ||
                         (type === 'tickets_updateTicket' && act.public))) reply = act.text;
         entry.recorded = true;
+
+      } else if (type === 'for_each') {
+        // The loop body of both cancellation flows is Odin WRITE steps -
+        // cancel an item, refund a payment. Walking it would mean either
+        // running them (never) or faking their answers (a lie). So the loop is
+        // recorded with the exact list it would have iterated, and the flow
+        // continues on "done", which is where the customer-visible reply is.
+        const items = evalSetting(settingOf(step, 'items'), scope);
+        let list = items;
+        if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = String(items).split(/[\s,]+/).filter(Boolean); } }
+        if (!Array.isArray(list)) list = list ? [list] : [];
+        actions.push({ step: cursor, type, wouldLoopOver: list.slice(0, 50), times: list.length,
+          note: 'body not walked: it contains Odin write steps' });
+        entry.recorded = true;
+        entry.loopTimes = list.length;
+        outcome = 'done';
+
+      } else if (ODIN_WRITE.test(type)) {
+        // Same rule as the ticket writes: recorded, never run.
+        const params = {};
+        for (const st of (step.settings || [])) {
+          if (!st || !st.name) continue;
+          params[st.name] = evalSetting(st.value, scope);
+        }
+        actions.push({ step: cursor, type, params });
+        scope[cursor] = { output: withLowercaseMirror({ ok: true, simulated: true }) };
+        entry.recorded = true;
+
+      } else if (type === 'update_custom_variables') {
+        // Zendesk's own "remember these values" step: its settings ARE the
+        // variables. Evaluating them into this step's output is exactly what
+        // the account does.
+        const vars = {};
+        for (const st of (step.settings || [])) {
+          if (!st || !st.name) continue;
+          vars[st.name] = evalSetting(st.value, scope);
+        }
+        scope[cursor] = { output: withLowercaseMirror(vars) };
+        entry.output = Object.keys(vars);
+
+      } else if (ODIN_READ.test(type)) {
+        // A read we cannot perform from here (payments, refund ceilings): it
+        // answers empty AND says so, per run, so a branch taken because of it
+        // is never mistaken for a finding about the customer.
+        scope[cursor] = { output: withLowercaseMirror({}) };
+        entry.unfedRead = type.replace(/^[a-z0-9]+_/, '');
+        unfedReads.push(entry.unfedRead);
 
       } else if (type === 'if') {
         const cond = settingOf(step, 'condition');
@@ -635,6 +692,7 @@ async function runFlow(wf, mail, opts) {
     wouldHaveWritten: actions,
     stubbedSteps: trace.filter(t => t.stubbed).map(t => t.step),
     unfedBookingSearches: unfedSearches,
+    unfedOdinReads: unfedReads,
     halted,
     trace: opts.verbose ? trace : undefined,
   };
