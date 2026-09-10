@@ -343,6 +343,27 @@ async function runFlow(wf, mail, opts) {
     let outcome = null;
 
     try {
+      // A CANNED OUTPUT, SUPPLIED BY THE CALLER.
+      //
+      // Checked before anything else, and the reason the simulator can be
+      // complete without pretending to reach systems it cannot reach. Zendesk's
+      // MCP connector to Odin is one of those: the flows read shops through it,
+      // Odin's REST equivalent is not public, and guessing its paths is how a
+      // simulation quietly starts lying. Whoever runs the simulation usually CAN
+      // read that data - the Odin tools are one call away in a Claude session -
+      // so they hand it in, keyed by step name or by step type, and the trace
+      // says plainly which steps were fed rather than executed.
+      const stub = opts.stubs && (opts.stubs[cursor] !== undefined ? opts.stubs[cursor] : opts.stubs[type]);
+      if (stub !== undefined) {
+        scope[cursor] = { output: withLowercaseMirror(stub && typeof stub === 'object' ? stub : { value: stub }) };
+        entry.stubbed = 'supplied by the caller';
+        trace.push(entry);
+        const nx = nextStep(wf, cursor, null);
+        if (!nx) break;
+        cursor = nx;
+        continue;
+      }
+
       if (WRITE_PREFIXES.some(p => type.indexOf(p) === 0)) {
         // Recorded, never executed. This is the whole safety story.
         const body = settingOf(step, 'comment_plain_body') || settingOf(step, 'comment_html_body');
@@ -450,6 +471,7 @@ async function runFlow(wf, mail, opts) {
     path: trace.map(t => t.step + (t.result === true ? '[then]' : t.result === false ? '[else]' : '')),
     branches: trace.filter(t => t.type === 'if').map(t => ({ step: t.step, taken: t.result ? 'then' : 'else' })),
     wouldHaveWritten: actions,
+    stubbedSteps: trace.filter(t => t.stubbed).map(t => t.step),
     halted,
     trace: opts.verbose ? trace : undefined,
   };
@@ -529,6 +551,7 @@ export async function handler(req, res) {
     model: q.model ? String(q.model) : MODEL,
     maxTokens: parseInt(q.maxTokens, 10) || 2000,
     apiMap: q.apiMap || null,
+    stubs: (q.stubs && typeof q.stubs === 'object') ? q.stubs : null,
     apiTimeoutMs: parseInt(q.apiTimeoutMs, 10) || 25000,
     promptOnly: q.promptOnly === true || String(q.promptOnly || '') === '1',
     keepPrompts: q.keepPrompts === true || String(q.keepPrompts || '') === '1',
