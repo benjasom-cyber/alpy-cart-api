@@ -65,7 +65,7 @@ const BUDGET_MS = 48000;
 
 // A flow is a few dozen steps; anything past this is a loop we do not want to
 // discover in production.
-const MAX_STEPS = 120;
+const MAX_STEPS = 400;   // a for_each over a dozen items walks its body a dozen times
 
 /**
  * Custom API steps, by the type id the flow carries, to the route that serves
@@ -387,6 +387,9 @@ async function runFlow(wf, mail, opts) {
       },
     },
   };
+  // Written by update_custom_variables inside a loop body and read after it -
+  // the Cancellation flow decides whether to answer the customer on this.
+  scope.workflow.custom_variables = {};
   scope.workflow.input.comment = blankly(scope.workflow.input.comment);
   scope.workflow.input = blankly(scope.workflow.input);
   scope.workflow = blankly(scope.workflow);
@@ -397,6 +400,8 @@ async function runFlow(wf, mail, opts) {
   const unfedSearches = [];
   // Odin reads the simulator cannot perform - same rule: reported, never hidden.
   const unfedReads = [];
+  // Open for_each steps, innermost last.
+  const loopStack = [];
   let cursor = opts.start || firstStep(wf);
   let steps = 0;
   let halted = null;
@@ -434,7 +439,10 @@ async function runFlow(wf, mail, opts) {
         entry.stubbed = 'supplied by the caller';
         trace.push(entry);
         const nx = nextStep(wf, cursor, null);
-        if (!nx) break;
+        if (!nx) {
+          if (loopStack.length) { cursor = loopStack[loopStack.length - 1].step; continue; }
+          break;
+        }
         cursor = nx;
         continue;
       }
@@ -464,7 +472,10 @@ async function runFlow(wf, mail, opts) {
         entry.stubbed = 'directory ' + dir.by + '=' + key;
         trace.push(entry);
         const nx = nextStep(wf, cursor, null);
-        if (!nx) break;
+        if (!nx) {
+          if (loopStack.length) { cursor = loopStack[loopStack.length - 1].step; continue; }
+          break;
+        }
         cursor = nx;
         continue;
       }
@@ -506,20 +517,36 @@ async function runFlow(wf, mail, opts) {
         entry.recorded = true;
 
       } else if (type === 'for_each') {
-        // The loop body of both cancellation flows is Odin WRITE steps -
-        // cancel an item, refund a payment. Walking it would mean either
-        // running them (never) or faking their answers (a lie). So the loop is
-        // recorded with the exact list it would have iterated, and the flow
-        // continues on "done", which is where the customer-visible reply is.
-        const items = evalSetting(settingOf(step, 'items'), scope);
-        let list = items;
-        if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = String(items).split(/[\s,]+/).filter(Boolean); } }
-        if (!Array.isArray(list)) list = list ? [list] : [];
-        actions.push({ step: cursor, type, wouldLoopOver: list.slice(0, 50), times: list.length,
-          note: 'body not walked: it contains Odin write steps' });
-        entry.recorded = true;
-        entry.loopTimes = list.length;
-        outcome = 'done';
+        // A real loop. The body is walked once per item, with the current item
+        // exposed the way Zendesk exposes it - step_<name>.output.item - and
+        // the Odin writes inside it recorded rather than run. Skipping the body
+        // (the first version of this) left every variable the body sets empty:
+        // the Cancellation flow reads `cancelled_summary` after the loop to
+        // decide whether to answer at all, so 23 of 35 runs looked like silent
+        // non-answers that production would never produce.
+        const open = loopStack.length && loopStack[loopStack.length - 1].step === cursor
+                   ? loopStack[loopStack.length - 1] : null;
+        if (!open) {
+          let list = evalSetting(settingOf(step, 'items'), scope);
+          if (typeof list === 'string') {
+            try { list = JSON.parse(list); }
+            catch { list = String(list).split(/[\s,]+/).filter(Boolean); }
+          }
+          if (!Array.isArray(list)) list = (list === '' || list == null) ? [] : [list];
+          entry.loopTimes = list.length;
+          if (!list.length) { outcome = 'done'; }
+          else {
+            loopStack.push({ step: cursor, list, i: 0 });
+            scope[cursor] = { output: withLowercaseMirror({ item: list[0], index: 0 }) };
+            outcome = 'loop';
+          }
+        } else {
+          open.i++;
+          if (open.i < open.list.length) {
+            scope[cursor] = { output: withLowercaseMirror({ item: open.list[open.i], index: open.i }) };
+            outcome = 'loop';
+          } else { loopStack.pop(); outcome = 'done'; }
+        }
 
       } else if (ODIN_WRITE.test(type)) {
         // Same rule as the ticket writes: recorded, never run.
@@ -533,16 +560,18 @@ async function runFlow(wf, mail, opts) {
         entry.recorded = true;
 
       } else if (type === 'update_custom_variables') {
-        // Zendesk's own "remember these values" step: its settings ARE the
-        // variables. Evaluating them into this step's output is exactly what
-        // the account does.
-        const vars = {};
-        for (const st of (step.settings || [])) {
-          if (!st || !st.name) continue;
-          vars[st.name] = evalSetting(st.value, scope);
+        // The setting is an array of { variable, value }; the account writes
+        // them into workflow.custom_variables, which later steps read.
+        let list = evalSetting(settingOf(step, 'custom_variables'), scope);
+        if (!Array.isArray(list)) list = list ? [list] : [];
+        const set = {};
+        for (const v of list) {
+          if (!v || !v.variable) continue;
+          scope.workflow.custom_variables[v.variable] = v.value;
+          set[v.variable] = true;
         }
-        scope[cursor] = { output: withLowercaseMirror(vars) };
-        entry.output = Object.keys(vars);
+        scope[cursor] = { output: withLowercaseMirror(set) };
+        entry.output = Object.keys(set);
 
       } else if (ODIN_READ.test(type)) {
         // A read we cannot perform from here (payments, refund ceilings): it
@@ -675,7 +704,12 @@ async function runFlow(wf, mail, opts) {
 
     trace.push(entry);
     const next = nextStep(wf, cursor, outcome);
-    if (!next) break;
+    if (!next) {
+      // The end of a for_each body has no wire back: Zendesk returns to the
+      // loop step itself. So do we.
+      if (loopStack.length) { cursor = loopStack[loopStack.length - 1].step; continue; }
+      break;
+    }
     cursor = next;
   }
 
