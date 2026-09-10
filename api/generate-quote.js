@@ -1073,6 +1073,20 @@ export default async function handler(req, res) {
       const endDate   = pick(endDateParam,   undefined) || pick(endDateAlt,   undefined)
                               || pick(undefined, cj.end_date)   || pick(undefined, cj.endDate)   || null;
 
+      // SECOND_PERIOD (582254): two consecutive weeks are two rentals, not one.
+      //
+      // "10 people 9-16 January, 10 more 16-23 January" was merged by the
+      // extraction into a single 9->23 span. Fifteen days, one over the 14-day
+      // guard, so this endpoint answered 400, the custom-action step failed, and
+      // a customer who had supplied dates, ages and insurance received nothing
+      // at all. The guard is right - a 205-day "rental" was once priced at
+      // 3,436 EUR (581658) - so the fix is not to loosen it but to be able to
+      // read the second period the customer actually wrote.
+      const secondStart = pick(params.second_start_date, undefined) || pick(params.secondStartDate, undefined)
+                              || pick(undefined, cj.second_start_date) || pick(undefined, cj.secondStartDate) || null;
+      const secondEnd   = pick(params.second_end_date,   undefined) || pick(params.secondEndDate,   undefined)
+                              || pick(undefined, cj.second_end_date)   || pick(undefined, cj.secondEndDate)   || null;
+
       const lang = pick(langParam, cj.language) || 'en';
 
       const adultsEff       = pick(adultsParam,       cj.adults);
@@ -1245,14 +1259,18 @@ export default async function handler(req, res) {
                         });
               }
               if (spanDays > MAX_RENTAL_DAYS) {
-                        return res.status(400).json({
-                                  error: 'Rental period is ' + spanDays + ' days (' + startDate + ' to ' +
-                                         endDate + '), which exceeds the ' + MAX_RENTAL_DAYS + '-day maximum. ' +
-                                         'A date this far out is almost always a promotion deadline or a ' +
-                                         'booking-window date read as the end of the rental. Ask the customer ' +
-                                         'for the return date instead of pricing this.',
-                                  startDate, endDate, days: spanDays,
+                        // A 4xx here stops the flow and the customer gets nothing - the very
+                        // failure askCustomer() exists to prevent (581984). The guard stands,
+                        // but it now asks rather than dies: over 14 days the reading is
+                        // doubtful, and the honest move is to say so in one question instead
+                        // of pricing a fortnight nobody asked for or falling silent.
+                        return askCustomer(res, {
                                   reason: 'PERIOD_TOO_LONG',
+                                  resort: resort || null,
+                                  question: 'we have read your rental as ' + startDate + ' to ' + endDate +
+                                            ', which is ' + spanDays + ' days. Could you confirm the exact ' +
+                                            'first and last day of the hire - and, if this covers more than ' +
+                                            'one separate rental period, the dates of each?',
                         });
               }
       }
@@ -1472,14 +1490,60 @@ export default async function handler(req, res) {
               levelNote: buildLevelNote(persons, defs),
       });
 
+  // SECOND_PERIOD (582254): price the second rental and put it in the same letter.
+  //
+  // Done here, by calling ourselves, rather than by teaching the flow to branch:
+  // an Action Flow step may have only one incoming wire, so a conditional second
+  // call cannot rejoin the main line without duplicating the whole tail. One
+  // extra HTTP hop inside this function keeps the flow at the size it is.
+  let second = null;
+  let secondNote = '';
+  const isDayShape = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim());
+  if (secondStart && secondEnd && isDayShape(secondStart) && isDayShape(secondEnd) && !params._no_second) {
+          try {
+                    const proto2 = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+                    const host2 = req.headers['x-forwarded-host'] || req.headers.host;
+                    const body2 = Object.assign({}, typeof bodyIn === 'object' ? bodyIn : {}, {
+                              startDate: secondStart, endDate: secondEnd,
+                              second_start_date: '', second_end_date: '',
+                              secondStartDate: '', secondEndDate: '',
+                              claude_json: '',            // the blob still carries the first period
+                              _no_second: true,           // one level deep, never a loop
+                              resort: resort || undefined,
+                              shopId: shop && shop.id ? shop.id : undefined,
+                    });
+                    const r2 = await fetch(proto2 + '://' + host2 + '/api/generate-quote', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body2),
+                    });
+                    const j2 = await r2.json().catch(() => null);
+                    if (j2 && j2.cartUrl) second = j2;
+          } catch (e) { console.error('generate-quote: second period failed', e); }
+  }
+  if (second) {
+          const money2 = (n) => (typeof n === 'number' ? n.toFixed(2) : null);
+          const p2 = money2(second.cartOnlinePrice);
+          secondNote = String(secondNote || '') +
+                    '\n\nSECOND RENTAL PERIOD, ' + secondStart + ' to ' + secondEnd + ', same group and same shop: ' +
+                    (p2 ? p2 + ' ' + (second.currency || 'EUR') + ' online.' : 'price could not be computed.') +
+                    ' Its own cart: ' + second.cartUrl +
+                    '\nQuote BOTH periods in the reply, each with its own dates, its own price and its own link. ' +
+                    'They are two separate rentals, not one long one: never add the two periods into a single span, ' +
+                    'and never present one link as covering both.';
+  } else if (secondStart && secondEnd) {
+          secondNote = String(secondNote || '') +
+                    '\n\nThe customer also asked about a second period, ' + secondStart + ' to ' + secondEnd +
+                    ', which could not be priced. Quote the first period, say plainly that the second is being ' +
+                    'checked, and ask them to confirm the dates.';
+  }
+
   const topLevelPricing = {
           // `quoteline` reste du texte, comme avant, pour ne casser aucun flow
           // qui l'utilise deja - simplement avec l'URL sur sa propre ligne.
           // `quotelinehtml` est la version a inserer dans une reponse client.
-          quoteLine: quoteLine.text,
-          quoteline: quoteLine.text,
-          quoteLineHtml: quoteLine.html,
-          quotelinehtml: quoteLine.html,
+          quoteLine: quoteLine.text + (typeof secondNote === 'string' ? secondNote : ''),
+          quoteline: quoteLine.text + (typeof secondNote === 'string' ? secondNote : ''),
+          quoteLineHtml: quoteLine.html + (typeof secondNote === 'string' ? secondNote : ''),
+          quotelinehtml: quoteLine.html + (typeof secondNote === 'string' ? secondNote : ''),
           quoteHasPrice,
           quotehasprice: quoteHasPrice,
           detectedLanguage: lang,          
@@ -1529,6 +1593,14 @@ export default async function handler(req, res) {
   return res.status(200).json({
           cartUrl,
           shopUrl,
+          secondPeriodStart: second ? secondStart : '',
+          secondperiodstart: second ? secondStart : '',
+          secondPeriodEnd: second ? secondEnd : '',
+          secondperiodend: second ? secondEnd : '',
+          secondCartUrl: second ? second.cartUrl : '',
+          secondcarturl: second ? second.cartUrl : '',
+          secondCartOnlinePrice: second ? second.cartOnlinePrice : null,
+          secondcartonlineprice: second ? second.cartOnlinePrice : null,
           // The brand the links were built on - flat and lowercase too, so a
           // Zendesk custom action can bind it and a reply can name the site.
           platformDomain: siteDomain,
