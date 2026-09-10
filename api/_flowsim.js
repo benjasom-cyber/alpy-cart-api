@@ -402,6 +402,13 @@ async function runFlow(wf, mail, opts) {
   const unfedReads = [];
   // Open for_each steps, innermost last.
   const loopStack = [];
+  // References this run "cancelled" - recorded, not really cancelled. Used only
+  // when the caller asks the simulation to assume its writes worked, so that
+  // the flow's own verification step (cancel, then read the booking back) does
+  // not always conclude "the cancellation was refused" and hand over. Every
+  // such assumption is listed in the result.
+  const assumedCancelled = new Set();
+  const assumptions = [];
   let cursor = opts.start || firstStep(wf);
   let steps = 0;
   let halted = null;
@@ -556,6 +563,10 @@ async function runFlow(wf, mail, opts) {
           params[st.name] = evalSetting(st.value, scope);
         }
         actions.push({ step: cursor, type, params });
+        if (/_booking_cancel$/.test(type)) {
+          const ref = String(params.bookingReference || params.reference || params.ref || '').trim().toUpperCase();
+          if (ref) assumedCancelled.add(ref);
+        }
         scope[cursor] = { output: withLowercaseMirror({ ok: true, simulated: true }) };
         entry.recorded = true;
 
@@ -658,6 +669,12 @@ async function runFlow(wf, mail, opts) {
             entry.notFound = true;
           } else { throw e; }
         }
+        const ref = String(params.bookingReference || '').trim().toUpperCase();
+        if (opts.assumeWrites && ref && assumedCancelled.has(ref)) {
+          out = Object.assign({}, out, { status: 'CANCELLED', bookingStatus: 'CANCELLED' });
+          entry.assumed = 'cancelled ' + ref;
+          assumptions.push('booking ' + ref + ' read back as CANCELLED because this run recorded a cancel for it');
+        }
         scope[cursor] = { output: withLowercaseMirror(out) };
         entry.api = MCP_MAP.booking_get_by_reference;
 
@@ -727,6 +744,7 @@ async function runFlow(wf, mail, opts) {
     stubbedSteps: trace.filter(t => t.stubbed).map(t => t.step),
     unfedBookingSearches: unfedSearches,
     unfedOdinReads: unfedReads,
+    assumptions,
     halted,
     trace: opts.verbose ? trace : undefined,
   };
@@ -809,6 +827,7 @@ export async function handler(req, res) {
     stubs: (q.stubs && typeof q.stubs === 'object') ? q.stubs : null,
     stubMaps: (q.stubMaps && typeof q.stubMaps === 'object') ? q.stubMaps : null,
     bookings: (q.bookings && typeof q.bookings === 'object') ? q.bookings : null,
+    assumeWrites: q.assumeWrites === true || String(q.assumeWrites || '') === '1',
     apiTimeoutMs: parseInt(q.apiTimeoutMs, 10) || 25000,
     promptOnly: q.promptOnly === true || String(q.promptOnly || '') === '1',
     keepPrompts: q.keepPrompts === true || String(q.keepPrompts || '') === '1',
