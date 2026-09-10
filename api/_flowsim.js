@@ -353,7 +353,12 @@ async function runFlow(wf, mail, opts) {
       // read that data - the Odin tools are one call away in a Claude session -
       // so they hand it in, keyed by step name or by step type, and the trace
       // says plainly which steps were fed rather than executed.
-      const stub = opts.stubs && (opts.stubs[cursor] !== undefined ? opts.stubs[cursor] : opts.stubs[type]);
+      // NOTE: written as a ternary on purpose. `opts.stubs && (...)` yields null
+      // when there are no stubs at all, and `null !== undefined` is true, which
+      // silently stubbed EVERY step of every run.
+      const stub = opts.stubs
+        ? (opts.stubs[cursor] !== undefined ? opts.stubs[cursor] : opts.stubs[type])
+        : undefined;
       if (stub !== undefined) {
         scope[cursor] = { output: withLowercaseMirror(stub && typeof stub === 'object' ? stub : { value: stub }) };
         entry.stubbed = 'supplied by the caller';
