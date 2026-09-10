@@ -385,6 +385,8 @@ async function runFlow(wf, mail, opts) {
 
   const trace = [];
   const actions = [];
+  // Booking searches the caller did not feed - reported, never hidden.
+  const unfedSearches = [];
   let cursor = opts.start || firstStep(wf);
   let steps = 0;
   let halted = null;
@@ -483,7 +485,14 @@ async function runFlow(wf, mail, opts) {
         if (tags !== undefined)   act.tags   = evalSetting(tags, scope);
         if (status !== undefined) act.status = evalSetting(status, scope);
         actions.push(act);
-        if (type === 'tickets_addPublicTicketComment' && act.text) reply = act.text;
+        // A flow answers the customer in two different ways, and reading only
+        // the first made 25 of 39 Voucher Resend runs look like silent
+        // non-answers: addPublicTicketComment, and updateTicket carrying
+        // comment_public. Both are the reply.
+        const pub = settingOf(step, 'comment_public');
+        act.public = pub === undefined ? undefined : !!evalSetting(pub, scope);
+        if (act.text && (type === 'tickets_addPublicTicketComment' ||
+                        (type === 'tickets_updateTicket' && act.public))) reply = act.text;
         entry.recorded = true;
 
       } else if (type === 'if') {
@@ -537,16 +546,60 @@ async function runFlow(wf, mail, opts) {
         scope[cursor] = { output: withLowercaseMirror(out) };
         entry.api = apiMap[type];
 
-      } else if (/_booking_search$/.test(type) || /_booking_get_by_reference$/.test(type)) {
-        const route = /_booking_search$/.test(type) ? MCP_MAP.booking_search : MCP_MAP.booking_get_by_reference;
-        const params = {};
+      } else if (/_booking_get_by_reference$/.test(type)) {
+        // Odin's lookup by reference is public, so this one is honest: our own
+        // /api/get-booking calls GET /api/v2/booking/{ref} with no token.
+        // The MCP connector's parameter names are not our endpoint's.
+        const p = {};
         for (const st of (step.settings || [])) {
           if (!st || !st.name) continue;
-          params[st.name] = evalSetting(st.value, scope);
+          p[st.name] = evalSetting(st.value, scope);
         }
-        const out = await callOwnApi(base, route, params, opts.apiTimeoutMs);
+        const params = {
+          bookingReference: p.bookingReference || p.reference || p.ref || '',
+          customerName: p.customerName || p.name || mail.name || 'x',
+        };
+        let out;
+        try {
+          out = await callOwnApi(base, MCP_MAP.booking_get_by_reference, params, opts.apiTimeoutMs);
+        } catch (e) {
+          // The MCP connector answers "no booking" where our endpoint answers
+          // 400 (no reference given) or 404 (reference unknown). Treating those
+          // as run-ending errors turned "the mail carried no booking code" -
+          // an ordinary case the flow is built for - into a simulator failure.
+          if (/answered (400|404)/.test(String(e && e.message))) {
+            out = { found: false, reason: String(e.message).slice(0, 120) };
+            entry.notFound = true;
+          } else { throw e; }
+        }
         scope[cursor] = { output: withLowercaseMirror(out) };
-        entry.api = route;
+        entry.api = MCP_MAP.booking_get_by_reference;
+
+      } else if (/_booking_search$/.test(type)) {
+        // Searching Odin by customer e-mail needs credentials this endpoint
+        // deliberately does not hold - and /api/search-bookings cannot stand in
+        // for it: its Odin OAuth client is refused (401 invalid_client). So the
+        // caller feeds it, or the step answers "found nothing" AND SAYS SO. The
+        // difference matters: a silent empty answer sends every flow down its
+        // no-booking branch and the run looks like a finding about the customer
+        // rather than a hole in the simulation.
+        const p = {};
+        for (const st of (step.settings || [])) {
+          if (!st || !st.name) continue;
+          p[st.name] = evalSetting(st.value, scope);
+        }
+        const key = String(p.customerEmail || p.email || mail.from || '').trim().toLowerCase();
+        const table = (opts.bookings && typeof opts.bookings === 'object') ? opts.bookings : null;
+        const hit = table && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : null;
+        if (hit) {
+          scope[cursor] = { output: withLowercaseMirror(hit) };
+          entry.stubbed = 'bookings supplied for ' + key;
+        } else {
+          scope[cursor] = { output: withLowercaseMirror({ bookings: [], data: [], total: 0 }) };
+          entry.unfed = key || '(no e-mail)';
+          unfedSearches.push(key || '(no e-mail)');
+        }
+        entry.api = 'booking_search (directory)';
 
       } else {
         // Deliberately fatal for this run. A step nobody taught the simulator
@@ -581,6 +634,7 @@ async function runFlow(wf, mail, opts) {
     branches: trace.filter(t => t.type === 'if').map(t => ({ step: t.step, taken: t.result ? 'then' : 'else' })),
     wouldHaveWritten: actions,
     stubbedSteps: trace.filter(t => t.stubbed).map(t => t.step),
+    unfedBookingSearches: unfedSearches,
     halted,
     trace: opts.verbose ? trace : undefined,
   };
@@ -662,6 +716,7 @@ export async function handler(req, res) {
     apiMap: q.apiMap || null,
     stubs: (q.stubs && typeof q.stubs === 'object') ? q.stubs : null,
     stubMaps: (q.stubMaps && typeof q.stubMaps === 'object') ? q.stubMaps : null,
+    bookings: (q.bookings && typeof q.bookings === 'object') ? q.bookings : null,
     apiTimeoutMs: parseInt(q.apiTimeoutMs, 10) || 25000,
     promptOnly: q.promptOnly === true || String(q.promptOnly || '') === '1',
     keepPrompts: q.keepPrompts === true || String(q.keepPrompts || '') === '1',
