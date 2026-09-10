@@ -669,9 +669,15 @@ async function runFlow(wf, mail, opts) {
             entry.notFound = true;
           } else { throw e; }
         }
+        // Our endpoint answers a FLATTENED booking (customerEmail, rentalFrom,
+        // status) and keeps Odin's own object in `raw`. The flows read the MCP
+        // connector's answer, which IS Odin's object - so a flow reading
+        // customer.email saw nothing and concluded EMAIL_MISMATCH on 22 of 35
+        // cancellations. Hand it the same shape the account gets.
+        if (out && out.raw && typeof out.raw === 'object') out = out.raw;
         const ref = String(params.bookingReference || '').trim().toUpperCase();
         if (opts.assumeWrites && ref && assumedCancelled.has(ref)) {
-          out = Object.assign({}, out, { status: 'CANCELLED', bookingStatus: 'CANCELLED' });
+          out = Object.assign({}, out, { status: 'CANCELED', bookingStatus: 'CANCELED' });
           entry.assumed = 'cancelled ' + ref;
           assumptions.push('booking ' + ref + ' read back as CANCELLED because this run recorded a cancel for it');
         }
