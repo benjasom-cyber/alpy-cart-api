@@ -1335,6 +1335,26 @@ function stripQuotedAndSignature(body) {
               /\b(De|From|Von|Da)\s*:\s*[^\n]{0,80}?[<(]?[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/i,
               /\b(Envoy[eé]|Sent|Gesendet|Inviato|Enviado)\s*:\s*\w/i,
               /\b(Objet|Subject|Betreff|Oggetto|Asunto)\s*:\s*[^\n]{0,80}\b(confirmation|booking|r[eé]servation|voucher)\b/i,
+              // THE VERB AND THE COLON ARE NOT ALWAYS ADJACENT (10 septembre 2026).
+              //
+              // The rule above wants "schrieb:" - but German, Dutch and Danish mail
+              // clients put the sender in between: "Am 14.12.2025 um 21:29 schrieb
+              // Alpy.com <web@alpy.com>:", "Op ma 26 jan 2026 schreef Alpy.com
+              // <web@alpy.com>:". "schreef", "ha scritto", "skrev" and "napisal"
+              // were not in the verb list at all. Measured on the 314 mails of 26
+              // January: on six of the nine mails that Voucher Resend refused, the
+              // cut removed NOTHING, our whole quoted confirmation stayed in the
+              // text, and its words - Rechnung, Versicherung, payment - matched the
+              // "documents + payment" voucher rule. The customers were asking to
+              // cancel after an injury, to remove four people from a booking, to add
+              // a missing insurance. None of them wanted a voucher.
+              /^\s*(On|Le|Am|El|Op|Il|Den|W\s?dniu)\b[^\n]{0,140}?\b(wrote|a [eé]crit|schrieb|schreef|escribi[oó]|ha scritto|skrev|napisa[lł]\w*)\b[^\n]{0,120}?:/mi,
+              // The opening line of a forwarded block, one per language.
+              /^\s*(Start p[åa] videresendt besked|Inizio messaggio inoltrato|Begin doorgestuurd bericht|Anfang der weitergeleiteten Nachricht|D[ée]but du message transf[ée]r[ée]|Begin forwarded message|-{5,}\s*Forwarded message)/mi,
+              // A phone signature always sits immediately above the quote.
+              /^\s*(Von meinem iPhone gesendet|Sent from my iPhone|Sent from my Samsung|Envoy[eé] de mon iPhone|Verzonden vanaf mijn iPhone|Inviato da iPhone|Sendt fra min iPhone)\b/mi,
+              // Our own confirmation, quoted: its first line is the booking number.
+              /^\s*(Ihre Buchungsnummer|Your booking reference|Votre num[ée]ro de r[ée]servation|Din reservationsnummer|Il tuo numero di prenotazione|Uw boekingsnummer|Numer rezerwacji)\s*:/mi,
               /The information transmitted in this e-?mail/i,
               /Powered\s*by\s*2beGROUP/i,
               /Head of Support/i,
