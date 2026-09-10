@@ -260,7 +260,10 @@ async function callOwnApi(base, route, params, timeoutMs) {
     // back 405 with a JSON error body, which the simulator used to hand to the
     // flow as if it were data: every booking lookup then read as "no booking"
     // and every flow took its no-booking branch. Retry the honest way instead.
-    if (out.status === 405 || out.status === 404) {
+    // 405 only: a 404 means "this route answered, and there is no such thing",
+    // which is an answer. Retrying it as a GET turned a plain not-found into a
+    // "405 Method not allowed" from the same endpoint, hiding the real result.
+    if (out.status === 405) {
       const qs = Object.keys(params || {})
         .filter(k => params[k] !== undefined && params[k] !== null && params[k] !== '')
         .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(
