@@ -215,6 +215,16 @@ const KEYWORDS = [
       // for, and days that were paid but not used.
       { topic: 'CANCELLATION_AFTER',
         re: /(?=[\s\S]*\b(?:refund\w*|reimburs\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|money\s+back|rimbors\w*|reembols\w*))(?=[\s\S]*(?:\bunused\s+days?\b|\bdays?\s+(?:we|they|i)\s+(?:did\s+not|didn.t|could\s+not|couldn.t|never)\s+use\b|\bjours?\s+(?:non\s+)?utilis[eé]s?\b|\bnicht\s+genutzte\w*\s+tage\b|\breturn\w*[\s\S]{0,40}(?:early|earlier|\d+\s+days?\s+(?:before|early))\b|\brendu[\s\S]{0,30}(?:mat[eé]riel|skis?|plus\s+t[oô]t)\b|\brentr[eé]\w*\s+plus\s+t[oô]t\b|\b(?:vorzeitig|fr[uü]her)\s+zur[uü]ck\w*|\bremaining\s+days?\b|\bjours?\s+restants?\b))/i },
+      // THE SAME CASE, IN DUTCH, ITALIAN AND SPANISH (11 septembre 2026).
+      //
+      // The two rules above are built from English, French and German words.
+      // "Ik heb mijn been gebroken ... krijg ik de niet gebruikte dagen terug?",
+      // "ho restituito gli sci in anticipo, posso avere un rimborso dei giorni
+      // non utilizzati" and "devolvi los esquis antes ... reembolso de los dias
+      // no utilizados" all fell through - three ways of describing the one case
+      // that must never be priced like an ordinary cancellation.
+      { topic: 'CANCELLATION_AFTER',
+        re: /(?=[\s\S]*(?:gebroken|blessure|gewond|ziek\b|rotto|rotta|infortun\w*|malatt\w*|malato|roto|rota|lesi[oó]n\w*|enferm\w*|herido|niet\s+gebruikte\s+dagen|eerder\s+terug\w*|giorni\s+non\s+utilizzat\w*|restituit\w*\s+in\s+anticipo|d[ií]as\s+no\s+utilizad\w*|devolv[ií]\w*\s+antes))(?=[\s\S]*(?:terugbetal\w*|terug\s+krijg\w*|vergoeding|rimbors\w*|reembols\w*|devoluci[oó]n|niet\s+gebruikte\s+dagen|giorni\s+non\s+utilizzat\w*|d[ií]as\s+no\s+utilizad\w*))/i },
       // "I DO NOT UNDERSTAND THE AMOUNT CHARGED" IS A VOUCHER QUESTION.
       //
       // Customers open the rental voucher, see one figure, compare it to the card
@@ -332,6 +342,12 @@ const KEYWORDS = [
       // alone is a statement, duplicate plus a cancel or refund word is a request.
       { topic: 'CANCELLATION',
         re: /\b(duplicate|duplicated|double|twice|two\s+(?:identical|same)\s+bookings?|en\s+double|deux\s+fois|doppelt|doppelte)\b[\s\S]{0,300}\b(cancel\w*|annul\w*|storn\w*|refund\w*|rembours\w*|erstatt\w*)/i },
+      // A DOUBLE BOOKING, SAID IN DUTCH, SPANISH OR ITALIAN (11 septembre 2026).
+      // "dubbel geboekt", "dos veces por error", "due volte" - none of the three
+      // was in the rule above, and the Dutch one was routed as a plain
+      // cancellation, which would have cancelled the wrong thing.
+      { topic: 'DUPLICATE_BOOKING',
+        re: /(?=[\s\S]*\b(?:dubbel\w*|twee\s+identieke|dos\s+veces|duplicad\w*|due\s+volte|doppia\s+prenotazione)\b)(?=[\s\S]*\b(?:annul\w*|anul\w*|cancel\w*|storn\w*|rimbors\w*|reembols\w*|terugbetal\w*)\b)/i },
       { topic: 'DATE_CHANGE',   re: /\b(change\s+(my|the)\s+dates?|move\s+(my|the)\s+booking|postpone|d[eé]caler|changer\s+(mes|les)\s+dates?|different\s+dates?)\b/i },
       // "Pouvez-vous modifier la reservation svp ? je me suis trompee de date"
       //
@@ -377,6 +393,12 @@ const KEYWORDS = [
       // flow. Dates and equipment are excluded: those are DATE_CHANGE / REQUOTE.
       { topic: 'PERSONAL_INFO',
         re: /(?=[\s\S]*\b(?:height|weight|shoe\s*size|boot\s*size|foot\s*size|taille|poids|pointure|gr[oö][sß]e|gewicht|schuhgr[oö][sß]e|altezza|peso|numero\s+di\s+scarpe|estatura|talla|skier\s+details|skier\s+information|personal\s+(?:details|information|data)|donn[eé]es\s+personnelles|pers[oö]nliche\s+(?:daten|angaben)|(?:ski\s+)?level|niveau|(?:ski)?niveau|date\s+of\s+birth|birth\s*date|date\s+de\s+naissance|geburtsdatum|\d{2,3}\s*cm\b|\d{2,3}\s*kg\b|\d{2,3}\s*lbs?\b))(?=[\s\S]*(?:^|[^a-zA-Z])(?:updat\w*|chang\w*|correct\w*|modif\w*|adjust\w*|fix\b|wrong|mistake|error|typo|grown|grew|mettre\s+[aà]\s+jour|changer|corriger|rectifier|erreur|grandi|[aä]ndern|aktualisier\w*|korrigier\w*|falsch|fehler|gewachsen|aggiorn\w*|cambiar|corregir|actualizar|is\s+now\b|are\s+now\b|now\s+\d|fait\s+maintenant|mesure\s+maintenant|ist\s+jetzt|misst\s+jetzt))(?![\s\S]*\b(?:cancel\w*|annul\w*|stornier\w*|refund\w*|rembours\w*))/i },
+      // SKIER DETAILS, IN ITALIAN (11 septembre 2026).
+      // The rule above lists altezza and numero di scarpe, but its verb list has
+      // correct\w* - which does not match "correggere". One conjugation, and
+      // "Devo correggere altezza e numero di scarpe" routed nowhere.
+      { topic: 'PERSONAL_INFO',
+        re: /(?=[\s\S]*\b(?:corregg\w*|correzion\w*|modificar\w*|aggiornar\w*|sbagliat\w*)\b)(?=[\s\S]*\b(?:altezza|peso|numero\s+di\s+scarpe|scarponi|taglia|livello)\b)/i },
       { topic: 'REQUOTE',       re: /\b(add\s+(?:\d+\s+)?(?:more\s+)?(?:days?|nights?)|extend\s+(?:my|the|our)\s+(?:booking|reservation|rental|stay)|prolonger\s+(?:ma|la|notre)\s+(?:r[eé]servation|location)|ajouter\s+(?:\d+\s+)?(?:jours?|nuits?)|add\s+(?:a\s+|an\s+|the\s+|another\s+|one\s+|\d+\s+)?(?:more\s+)?(?:skis?|snowboards?|persons?|people|adults?|child(?:ren)?|skiers?)\s+to\s+(?:my|the|our)\s+(?:booking|reservation|rental)|re-?quote|nouveau\s+devis)\b/i },
       // Helmets, boots and protections added to an EXISTING booking: the General
       // questions flow rebuilds the cart with the addon and answers the customer
