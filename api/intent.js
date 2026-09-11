@@ -2176,10 +2176,71 @@ async function resolveTownFromShops(text) {
     }
   }
 
-  if (hits.size !== 1) return null;
-  const found = [...hits.keys()][0];
-  // Give back the town as it is spelled in the shop table, not deaccented.
-  return { town: originalTownSpelling(found) || found, shops: [], refused: [] };
+  if (hits.size === 1) {
+    const found = [...hits.keys()][0];
+    // Give back the town as it is spelled in the shop table, not deaccented.
+    return { town: originalTownSpelling(found) || found, shops: [], refused: [] };
+  }
+  if (hits.size > 1) return null;          // two resorts named - ask, do not guess
+
+  return resolveResortFamily(raw, hay);
+}
+
+/**
+ * The resort the customer names, when it is not one of the towns we stock.
+ *
+ * #582307 was titled "Ski Hire Courchevel 1550". Our table holds Courchevel
+ * 1300, 1650 and 1850 - there is no shop in 1550 - so an exact match found
+ * nothing and we asked a customer who had written the resort in the subject
+ * line which resort he meant.
+ *
+ * That is the wrong test. A resort is a place on a mountain, not a row in our
+ * shop table: Courchevel 1550 exists, it sits between two villages where we do
+ * have shops, and find-nearest-shop geocodes it perfectly well. What we need
+ * from the message is the customer's own words for where they are going, not a
+ * key into our data.
+ *
+ * So a second pass matches the ALPHABETIC STEM of our town names - the part
+ * before the altitude, the numeral, the hyphenated half - and hands back the
+ * phrase the customer actually wrote, altitude included. Ambiguity is still
+ * refused: two different stems in one message is two resorts, and a guess
+ * between them is a quote on the wrong mountain.
+ */
+let _townStems = null;
+
+function buildTownStems() {
+  if (_townStems) return _townStems;
+  _townStems = new Map();
+  for (const town of (_shopTowns ? _shopTowns.keys() : [])) {
+    // "courchevel 1850" -> "courchevel"; "les menuires" keeps both words.
+    const stem = town.replace(/[\s-]*\d[\d\s]*$/, '').trim();
+    if (stem.length < 6 || stem === town) continue;   // only names an altitude trims
+    if (TOWN_LOOKALIKES.has(stem)) continue;
+    _townStems.set(stem, (_townStems.get(stem) || 0) + 1);
+  }
+  return _townStems;
+}
+
+function resolveResortFamily(raw, hay) {
+  const stems = buildTownStems();
+  const found = new Set();
+  let phrase = null;
+  for (const stem of stems.keys()) {
+    const at = hay.indexOf(stem);
+    if (at < 0) continue;
+    const before = at === 0 ? ' ' : hay.charAt(at - 1);
+    const after = hay.charAt(at + stem.length) || ' ';
+    if (/[a-z0-9]/.test(before) || /[a-z]/.test(after)) continue;
+    if (!/^[A-ZÀ-Þ]/.test(raw.charAt(at) || '')) continue;      // a proper noun, capitalised
+    found.add(stem);
+    // Keep what the customer wrote, altitude and all - that is what a
+    // geocoder needs and what the reply should name back to them.
+    const tail = raw.slice(at, at + stem.length + 10)
+      .match(/^[A-Za-zÀ-ÿ'’’.\- ]+(?:\s*\d{3,4})?/);
+    phrase = (tail && tail[0].trim() ? tail[0] : raw.substr(at, stem.length)).trim();
+  }
+  if (found.size !== 1 || !phrase) return null;
+  return { town: phrase, shops: [], refused: [], family: true };
 }
 
 function originalTownSpelling(flatName) {
@@ -2864,6 +2925,19 @@ export default async function handler(req, res) {
 
       // The whole conversation, when we are allowed to read it.
       const thread = await fetchCustomerThread(ticketId);
+
+      /*
+       * The subject line, from the payload as well as from the ticket.
+       *
+       * It is read today only through fetchCustomerThread, which needs a
+       * ticket_id and Zendesk credentials. That is the normal path, but it
+       * makes the subject invisible to any caller that has the mail and not the
+       * ticket - a simulator, a replay, a flow that forgets the parameter - and
+       * the subject is where people put the resort: #582307 was titled "Ski
+       * Hire Courchevel 1550" and said everything else in the body.
+       */
+      const subjectParam = String(params.subject ?? params.ticket_subject ?? params.ticketsubject ?? '').trim();
+      if (subjectParam && !thread.subject) thread.subject = subjectParam;
 
       const fromMessage = extractFromMessage(message);
 

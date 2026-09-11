@@ -283,6 +283,16 @@ lift. Virtual shop: a partner with no shop in the town shown, which either
 delivers to the accommodation or shuttles the customer to its real shop and
 back. The "i" next to each shop lists that shop's own advantages.
 
+A VILLAGE OF THE RESORT WHERE WE HAVE NO SHOP
+Several resorts number their villages by altitude - Courchevel 1300 / 1650 /
+1850, Valmeinier 1500 / 1800, Chamrousse 1650 / 1750, Puy St Vincent 1400 /
+1600 - and a customer will name the one they are staying in even when we have
+no shop there. Courchevel 1550 is the standing example. Never answer that with
+a question about which resort they mean: they told us. Propose the nearest
+village where we do have a shop - the closest altitude - and say plainly that
+we have nothing closer, for example "we have no shop in Courchevel 1550 itself;
+Courchevel 1650 is the closest village where we do". Then quote there.
+
 VERY TALL OR VERY SMALL SKIERS - THE SITE'S LIMIT IS NOT THE SHOP'S
 The booking form stops at 1.80 m. That ceiling belongs to the form, not to the
 equipment: the shops carry longer skis and larger boots, and a skier of two

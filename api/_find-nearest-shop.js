@@ -120,6 +120,27 @@ function resolveTown(shops, query) {
   // A shop name typed instead of a town ("Sport 2000 Chamonix").
   const byShop = towns.filter(t => t.shops.some(s => norm(s.name).includes(q)));
   if (byShop.length === 1) return { towns: byShop, ambiguous: false };
+
+  /*
+   * A village of the resort where we have no shop at all.
+   *
+   * #582307 was titled "Ski Hire Courchevel 1550". We stock Courchevel 1300,
+   * 1650 and 1850; there is no 1550, so every stage above found nothing and the
+   * customer - who had named his resort in the subject line - was asked which
+   * resort he meant.
+   *
+   * The altitude is the village, not the resort. Strip it and the family is
+   * obvious, and the right answer is not a question: it is the nearest village
+   * we do serve, with the fact stated plainly that there is nothing closer.
+   * The caller geocodes the customer's own words to pick which sibling, exactly
+   * as it already does for an accommodation.
+   */
+  const stem = q.replace(/[\s-]*\d[\d\s]*$/, '').trim();
+  if (stem.length >= 5 && stem !== q) {
+    const family = towns.filter(t => norm(t.town).replace(/[\s-]*\d[\d\s]*$/, '').trim() === stem);
+    if (family.length === 1) return { towns: family, ambiguous: false, neighbour: true };
+    if (family.length > 1) return { towns: family, ambiguous: true, neighbour: true };
+  }
   return { towns: [], ambiguous: false };
 }
 
@@ -429,6 +450,46 @@ export async function handler(req, res) {
       const pick = await disambiguateByAccommodation(resolved.towns, accommodation, resort || accommodation).catch(() => null);
       if (pick) { resolved = { towns: [pick.town], ambiguous: false }; preAcc = pick.acc; }
     }
+    /*
+     * A village of the resort with no shop of its own: pick the nearest sibling.
+     *
+     * "Courchevel 1550" is a real place with real coordinates, so the choice
+     * between 1300, 1650 and 1850 is a distance, not a question. The village
+     * the customer named is geocoded and the closest sibling wins - and the
+     * reply says so, because a customer who asked for 1550 needs to be told
+     * plainly that 1650 is the nearest we have rather than left to notice it.
+     */
+    let neighbourFor = null;
+    if (resolved.neighbour && resolved.towns.length) {
+      const asked = resort || accommodation;
+      if (resolved.ambiguous) {
+        /*
+         * The altitude IS the distance, and it needs no geocoder.
+         *
+         * Courchevel 1550 sits between 1300 and 1650; the nearest village we
+         * serve is 1650, a hundred metres of altitude away, not 1300 which is
+         * two hundred and fifty. Every resort that numbers its villages numbers
+         * them by height, so comparing the figures answers the question exactly
+         * and works when the geocoder is unreachable - which is when this path
+         * matters most, because it runs before any price can be built.
+         */
+        const askedAlt = parseInt((String(asked).match(/(\d{3,4})\s*$/) || [])[1], 10);
+        const withAlt = resolved.towns
+          .map(t => ({ t, alt: parseInt((String(t.town).match(/(\d{3,4})\s*$/) || [])[1], 10) }))
+          .filter(x => Number.isFinite(x.alt));
+        let pickedTown = null;
+        if (Number.isFinite(askedAlt) && withAlt.length) {
+          withAlt.sort((a, b) => Math.abs(a.alt - askedAlt) - Math.abs(b.alt - askedAlt));
+          pickedTown = withAlt[0].t;
+        }
+        if (!pickedTown) {
+          const pick = await disambiguateByAccommodation(resolved.towns, asked, asked).catch(() => null);
+          pickedTown = pick ? pick.town : resolved.towns[0];
+        }
+        resolved = { towns: [pickedTown], ambiguous: false };
+      }
+      neighbourFor = asked;
+    }
     if (resolved.ambiguous) {
       const names = resolved.towns.map(t => t.town).slice(0, 8);
       return reply(res, { found: false, located: false, needsQuestion: true, reason: 'AMBIGUOUS_RESORT',
@@ -452,6 +513,10 @@ export async function handler(req, res) {
       return reply(res, {
         found: true, located: false, needsQuestion: false, reason: 'RESOLVED',
         slug: town.slug, town: town.town, country: town.country, region: town.region,
+        askedVillage: neighbourFor || '',
+        nearestVillageNote: neighbourFor
+          ? 'We have no shop in ' + neighbourFor + ' itself; ' + town.town + ' is the closest village where we do.'
+          : '',
         shopCount: town.shops.length,
         shopIds: town.shops.map(s => s.id).join(','),
         centreLat: centre ? centre.lat : null, centreLng: centre ? centre.lng : null,
@@ -528,6 +593,13 @@ export async function handler(req, res) {
       accommodationLat: acc ? acc.lat : null, accommodationLng: acc ? acc.lng : null, geocoder: acc ? acc.source : '',
       centreLat: centre ? centre.lat : null, centreLng: centre ? centre.lng : null,
       rankingBasis: basis,
+      // The village they asked for is not one we serve. Said here, and said
+      // in the reply, rather than left for the customer to spot.
+      askedVillage: neighbourFor || '',
+      nearestVillageNote: neighbourFor
+        ? 'We have no shop in ' + neighbourFor + ' itself. ' + town.town +
+          ' is the closest village where we do, and the shops below are the nearest to you.'
+        : '',
       nearestShopId: nearest ? nearest.id : null,
       nearestShopName: nearest ? nearest.name : '',
       nearestShopAddress: nearest ? (nearest.address || '') : '',
