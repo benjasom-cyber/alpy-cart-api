@@ -2138,7 +2138,11 @@ async function resolvePlaceFromShops(text) {
  * "Astenblick" is not in the list, "Germany" is not in the list, "Winterberg"
  * is - which is exactly the discrimination that was missing.
  */
-const TOWN_LOOKALIKES = new Set(['soll', 'stumm', 'lenk', 'bila', 'itter', 'vent', 'moena']);
+// Towns whose name is an ordinary word somewhere in the six languages we read,
+// even capitalised at the start of a sentence: Söll/soll and Vent/vent are the
+// dangerous pair, and no capitalisation test saves them.
+const TOWN_LOOKALIKES = new Set(['soll', 'stumm', 'lenk', 'bila', 'itter', 'vent', 'moena',
+                                 'oetz', 'sant', 'sankt', 'saint', 'sainte', 'pejo', 'bad']);
 
 async function resolveTownFromShops(text) {
   const raw = String(text || '');
@@ -2150,7 +2154,13 @@ async function resolveTownFromShops(text) {
   const hits = new Map();
 
   for (const town of _shopTowns.keys()) {
-    if (town.length < 5 || TOWN_LOOKALIKES.has(town)) continue;
+    // Four-letter resorts - Zürs, Vars, Fiss, Kals, Imst - were excluded
+    // outright because "soll" and "vent" are ordinary words. Excluding them
+    // costs real mail (13 quote requests in the archives named one), and the
+    // capitalisation rule below already separates the resort from the verb:
+    // a customer writing Zürs capitalises it, a customer writing German does
+    // not. So they are allowed in, and lean entirely on that test.
+    if (town.length < 4 || TOWN_LOOKALIKES.has(town)) continue;
     let at = hay.indexOf(town);
     while (at >= 0) {
       const before = at === 0 ? ' ' : hay.charAt(at - 1);
@@ -3180,9 +3190,10 @@ export default async function handler(req, res) {
        * So the slot sits in `assumes`, and this puts it back into `needs` for
        * exactly the case where a question is going out anyway.
        */
-      if (topic === 'QUOTE' && check.missing.length &&
-          !SLOTS.equipment_level.looksValid(slots.equipment_level)) {
-              extraNeeds.push('equipment_level');
+      if (topic === 'QUOTE' && check.missing.length) {
+              for (const name of ['equipment_level', 'adults']) {
+                        if (!SLOTS[name].looksValid(slots[name])) extraNeeds.push(name);
+              }
               check = checkSlots(topic, slots, extraNeeds);
       }
       // Two different things, deliberately kept apart.

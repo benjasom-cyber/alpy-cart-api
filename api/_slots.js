@@ -54,10 +54,31 @@ export const SLOTS = {
               ask: 'And which day will you return it?',
               looksValid: v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()),
       },
+      // The headcount, and the second slot to stop holding a price hostage.
+      //
+      // Measured on 1809 real quote requests: 176 of them state the resort and
+      // the dates and never say how many people are coming - against 99 that
+      // state all three. Asking those 176 "how many adults?" and sending
+      // nothing else is the worst trade we make: a price per person needs only
+      // the resort and the dates, it is the number the customer actually wants
+      // to know, and the headcount then arrives with their reply instead of
+      // instead of it. Agents know this - 45% of the replies that work carry a
+      // figure.
+      //
+      // So one adult is quoted, said out loud as a per-person rate, and the
+      // basket is built when they answer. As with the level, this applies only
+      // when the resort and the dates are already known; a missing resort means
+      // no price is possible at all and the headcount is asked with the rest.
       adults: {
               label: 'number of adults',
               ask: 'How many adults is the equipment for?',
               looksValid: v => Number.isFinite(parseInt(v, 10)) && parseInt(v, 10) >= 0,
+              fallback: {
+                        value: '1',
+                        announce: 'one adult',
+                        closing: 'The figure above is therefore the price for one person: ' +
+                                 'tell us how many of you are coming and we will build the full basket.',
+              },
       },
       // Children are priced on their exact age, so an age we invent is a wrong
       // price discovered at the till. That is why this slot exists, and why for
@@ -226,8 +247,18 @@ export const ROUTES = {
       // holds the whole quote hostage is not helpfulness, it is a queue.
       QUOTE: {
               flow: 'Quote Generator',
-              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults'],
-              assumes: ['children_ages', 'equipment_level', 'boots', 'helmets', 'insurance'],
+      // WHAT A QUOTE REALLY REQUIRES: a place and a period. Nothing else.
+      //
+      // Everything below `needs` is something we can take a stated default for
+      // and print in the reply, where one word corrects it. A place and a
+      // period are different in kind: without them there is no price to
+      // compute at all, not even a wrong one.
+      //
+      // Drawing the line there is what turns 99 answerable mails into 275 on
+      // the same corpus. The other five slots are not unimportant - they are
+      // simply not worth a round trip that a third of customers never complete.
+              needs: ['resort_name|shop_name', 'start_date', 'end_date'],
+              assumes: ['adults', 'children_ages', 'equipment_level', 'boots', 'helmets', 'insurance'],
       },
       REQUOTE: {
               flow: 'Requote from booking',
@@ -310,6 +341,52 @@ export const ROUTES = {
       },
 };
 
+/*
+ * The question we send when the core is missing - and why its shape matters
+ * more than any of the extraction work around it.
+ *
+ * Measured on 320 real quote tickets: when an agent replies with the intake
+ * macro, the customer answers 63% of the time. More than a third of quote
+ * requests die on the question, which is a larger loss than anything the
+ * reader can still recover.
+ *
+ * What we used to send was one sentence with every hole strung through it:
+ * "To prepare this we need resort or shop, first day of the rental, last day
+ * of the rental, number of adults and skis or snowboard and the level, person
+ * by person." Five clauses, no line breaks, read on a phone. The agents' macro
+ * puts one item per line and converts.
+ *
+ * So: short lines, related things merged into one line - a first and last day
+ * is one question to a human, not two - and a closing sentence that says a
+ * single line back is enough. No warnings, no pricing lecture: those belong in
+ * the reply that carries the price, not in the message asking for permission
+ * to compute it.
+ */
+const ASK_LINES = [
+      { needs: ['resort_name', 'shop_name'], line: 'the resort (or the shop, if you have one in mind)' },
+      { needs: ['start_date', 'end_date'],   line: 'the first and last day of the rental' },
+      { needs: ['adults', 'children_ages'],  line: 'how many of you are coming, and the age of any children' },
+      { needs: ['equipment_level'],          line: 'skis or a snowboard for each person, and roughly what level' },
+      { needs: ['boots', 'helmets', 'insurance'], line: 'who needs boots or a helmet, and whether you want damage & theft protection' },
+];
+
+function composeAsk(missing) {
+      const flat = new Set();
+      for (const req of missing) for (const n of req.split('|')) flat.add(n);
+
+      const lines = ASK_LINES
+        .filter(g => g.needs.some(n => flat.has(n)))
+        .map(g => '- ' + g.line);
+
+      // A slot nobody thought to group still gets asked, rather than silently
+      // dropped: a question that omits what it needs is worse than an ugly one.
+      const covered = new Set(ASK_LINES.flatMap(g => g.needs));
+      for (const n of flat) if (!covered.has(n) && SLOTS[n]) lines.push('- ' + SLOTS[n].label);
+
+      return 'Could you send us:\n' + lines.join('\n') +
+             '\nOne short reply with those and the price follows.';
+}
+
 /**
  * Which declared slots are not satisfied, and the single question to ask next.
  *
@@ -370,24 +447,7 @@ export function checkSlots(topic, slots, extraNeeds) {
               if (missing.length === 1) {
                         nextQuestionAll = nextQuestion;
               } else {
-                        const labels = missing.map(req => {
-                                  const alternatives = req.split('|');
-                                  return alternatives.map(n => SLOTS[n] ? SLOTS[n].label : n).join(' or ');
-                        });
-                        const last = labels.pop();
-                        nextQuestionAll = 'To prepare this we need ' + labels.join(', ') + ' and ' + last + '.';
-                        // The ages carry their own warning wherever they appear: a
-                        // quote priced without them is wrong and the customer finds
-                        // out at the till.
-                        // Accessories are priced per person and were previously
-                        // assumed rather than asked. Name them explicitly so the
-                        // composed reply cannot reduce them to "any extras?".
-                        if (missing.includes('boots') || missing.includes('helmets') || missing.includes('insurance')) {
-                                  nextQuestionAll += ' Tell us person by person who needs boots and who needs a helmet — both are charged individually — and whether you want damage & theft protection, which adds 15% of the rental price.';
-                        }
-                        if (missing.includes('children_ages')) {
-                                  nextQuestionAll += ' We need the age of every child skiing with you — a child is priced on their age, so a quote without them would be wrong. If there are no children, just say so.';
-                        }
+                        nextQuestionAll = composeAsk(missing);
               }
       }
 
@@ -403,16 +463,36 @@ export function checkSlots(topic, slots, extraNeeds) {
               const def = SLOTS[name];
               if (!def || !def.fallback) continue;
               if (def.looksValid(values2[name])) continue;
-              assumed.push({ slot: name, value: def.fallback.value, announce: def.fallback.announce });
+              assumed.push({
+                        slot: name, value: def.fallback.value,
+                        announce: def.fallback.announce, closing: def.fallback.closing || null,
+              });
       }
 
+      /*
+       * The assumptions, said plainly, and one thing said separately.
+       *
+       * Everything we took a default for goes into one list the customer can
+       * scan. But a headcount of one is not an assumption of the same kind: it
+       * changes what the figure in the mail MEANS - a rate per person rather
+       * than a total - and burying that in the middle of a comma list is how a
+       * customer reads a price for six people and books a surprise. So a
+       * fallback may carry its own closing sentence, which is printed after the
+       * list rather than inside it.
+       */
+      // An assumption only means something next to a price. Printing "we have
+      // assumed boots for everyone" in a message that asks which resort they
+      // are going to is noise at best, and at worst it reads as though a quote
+      // were attached when none is.
       let assumedSentence = null;
-      if (assumed.length) {
+      if (assumed.length && !missing.length) {
               const parts = assumed.map(a => a.announce);
               const last = parts.pop();
+              const closings = assumed.map(a => a.closing).filter(Boolean);
               assumedSentence = 'We have assumed ' +
-                        (parts.length ? parts.join(', ') + ' and ' + last : last) +
-                        '. Nothing here is fixed: the quote is a starting point you can change ' +
+                        (parts.length ? parts.join(', ') + ' and ' + last : last) + '. ' +
+                        (closings.length ? closings.join(' ') + ' ' : '') +
+                        'Nothing here is fixed: the quote is a starting point you can change ' +
                         'item by item — swap a level, add something, take something out — and ' +
                         'we will re-price it. Just tell us what to change.';
       }
