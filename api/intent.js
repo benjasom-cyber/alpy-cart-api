@@ -522,6 +522,28 @@ const INTERNAL_DOMAINS = [
  */
 const FORWARD_PREFIX = /^\s*(WG|TR|FW|FWD)\s*:/i;
 
+/**
+ * The mails we send to SHOPS, never to customers.
+ *
+ * A booking notification lands in a shop's inbox to tell them a rental has been
+ * sold. Nobody who booked a holiday has ever received one. So a forwarded copy
+ * of it identifies its sender as a partner as surely as a letterhead would -
+ * which is what ticket 581757 actually was, and the only thing the forward
+ * prefix was ever standing in for.
+ *
+ * Deliberately narrow: these are our own subject lines, in the languages the
+ * shops read. A customer's own confirmation - "your booking reference", "uw
+ * bevestiging van de skiverhuur" - is emphatically NOT here.
+ */
+const SHOP_NOTIFICATION = new RegExp(
+      'neue\\s+buchung\\s+eingegangen|neue\\s+reservierung\\s+eingegangen|' +
+      'new\\s+booking\\s+(?:received|notification)|booking\\s+notification|' +
+      'nouvelle\\s+r[eé]servation\\s+re[cç]ue|nouvelle\\s+commande\\s+re[cç]ue|' +
+      'nieuwe\\s+boeking\\s+ontvangen|nuova\\s+prenotazione\\s+ricevuta|' +
+      'nueva\\s+reserva\\s+recibida|' +
+      'stornierung\\s+eingegangen|cancellation\\s+notification',
+      'i');
+
 function detectInternalSender(message, senderEmail, subject) {
       const from = String(senderEmail || '').trim();
       if (from && INTERNAL_DOMAINS.some(re => re.test(from))) {
@@ -536,16 +558,33 @@ function detectInternalSender(message, senderEmail, subject) {
       // cancellation, and we replied to the SHOP offering to cancel a CUSTOMER's
       // booking by name. The booking was not theirs to cancel.
       //
-      // The subject is the one place a forward always announces itself.
-      if (FORWARD_PREFIX.test(String(subject || ''))) {
-              return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
-      }
-
-      // Only the first line of the body is eligible - a forward prefix lives
-      // there or nowhere. Scanning the whole body would match every quoted thread.
-      const firstLine = String(message || '').split(/\r?\n/).find(l => l.trim() !== '') || '';
-      if (FORWARD_PREFIX.test(firstLine)) {
-              return { topic: 'OTHER', source: 'forwarded_mail', blocked: true };
+      // ... but "forwarded" is not "not a customer", and treating the two as the
+      // same silenced our most ordinary customer.
+      //
+      // With the subject finally reaching the simulator, 19 of the 314 mails of
+      // 26 January turned out to stop here. Among them:
+      //     Fwd: Uw bevestiging van de skiverhuur: BABUDX
+      //     FW: Booking confirmation B45VRL overcharge
+      //     WG: Confirmation of Ski Rental Order & Question About Ski Depot
+      // Every one is a customer forwarding THEIR OWN confirmation with their
+      // question written above it. That is not an edge case, it is how people
+      // ask us about a booking, and we answered none of them.
+      //
+      // What actually made 581757 dangerous was never the forward prefix. It was
+      // a partner shop, with a GmbH signature, writing "bitte buchungen stoppen"
+      // about somebody else's booking - and the partner checks further down
+      // catch exactly that, on the evidence that describes it. The forward
+      // prefix was a proxy for "not our customer", and it was a bad one.
+      //
+      // So a forward is blocked here only when what was forwarded is one of OUR
+      // SHOP-FACING notifications. Those go to shops and never to customers, so
+      // a person forwarding one is on our side of the counter by definition.
+      // Everything else falls through to the partner tests and, failing those,
+      // is read as the customer request it is.
+      const forwarded = FORWARD_PREFIX.test(String(subject || '')) ||
+              FORWARD_PREFIX.test(String(message || '').split(/\r?\n/).find(l => l.trim() !== '') || '');
+      if (forwarded && SHOP_NOTIFICATION.test(String(subject || '') + '\n' + String(message || ''))) {
+              return { topic: 'OTHER', source: 'forwarded_shop_notice', blocked: true };
       }
 
       // A company writing to us about the season, not a customer writing about a trip.
