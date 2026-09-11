@@ -450,7 +450,20 @@ function detectInternalSender(message, senderEmail, subject) {
               /\b(gmbh|s\.?r\.?o\.?|s\.?a\.?r\.?l\.?|ltd\b|b\.?v\.?|a\.?g\b|UID\s*[A-Z]{2}|FN\s*\d{4,}|VAT\s*(?:no|number|ID))/i.test(body);
       const talksBusiness =
               /\b(buchungen\s+stoppen|stop\s+(?:all\s+)?bookings|arr[eê]ter\s+les\s+r[eé]servations|konditionen|conditions?\s+for\s+(?:the\s+)?(?:next\s+)?season|vor\s+der\s+saison|preise\s+(?:bekannt|festgelegt)|tarifs?\s+(?:de\s+la\s+)?saison|commission|vertrag|contract)\b/i.test(body);
-      if (hasCompanySignature && talksBusiness) {
+      // A SHOP TALKING ABOUT "YOUR CLIENTS" IS NOT A CLIENT (542205).
+      //
+      // Pic Negre wrote "This is to inform your clients, and to note on the
+      // vouchers that arrive at the shops, that if any of your clients pick up
+      // the equipment the day before...". It has no company signature and no
+      // commercial vocabulary, so the two tests above both missed it, and
+      // General questions answered a partner as if he were a holidaymaker.
+      //
+      // A customer never writes "your clients". The phrase names our customers
+      // in the third person, which only someone on our side of the counter does.
+      // Measured on the 314 mails of 26 January: exactly one match, this one.
+      const speaksOfOurCustomers =
+              /\b(your|vos|ihre|uw|i vostri|sus)\s+(clients?|customers?|kunden|klanten|clienti)\b/i.test(body);
+      if ((hasCompanySignature && talksBusiness) || speaksOfOurCustomers) {
               return { topic: 'OTHER', source: 'partner_business', blocked: true };
       }
 
