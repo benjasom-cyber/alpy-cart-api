@@ -1068,9 +1068,9 @@ export default async function handler(req, res) {
       // action, whose test call sends exactly that shape; a detector prompt
       // reworded to camelCase would have broken every quote the same way, with
       // an error message pointing at the caller instead of at us.
-      const startDate = pick(startDateParam, undefined) || pick(startDateAlt, undefined)
+      let startDate = pick(startDateParam, undefined) || pick(startDateAlt, undefined)
                               || pick(undefined, cj.start_date) || pick(undefined, cj.startDate) || null;
-      const endDate   = pick(endDateParam,   undefined) || pick(endDateAlt,   undefined)
+      let endDate   = pick(endDateParam,   undefined) || pick(endDateAlt,   undefined)
                               || pick(undefined, cj.end_date)   || pick(undefined, cj.endDate)   || null;
 
       // SECOND_PERIOD (582254): two consecutive weeks are two rentals, not one.
@@ -1219,16 +1219,56 @@ export default async function handler(req, res) {
       //
       // Failing here is the honest outcome: the flow's error branch puts it in
       // front of a human, who can see in one look that the year is wrong.
+      let yearRolled = null;
       if (startDate && !missing.length) {
               const today = new Date(); today.setUTCHours(0, 0, 0, 0);
               if (new Date(startDate) < today) {
-                        return res.status(400).json({
-                                  error: 'Start date is in the past: ' + startDate +
-                                         '. A past period cannot be priced or booked - the year is ' +
-                                         'almost certainly wrong. Today is ' +
-                                         today.toISOString().slice(0, 10) + '.',
-                                  startDate, endDate,
-                        });
+                        // A PAST DATE IS A MISSING YEAR, NOT A QUESTION (11 septembre 2026).
+                        //
+                        // Benjamin's rule, and it holds for every customer: one can only
+                        // book from today to the end of the coming season, 30 June. So a
+                        // date that has already passed is an omitted or mistyped year -
+                        // someone writing in December about "15 February" - and the only
+                        // year that can be meant is the one that puts it inside that
+                        // window. Rolling it forward is not a guess, it is the single
+                        // possibility.
+                        //
+                        // Before this, the endpoint answered 400. A 4xx stops the flow, so
+                        // the customer received nothing at all: no quote, no question,
+                        // silence. Measured on the 26 January replay, the Quote flow
+                        // reached this line with everything it needed and died here.
+                        const SEASON_END = (function () {
+                          const y = today.getUTCFullYear() + (today.getUTCMonth() >= 6 ? 1 : 0);
+                          return new Date(Date.UTC(y, 5, 30));      // 30 June
+                        })();
+                        const addYears = (iso, n) => {
+                          const d = new Date(iso);
+                          if (!Number.isFinite(d.getTime())) return null;
+                          return new Date(Date.UTC(d.getUTCFullYear() + n, d.getUTCMonth(), d.getUTCDate()));
+                        };
+                        let shift = 0, rolledStart = null;
+                        for (let n = 1; n <= 2; n++) {
+                          const c = addYears(startDate, n);
+                          if (c && c >= today) { shift = n; rolledStart = c; break; }
+                        }
+                        const rolledEnd = (shift && endDate) ? addYears(endDate, shift) : null;
+                        if (rolledStart && rolledStart <= SEASON_END) {
+                          const oldStart = startDate, oldEnd = endDate;
+                          startDate = rolledStart.toISOString().slice(0, 10);
+                          if (rolledEnd) endDate = rolledEnd.toISOString().slice(0, 10);
+                          yearRolled = { from: oldStart, to: startDate, fromEnd: oldEnd, toEnd: endDate, years: shift };
+                        } else {
+                          // Outside the bookable window even after rolling: there is nothing
+                          // sensible to assume, so ask - with a 200, never a 4xx.
+                          return askCustomer(res, {
+                            reason: 'DATES_OUTSIDE_THE_BOOKABLE_SEASON',
+                            question: 'we have read your rental as starting on ' + startDate +
+                                      ', which we cannot book: reservations run from today to ' +
+                                      SEASON_END.toISOString().slice(0, 10) +
+                                      '. Which dates would you like?',
+                            startDate, endDate,
+                          });
+                        }
               }
       }
 
@@ -1590,7 +1630,17 @@ export default async function handler(req, res) {
           couponMessage,
   };
 
+  const rolledNote = yearRolled
+    ? 'YEAR ASSUMED: the customer wrote ' + yearRolled.from + ' to ' + yearRolled.fromEnd +
+      ', which is past. Only one season can be booked (today to 30 June), so the quote is ' +
+      'for ' + yearRolled.to + ' to ' + yearRolled.toEnd + '. Say these dates in the reply so ' +
+      'the customer can correct us if we guessed the wrong season.'
+    : '';
   return res.status(200).json({
+          yearAssumed: !!yearRolled,
+          yearassumed: !!yearRolled,
+          yearAssumedNote: rolledNote,
+          yearassumednote: rolledNote,
           cartUrl,
           shopUrl,
           secondPeriodStart: second ? secondStart : '',
