@@ -264,6 +264,26 @@ const KEYWORDS = [
       // "whole", "entire", "toute la", "ganze" steps aside and stays full.
       { topic: 'PARTIAL_CANCELLATION',
         re: /^(?![\s\S]*\b(?:cover\w*|couvre|couvert|include\w*|inclu\w*|what\s+is|what\s+does|c.est\s+quoi|was\s+deckt|abgedeckt|kostet|co[uû]te|cost\w*)\b)(?![\s\S]*\b(?:whole|entire|complete|toute\s+la|toute\s+ma|enti[eè]re|ganze|gesamte|komplette|intera|completa|toda\s+la)\s+(?:booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b)(?![\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*)\s+(?:of\s+)?(?:my|the|our|this|ma|la|notre|cette|meine|die|unsere|la\s+mia|mi)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b[\s\S]{0,60}\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b|\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b[\s\S]{0,40}\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b))/i },
+      // REMOVING ONE PERSON OR ONE ITEM, IN THE OTHER LANGUAGES (11 septembre 2026).
+      //
+      // The rule above catches English and German. French, Italian, Spanish and
+      // Dutch fell through to a full cancellation or to nothing at all: "annuler
+      // les skis d'une seule personne", "annullate solo gli sci di Paul", "anulen
+      // solo los esquis", "annuleer alleen de ski's van Paul".
+      //
+      // Three conditions, and all three are needed: a cancel word WITHIN SIXTY
+      // CHARACTERS of an item word, a restrictor ("only", "seulement", "keep the
+      // rest"), and no mention of the WHOLE booking. The restrictor list must not
+      // contain a bare "just": on 542088 - "I just booked my ski rental 2 hours
+      // ago and need to know how to cancel it" - that one word turned a full
+      // cancellation into a partial one.
+      //
+      // Measured on the 314: no mail comes in from OTHER, and the two mails it
+      // takes from CANCELLATION belong to it - 542118 ("I will not need a helmet
+      // ... modify this portion") and 542258 ("cancel the reservation only for
+      // Tom, Eyal, Rami and Eiytan are still coming").
+      { topic: 'PARTIAL_CANCELLATION',
+        re: /(?![\s\S]*\b(?:whole|entire|toute\s+la|ganze|intera|toda\s+la)\s+(?:booking|r[eé]servation|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:(?:cancel\w*|annul\w*|storn\w*|disdi\w*|anular|anulen|annuleer\w*|annuleren)[\s\S]{0,60}?(?:skis?|sci\b|esqu[ií]s?|snowboard\w*|planche\w*|casque\w*|helm\w*|casco\w*|chaussures?|boots?|schuhe|scarponi|botas|mat[eé]riel|ausr[uü]stung|attrezzatura|equipo|uitrusting)|(?:skis?|sci\b|esqu[ií]s?|snowboard\w*|planche\w*|casque\w*|helm\w*|casco\w*|chaussures?|boots?|schuhe|scarponi|botas|mat[eé]riel|ausr[uü]stung|attrezzatura|equipo|uitrusting)[\s\S]{0,60}?(?:cancel\w*|annul\w*|storn\w*|disdi\w*|anular|anulen|annuleer\w*|annuleren)))(?=[\s\S]*(?:\bonly\b|seulement|uniquement|ne\s+que|\bnur\b|\balleen\b|\bsolo\b|\bs[oó]lo\b|solamente|una\s+sola|une\s+seule|eine\s+einzige|keep\s+the\s+rest|garder\s+le\s+reste|der\s+rest\s+bleibt|de\s+rest\s+blijft|il\s+resto\s+resta|el\s+resto\s+se\s+queda|for\s+one\s+person|d.une\s+seule\s+personne|this\s+portion))/i },
       { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|these|those|this|that|both|all)?\s*(?:\w+\s+){0,2}(bookings?|reservations?|orders?|rentals?)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation|ations|[eé]e?s?)\s+(?:de\s+)?(?:ma|mes|la|les|notre|nos|cette|ces|deux)?\s*(?:\w+\s+){0,2}r[eé]servations?|storno\w*|stornier\w*)\b/i },
       // CANCELLING IN THE OTHER HALF OF EUROPE (11 septembre 2026).
       //
@@ -322,6 +342,22 @@ const KEYWORDS = [
       // verb AND something that says the change is about the period.
       { topic: 'DATE_CHANGE',
         re: /(?=[\s\S]*\b(modifier|changer|d[eé]caler|reporter|repousser|avancer|change|move|amend|umbuchen|[aä]ndern|cambiare|cambiar)\b)(?=[\s\S]*(\b(dates?|p[eé]riode|jours?|semaine|s[eé]jour|datum|termin|periodo|fechas?)\b|\b(?:tromp[eé]e?|erreur|mauvaise?|wrong|falsch|sbagliat\w+|equivocad\w+)\s+(?:de\s+)?(?:dates?|datum|fechas?)\b|\bme\s+suis\s+tromp[eé]e?\s+de\s+date))/i },
+      // CHANGING THE DATES WHEN THE VERB AND THE NOUN ARE GLUED OR FOREIGN
+      // (11 septembre 2026).
+      //
+      // The rule above knows "datum" but not its German plural "Daten", and
+      // knows no Dutch verb at all: "die Daten meiner Buchung aendern" and "de
+      // data van mijn boeking wijzigen" both routed nowhere.
+      //
+      // The verb must sit WITHIN 45 CHARACTERS of the date noun. Without that
+      // distance the rule fires on 542481 - "de ski's veranderen van beginner
+      // naar gevorderd" for a booking made "voor de periode van 1-5 maart",
+      // which is an upgrade, not a date change. Measured with the distance:
+      // 542536 ("den Zeitraum aendern von 02.05. - 05.05.") is picked up, and
+      // no mail that another rule routes is taken away - the voucher rules sit
+      // above this one and keep the four mails that mention both.
+      { topic: 'DATE_CHANGE',
+        re: /^(?![\s\S]*\b(?:beginner|anf[aä]nger|gevorderd|advanced|intermediate|expert|niveau\w*|level|modell?|modello|modelo)\b)(?=[\s\S]*(?:(?:[aä]ndern|umbuchen|verschieben|wijzig\w*|aanpass\w*|verzett\w*|verander\w*|[æa]ndre|flytte|zmieni\w*)[\s\S]{0,45}?(?:daten|datum|data|dagen|periode|zeitraum|termin\w*|reisedaten|huurperiode)|(?:daten|datum|data|dagen|periode|zeitraum|termin\w*|reisedaten|huurperiode)[\s\S]{0,45}?(?:[aä]ndern|umbuchen|verschieben|wijzig\w*|aanpass\w*|verzett\w*|verander\w*|[æa]ndre|flytte|zmieni\w*)))/i },
       // REQUOTE is re-pricing a booking that already exists, so it sits AFTER
       // DATE_CHANGE: a customer moving their dates wants the date-change flow,
       // not a new price. What lands here is adding days, adding people or
