@@ -853,15 +853,15 @@ function findDateTokens(text) {
       //    May. So a dot-separated pair only counts as a date when it is written
       //    the way a date is written - a two-figure month (19.06) or the German
       //    trailing dot (26.2.) - which no shoe size ever is.
-      const num = /(?<![\d.,/-])(\d{1,2})\s*([./-])\s*(\d{1,2})(\.?)(?:\s*[./-]?\s*(20\d{2}|[2-4]\d(?![\d.,/-])))?(?![\d.,]*\d)/g;
+      const num = /(?<![\d.,])(\d{1,2})\s*([./-])\s*(\d{1,2})(\.?)(?:\s*[./-]\s*(20\d{2})|[./-](\d{2})(?![\d]))?(?![\d.,]*\d)/g;
       while ((x = num.exec(m))) {
               const a = +x[1], sep = x[2], bRaw = x[3], b = +bRaw, trailingDot = x[4] === '.';
               // Both readings impossible - a height, a size, a price.
               if (b > 31 || a > 31) continue;
-              if (sep === '.' && bRaw.length < 2 && !trailingDot && !x[5]) continue;
+              if (sep === '.' && bRaw.length < 2 && !trailingDot && !x[5] && !x[6]) continue;
               out.push({
                         at: x.index, to: x.index + x[0].length,
-                        day: a, month: b, year: x[5] ? +x[5] : null,
+                        day: a, month: b, year: x[5] ? +x[5] : (x[6] ? 2000 + +x[6] : null),
                         swappable: a <= 12 && b <= 12,
               });
       }
@@ -904,6 +904,118 @@ function findDateTokens(text) {
 }
 
 /**
+ * "du 9 au 14 mars" - two days, one month, and the commonest way a European
+ * writes a week's holiday.
+ *
+ * Measured on 1809 real quote requests: 387 of them state their period exactly
+ * once, in this shape, and the generic reader saw a single date because only
+ * the second day carries a month. It is the largest single reason we fail to
+ * price a mail that contains everything.
+ *
+ *   du 9 au 14 mars        vom 16. bis 18. Januar      dal 4 al 10 gennaio
+ *   from 9 to 14 March     van 16 tot 18 januari       del 4 al 10 de marzo
+ *
+ * When the second day is the smaller of the two the holiday crosses a month
+ * end - "du 28 au 3 janvier" is 28 December to 3 January - so the named month
+ * belongs to the RETURN and the departure is the month before. Reading it the
+ * other way round would move a Christmas rental to the following December.
+ */
+// Weekday names get written between the connector and the day far more often
+// than you would guess - "du dimanche 9 jusqu'au samedi 15 février" - and a
+// pattern that does not step over them reads that sentence as one date.
+const WEEKDAY =
+      '(?:mon|tues?|wed(?:nes)?|thurs?|fri|satur|sun)day|' +
+      'lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|' +
+      'montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonnabend|sonntag|' +
+      'maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag|' +
+      'luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica|' +
+      'lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo';
+
+function findBareRange(text, now) {
+      const found = [];
+      const ORD = '(?:st|nd|rd|th|er|eme|[eè]me|\\.)?';
+      const CONN = '(?:-|–|—|to|until|till|through|au|jusqu(?:\'|’)?(?:au|à|a)|bis(?:\\s+zum)?|' +
+                   'tot(?:\\s+en\\s+met)?|t/m|al|fino\\s+al|hasta(?:\\s+el)?|a|and|et|und|en|e|y|/)';
+      const FILL = '(?:\\s*(?:le|la|the|el|il|den|dem|de|op|on|il\\s+giorno)\\b)?' +
+                   '(?:\\s*(?:' + WEEKDAY + ')\\b)?\\s*';
+      const re = new RegExp(
+        '(?:(?:' + WEEKDAY + ')\\s+)?' +
+        '(?<![\\d.,])(\\d{1,2})\\s*' + ORD + '\\s*' + CONN + FILL +
+        '(\\d{1,2})\\s*' + ORD + '\\s*(?:of\\s+|de\\s+|di\\s+|del\\s+|d[’\']|)\\s*' +
+        '([A-Za-zÀ-ÿ]{3,12})\\.?' +
+        '(?:\\s*,?\\s*(20\\d{2}|[2-4]\\d)\\b)?', 'gi');
+
+      let x;
+      while ((x = re.exec(String(text || '')))) {
+              const month = MONTH_WORDS[flat(x[3])];
+              if (!month) continue;
+              const d1 = +x[1], d2 = +x[2];
+              if (!(d1 >= 1 && d1 <= 31 && d2 >= 1 && d2 <= 31)) continue;
+              const year = x[4] ? +x[4] : null;
+              // Same month, or the departure sits in the month before.
+              const crosses = d2 < d1;
+              const startMonth = crosses ? (month === 1 ? 12 : month - 1) : month;
+              const startYear = year == null ? null : (crosses && month === 1 ? year - 1 : year);
+              const s = dateInSeason(d1, startMonth, startYear, now);
+              const e = dateInSeason(d2, month, year, now);
+              if (!s || !e) continue;
+              const days = (new Date(e) - new Date(s)) / 86400000;
+              if (days < 0 || days > 31) continue;
+              if (new Date(e) < seasonWindow(now).start) continue;
+              found.push({ start_date: s, end_date: e, at: x.index });
+      }
+
+      // The same shape written entirely in figures: "für den 4.-11.1.",
+      // "vom 25.12.-01.01." - the month rides on the second day only, exactly
+      // as above, and German mail writes it this way constantly.
+      const numeric = new RegExp(
+        '(?<![\\d.,])(\\d{1,2})\\.?\\s*(?:-|–|—|bis(?:\\s+zum)?|au|to|till|until|tot|al|hasta|/)\\s*' +
+        '(\\d{1,2})\\.(\\d{1,2})\\.?(?:\\s*(20\\d{2})|(\\d{2})(?![\\d]))?', 'g');
+      while ((x = numeric.exec(String(text || '')))) {
+              const d1 = +x[1], d2 = +x[2], month = +x[3];
+              if (!(month >= 1 && month <= 12)) continue;
+              if (!(d1 >= 1 && d1 <= 31 && d2 >= 1 && d2 <= 31)) continue;
+              const year = x[4] ? +x[4] : (x[5] ? 2000 + +x[5] : null);
+              const crosses = d2 < d1;
+              const startMonth = crosses ? (month === 1 ? 12 : month - 1) : month;
+              const startYear = year == null ? null : (crosses && month === 1 ? year - 1 : year);
+              const s = dateInSeason(d1, startMonth, startYear, now);
+              const e = dateInSeason(d2, month, year, now);
+              if (!s || !e) continue;
+              const days = (new Date(e) - new Date(s)) / 86400000;
+              if (days < 0 || days > 31) continue;
+              if (new Date(e) < seasonWindow(now).start) continue;
+              found.push({ start_date: s, end_date: e, at: x.index });
+      }
+
+      /*
+       * "la semaine du 28/12", "week of 17 February", "Woche vom 6.1."
+       *
+       * A week is a period, stated as precisely as any pair of dates - the
+       * customer simply expects us to know that a week is seven days. Taking
+       * the seventh day as the return is the reading they intend; if it is six
+       * days they will say so, and the reply prints the dates back to them.
+       */
+      const week = new RegExp(
+        '\\b(?:the\\s+week\\s+(?:of|beginning|starting|commencing)|semaine\\s+du|' +
+        'woche\\s+vom|week\\s+van|settimana\\s+del|semana\\s+del)\\s+' +
+        '(?:(?:' + WEEKDAY + ')\\s+)?(\\d{1,2})\\s*(?:st|nd|rd|th|er|\\.)?\\s*' +
+        '(?:[./-]\\s*(\\d{1,2})|(?:of\\s+|de\\s+|di\\s+)?([A-Za-zÀ-ÿ]{3,12}))', 'i');
+      const w = String(text || '').match(week);
+      if (w) {
+              const month = w[2] ? +w[2] : MONTH_WORDS[flat(w[3] || '')];
+              const s = month ? dateInSeason(+w[1], month, null, now) : null;
+              if (s) {
+                        const e = new Date(new Date(s).getTime() + 7 * 86400000).toISOString().slice(0, 10);
+                        if (new Date(e) >= seasonWindow(now).start) {
+                                  found.push({ start_date: s, end_date: e, at: w.index });
+                        }
+              }
+      }
+      return found;
+}
+
+/**
  * The rental period, when the message states one.
  *
  * Two dates make a period; one alone does not, because it could be either end
@@ -912,9 +1024,52 @@ function findDateTokens(text) {
  * month - which is what stops an invoice date or a birthday from being read as
  * a rental.
  */
+/*
+ * The stay and the rental are two different weeks, and the customer states
+ * both.
+ *
+ * "Nous séjournons à Crest-Voland du 21 au 28 février et souhaiterions une
+ * location de skis 6 jours (du dimanche 22/2 au vendredi 27/2)". Reading the
+ * first period prices seven days instead of six, on the wrong days, and the
+ * customer discovers it at the till. It is not a rare shape: people write
+ * where they are staying before they write what they want to rent.
+ *
+ * So a period introduced by a renting word beats one introduced by a lodging
+ * word. Everything else about the choice stays as it was.
+ */
+const RENTAL_CUE_NEAR = new RegExp(
+      'lou(?:er|ons|é|e)|location|mat[eé]riel|devis|' +
+      'rent(?:al|ing)?|hire|equipment|quote|offer|' +
+      'mieten|miete|leihen|ausleihen|verleih|ausr[uü]stung|angebot|' +
+      'huren|verhuur|uitrusting|offerte|' +
+      'noleggi\\w*|attrezzatura|preventivo|' +
+      'alquil\\w*|equipo|presupuesto', 'i');
+
+const STAY_CUE_NEAR = new RegExp(
+      's[ée]journ\\w*|logeons|logerons|h[ôo]tel|chalet|appartement|r[ée]sidence|' +
+      'stay(?:ing)?|accommodation|lodge|apartment|' +
+      '[uü]bernacht\\w*|unterkunft|wohnung|ferienwohnung|urlaub|' +
+      'verblijf\\w*|verblijven|logeren|' +
+      'soggiorn\\w*|alloggio|' +
+      'alojam\\w*|hospedam\\w*', 'i');
+
+function scorePeriod(text, at) {
+      const before = String(text || '').slice(Math.max(0, at - 90), at);
+      let score = 0;
+      if (RENTAL_CUE_NEAR.test(before)) score += 2;
+      if (STAY_CUE_NEAR.test(before)) score -= 2;
+      return score;
+}
+
 function findPeriod(text, now) {
+      // "du 9 au 14 mars" first: it is one unambiguous statement of a period,
+      // and stronger evidence than any two dates that merely sit near each
+      // other. Reading it here also rescues the 387 mails where it is the only
+      // form the period is written in.
+      const bare = findBareRange(text, now).map(c => Object.assign(c, { bare: true }));
+
       const tokens = findDateTokens(text);
-      if (tokens.length < 2) return null;
+      if (!bare.length && tokens.length < 2) return null;
 
       const tryPair = (a, b) => {
               const s = dateInSeason(a.day, a.month, a.year, now);
@@ -966,24 +1121,54 @@ function findPeriod(text, now) {
        * the 31st" - the period the customer wants is the one they wrote second.
        */
       const JOINER = new RegExp(
-        '^[\\s,)]*(?:-|–|—|to|until|till|through|thru|and|' +
+        '^[\\s,)]*(?:-|–|—|\\+|>|to|until|till|through|thru|and|' +
         'au|jusqu(?:\'|’)?au|a|' +
         'bis|bis zum|bis einschliesslich|und|' +
         'tot|t/m|tot en met|en|' +
         'al|fino al|fino a|' +
-        'hasta|hasta el|)?[\\s,(]*$', 'i');
+        'hasta|hasta el|hasta al|' +
+        'jusqu(?:\'|’)?a|jusque|ate|' +
+        ')?[\\s,(]*$', 'i');
 
       const joined = [];
       for (let i = 0; i + 1 < tokens.length; i++) {
               const a = tokens[i], b = tokens[i + 1];
               if (b.at < (a.to || a.at)) continue;             // overlapping reads of one date
-              const gap = String(text).slice(a.to || a.at, b.at);
-              if (gap.length > 24 || /\d/.test(gap)) continue;
+              // Weekday names and articles sit inside the joiner all the time -
+              // "du dimanche 22/2 au vendredi 27/2" - and are noise for this
+              // test, so they come out before it runs.
+              const gap = String(text).slice(a.to || a.at, b.at)
+                .replace(new RegExp('\\b(?:' + WEEKDAY + ')\\b', 'gi'), ' ')
+                .replace(/\b(?:le|la|the|el|il|den|dem|op|on)\b/gi, ' ');
+              if (gap.length > 34 || /\d/.test(gap)) continue;
               if (!JOINER.test(gap)) continue;
               const got = read(a, b);
-              if (got) joined.push(got);
+              if (got) joined.push(Object.assign(got, { at: a.at }));
       }
-      if (joined.length) return joined[joined.length - 1];
+      /*
+       * All the well-formed candidates now compete, and the stay-versus-rental
+       * cue decides. "Nous sejournons du 21 au 28 fevrier et souhaiterions une
+       * location 6 jours (du 22/2 au 27/2)" offers both: the first is written
+       * as a bare range, the second as a joined pair, and only the words in
+       * front of each say which one is the rental.
+       *
+       * With nothing to separate them the bare range wins - it is the stronger
+       * form - and between two of equal standing the last one wins, which is
+       * what "instead of X, I need Y" requires.
+       */
+      const candidates = bare.concat(joined);
+      if (candidates.length) {
+              let best = null, bestKey = null;
+              for (const cand of candidates) {
+                        const key = [scorePeriod(text, cand.at), cand.bare ? 1 : 0, cand.at];
+                        if (!bestKey || key[0] > bestKey[0] ||
+                            (key[0] === bestKey[0] && key[1] > bestKey[1]) ||
+                            (key[0] === bestKey[0] && key[1] === bestKey[1] && key[2] > bestKey[2])) {
+                                  best = cand; bestKey = key;
+                        }
+              }
+              return best;
+      }
 
       // Nothing joined. Fall back to position, but not blindly: #542447 wrote
       // "am 19.06." in the subject and again in the first line, and two
@@ -1173,6 +1358,22 @@ function findParty(text) {
       const m = flat(raw);
       const out = {};
 
+      /*
+       * "Adulte 1 : 75kg / 176cm — Adulte 2 : … — Enfant 1 : 31kg — Enfant 2 : …"
+       *
+       * A numbered list of people, one line each, with weight, height and shoe
+       * size instead of an age. It is a common and very precise way to write a
+       * party, and read naively it produces nonsense twice over: the index of
+       * "Enfant 1" becomes a one-year-old, and the indices get counted as a
+       * headcount. Here the labels are counted and the indices ignored, which
+       * is what they are.
+       */
+      const ENUM_ADULT = /\b(?:adulte?s?|adult|erwachsene[rn]?|volwassene?|adulti|adulto|adultos?|persona|person|personne)\s*(?:n[°º]\s*)?\d{1,2}\s*[:\-–]/gi;
+      const ENUM_CHILD = new RegExp('\\b(?:' + CHILD_PLAIN + ')\\s*(?:n[°º]\\s*)?\\d{1,2}\\s*[:\\-–]', 'gi');
+      const enumAdults = (m.match(ENUM_ADULT) || []).length;
+      const enumChildren = (m.match(ENUM_CHILD) || []).length;
+      const enumerated = enumAdults + enumChildren >= 2;
+
       // --- children, first: an adult count is only safe once we know whether
       //     the message is talking about children at all.
       const mentionsChild = mentionsAChild(raw);
@@ -1217,7 +1418,8 @@ function findParty(text) {
                         }
               }
       }
-      const uniqueAges = [...new Set(ages)];
+      // An index in a numbered list is not an age.
+      const uniqueAges = enumerated ? [] : [...new Set(ages)];
       if (uniqueAges.length) out.children_ages = uniqueAges.join(', ');
       else if (NO_CHILDREN.test(m)) out.children_ages = 'none';
 
@@ -1227,6 +1429,13 @@ function findParty(text) {
       }
 
       // --- adults
+      if (enumerated) {
+              if (enumAdults) out.adults = String(enumAdults);
+              if (enumChildren) { out._children_no_age = 'yes'; delete out.children_ages; }
+              else if (enumAdults) out.children_ages = 'none';
+              return out;
+      }
+
       const adultCount = m.match(new RegExp('\\b(\\d{1,3}|' + NUM_WORD_RE + ')\\s+(?:' + ADULT_WORDS + ')\\b', 'i'))
                       || m.match(new RegExp('(?:' + ADULT_WORDS + ')\\s*[:=]?\\s*(\\d{1,3})\\b', 'i'));
       if (adultCount) {
@@ -1247,6 +1456,53 @@ function findParty(text) {
               }
       }
 
+      /*
+       * A headcount with no word for "person" in sight.
+       *
+       * Measured on the same 1809: "we are" 137 times, "group" 49, and in
+       * almost none of them does the number sit next to the word "adults". It
+       * sits next to sets, pairs, packs, or nothing at all - "3 sets of skis",
+       * "a group of 6 girls", "the 4 of us", "wir sind zu viert". One set of
+       * equipment is one person, which is the whole reason a rental shop can
+       * count this way.
+       */
+      if (!out.adults) {
+              const UNITS = '(?:sets?|pairs?|paires?|paare?|paia|pares|packs?|complete? sets?|' +
+                            'skisets?|equipments?|ausr[üu]stungen|uitrustingen)';
+              const GEAR  = '(?:ski|skis|snowboard|snowboards|sci|esqu[ií]s?|schi|ausr[üu]stung|' +
+                            'mat[ée]riel|attrezzatura|equipo|uitrusting)';
+              const patterns = [
+                // "3 sets of skis", "2 paires de skis", "4 x Ski"
+                new RegExp('\\b(\\d{1,3}|' + NUM_WORD_RE + ')\\s+' + UNITS + '(?:\\s+(?:of|de|di|von|van)?\\s*' + GEAR + ')?\\b', 'i'),
+                new RegExp('\\b(\\d{1,3})\\s*[x×]\\s*' + GEAR + '\\b', 'i'),
+                // "a group of 6", "un groupe de 12", "eine Gruppe von 8"
+                new RegExp('\\b(?:group|groupe|gruppe|groep|gruppo|grupo)\\s+(?:of|de|von|van|di)\\s+(\\d{1,3}|' + NUM_WORD_RE + ')\\b', 'i'),
+                // "we are 5", "nous sommes 4", "wir sind 6", "siamo in 3"
+                new RegExp('\\b(?:we are|there (?:are|will be)|nous sommes|nous serons|on est|wir sind|wir waren|' +
+                           'wij zijn|we zijn|siamo(?: in)?|somos|seremos)\\s+(\\d{1,3}|' + NUM_WORD_RE + ')\\b', 'i'),
+                // "the 4 of us", "(4 of us)", "à 5"
+                new RegExp('\\b(\\d{1,3}|' + NUM_WORD_RE + ')\\s+of\\s+us\\b', 'i'),
+              ];
+              for (const re of patterns) {
+                        const hit = m.match(re);
+                        if (!hit) continue;
+                        const n = countAt(hit[1]);
+                        if (n == null || n < 1 || n > 60) continue;
+                        // Everyone counted, minus the children we can name.
+                        const kids = uniqueAges.length;
+                        const grown = kids && n > kids ? n - kids : n;
+                        if (kids && n <= kids) break;      // the count WAS the children
+                        out.adults = String(grown);
+                        break;
+              }
+              // "zu viert", "zu fünft" - German counts a party in one word.
+              if (!out.adults) {
+                        const ZU = { zweit: 2, dritt: 3, viert: 4, funft: 5, fuenft: 5, sechst: 6, siebt: 7, acht: 8 };
+                        const z = m.match(/\bzu\s+(zweit|dritt|viert|funft|fuenft|sechst|siebt|acht)\b/i);
+                        if (z) out.adults = String(ZU[flat(z[1])]);
+              }
+      }
+
       if (!out.adults && PAIR_PHRASES.test(m)) {
               out.adults = '2';
               // The phrase names the whole party. If a child is mentioned anywhere
@@ -1256,6 +1512,90 @@ function findParty(text) {
       }
 
       return out;
+}
+
+/*
+ * Our own quote form, filled in and sent back.
+ *
+ * We mail customers a template - SKIGEBIET / ERSTER MIETTAG / ANZAHL DER
+ * PERSONEN - and 66 of the 1809 quote requests are that template returned with
+ * every field completed. It is the most reliable message we ever receive, and
+ * until now the extractor read it exactly as badly as free prose: a labelled
+ * list of five things we need, and we asked for them again.
+ *
+ * Labels are matched, values are read to the end of the line. Nothing is
+ * guessed: a field the customer left blank stays missing.
+ */
+const FORM_FIELDS = [
+      ['resort_name',
+       'ski\\s?(?:resort|gebiet|gebied|omr[åa]de|area)|station\\s+de\\s+ski|domaine\\s+skiable|' +
+       'localit[àa]\\s+sciistica|zona\\s+de\\s+esqu[ií]|estaci[óo]n\\s+de\\s+esqu[ií]|skidestination'],
+      ['shop_name',
+       '(?:preferred|bevorzugtes|foretrukken|voorkeurs?)\\s*(?:shop|gesch[äa]ft|butik|winkel)|' +
+       'magasin\\s+(?:pr[ée]f[ée]r[ée]|souhait[ée])|negozio\\s+preferito|tienda\\s+preferida'],
+      ['start_date',
+       'first\\s+(?:rental\\s+)?day|premier\\s+jour(?:\\s+de\\s+location)?|erster\\s+miettag|' +
+       'eerste\\s+(?:huur)?dag|primo\\s+giorno\\s+di\\s+noleggio|primer\\s+d[ií]a\\s+de\\s+alquiler|' +
+       'f[øo]rste\\s+lejedag|pick-?up\\s+date'],
+      ['end_date',
+       'last\\s+(?:rental\\s+)?day|dernier\\s+jour(?:\\s+de\\s+location)?|letzter\\s+miettag|' +
+       'laatste\\s+(?:huur)?dag|ultimo\\s+giorno\\s+di\\s+noleggio|[úu]ltimo\\s+d[ií]a\\s+de\\s+alquiler|' +
+       'sidste\\s+lejedag|return\\s+date'],
+      ['_persons',
+       'number\\s+of\\s+(?:people|persons|skiers)|nombre\\s+de\\s+personnes|anzahl\\s+der\\s+personen|' +
+       'aantal\\s+personen|numero\\s+di\\s+persone|n[úu]mero\\s+de\\s+personas|antal\\s+personer'],
+      ['_ages',
+       'ages?\\s+and\\s+names?|names?\\s+and\\s+ages?|[âa]ge\\s+et\\s+nom|nom\\s+et\\s+[âa]ge|' +
+       'alter\\s+und\\s+name|name\\s+und\\s+alter|leeftijd\\s+en\\s+naam|et[àa]\\s+e\\s+nome|' +
+       'edad\\s+y\\s+nombre|alder\\s+og\\s+navn'],
+      ['equipment_level',
+       'equipment\\s+(?:needed|required)|mat[ée]riel\\s+(?:n[ée]cessaire|souhait[ée])|' +
+       'ben[öo]tigte\\s+ausr[üu]stung|ausr[üu]stung\\s+f[üu]r\\s+jede|attrezzatura\\s+necessaria|' +
+       'equipo\\s+necesario|benodigde\\s+uitrusting'],
+];
+
+function findFormFields(text, now) {
+      const raw = String(text || '');
+      const out = {};
+      for (const [slot, labels] of FORM_FIELDS) {
+              const re = new RegExp('^[^\\S\\n]*(?:[-*•]\\s*)?(?:' + labels + ')[^:\\n]{0,40}:\\s*([^\\n]{1,180})', 'im');
+              const hit = raw.match(re);
+              if (!hit) continue;
+              const value = hit[1].trim().replace(/^[\s:–-]+/, '').trim();
+              if (!value || /^\(?(?:si lo conosci|if you know|wenn bekannt|indien bekend)\)?$/i.test(value)) continue;
+              out[slot] = value;
+      }
+
+      const clean = {};
+      if (out.resort_name) clean.resort_name = out.resort_name.replace(/[.,;]+$/, '');
+      if (out.shop_name && out.shop_name.length >= 3) clean.shop_name = out.shop_name.replace(/[.,;]+$/, '');
+      for (const k of ['start_date', 'end_date']) {
+              if (!out[k]) continue;
+              const tok = findDateTokens(out[k])[0];
+              const iso = tok ? dateInSeason(tok.day, tok.month, tok.year, now) : null;
+              if (iso) clean[k] = iso;
+      }
+      // A period only counts when both ends are given: one alone is the same
+      // ambiguity as anywhere else.
+      if (!clean.start_date || !clean.end_date) { delete clean.start_date; delete clean.end_date; }
+
+      // "ETÀ E NOME DI OGNI PERSONA: Maria Luisa 63 guido 65 diletta 10" - the
+      // ages of everyone, from which the children separate themselves.
+      if (out._ages) {
+              const nums = (out._ages.match(/\b\d{1,2}\b/g) || []).map(Number).filter(n => n >= 0 && n < 100);
+              if (nums.length) {
+                        const kids = nums.filter(n => n < 18);
+                        const grown = nums.filter(n => n >= 18);
+                        if (grown.length) clean.adults = String(grown.length);
+                        clean.children_ages = kids.length ? kids.join(', ') : 'none';
+              }
+      }
+      if (!clean.adults && out._persons) {
+              const n = countAt((out._persons.match(/\b\d{1,3}\b/) || [])[0] || out._persons);
+              if (n != null && n >= 1 && n <= 60) clean.adults = String(n);
+      }
+      if (out.equipment_level && out.equipment_level.length >= 3) clean.equipment_level = out.equipment_level;
+      return clean;
 }
 
 const SKI_WORDS = 'skis?|skiing|ski-?set|skier|skien|sci|esqui|esquis|schi';
@@ -1357,7 +1697,7 @@ function findExtras(text) {
  * headcount - and silent everywhere else. Anything this function is not sure
  * of it leaves out, and the model's values still go through looksValid.
  */
-function extractFromMessage(message) {
+function extractFromMessage(message, now) {
       const m = String(message || '');
       const found = {};
 
@@ -1398,7 +1738,7 @@ function extractFromMessage(message) {
       // Two dates in order are a period. One alone is ambiguous - it could be a
       // start or an end - so we take nothing. findPeriod reads ISO, day-month
       // and written-out months, and fills the year from the bookable season.
-      const period = findPeriod(m);
+      const period = findPeriod(m, now);
       if (period) {
               found.start_date = period.start_date;
               found.end_date = period.end_date;
@@ -1413,6 +1753,11 @@ function extractFromMessage(message) {
 
       // Boots, helmets and protection, named or refused outright.
       Object.assign(found, findExtras(m));
+
+      // Our own form, last, so its labelled values overrule anything the prose
+      // reader picked up from the same message: a field the customer filled in
+      // under our label is the most explicit statement we ever get.
+      Object.assign(found, findFormFields(m, now));
 
       return found;
 }
@@ -2666,9 +3011,21 @@ export default async function handler(req, res) {
                 'huren|verhuur|uitrusting|' +
                 'noleggi\\w*|attrezzatura|' +
                 'alquil\\w*|equipo', 'i');
+              // Somebody who has already booked is not asking for a price. They
+              // say so in the first sentence - "I have just booked", "j'ai
+              // réservé", "habe gebucht" - and #542887 slipped through on the
+              // shape alone before this guard existed.
+              const ALREADY_BOOKED = new RegExp(
+                '\\b(?:(?:have|has|i|we)\\s+(?:just\\s+|already\\s+)?(?:booked|reserved|made a booking)|' +
+                'j(?:\'|’)ai\\s+(?:bien\\s+|d[eé]j[aà]\\s+)?r[eé]serv[eé]|nous avons r[eé]serv[eé]|' +
+                'habe\\s+(?:gerade\\s+|bereits\\s+|schon\\s+)?gebucht|haben\\s+(?:gerade\\s+)?gebucht|' +
+                'heb\\s+(?:zojuist\\s+|al\\s+)?geboekt|hebben\\s+geboekt|' +
+                'ho\\s+(?:appena\\s+|gi[aà]\\s+)?prenotato|abbiamo prenotato|' +
+                'he\\s+(?:ya\\s+)?reservado|hemos reservado)\\b', 'i');
               if (stated.start_date && stated.end_date && !stated.booking_ref &&
                   (stated.adults || stated.equipment_level) &&
-                  RENT_CUE.test(String(message))) {
+                  RENT_CUE.test(String(message)) &&
+                  !ALREADY_BOOKED.test(String(message))) {
                         decision = { topic: 'QUOTE', source: 'quote_by_shape', blocked: false };
               }
       }
@@ -2776,6 +3133,27 @@ export default async function handler(req, res) {
       // Not const: a second pass over an unanswered paid option rewrites this.
       // See the declineUnstatedExtras block below.
       let check = checkSlots(topic, slots, extraNeeds);
+
+      /*
+       * The level: assumed when it is the last thing missing, asked when it is
+       * not.
+       *
+       * 84% of real quote requests never state one, so requiring it turned the
+       * majority of them into a questionnaire. Quoting the mid range and saying
+       * so is the better trade, because the quote is something the customer
+       * edits rather than an invoice - but only when we would otherwise send
+       * nothing at all. If we are writing to ask for the resort or the dates,
+       * the level rides along in that same question at no cost, and an asked
+       * level beats an assumed one every time.
+       *
+       * So the slot sits in `assumes`, and this puts it back into `needs` for
+       * exactly the case where a question is going out anyway.
+       */
+      if (topic === 'QUOTE' && check.missing.length &&
+          !SLOTS.equipment_level.looksValid(slots.equipment_level)) {
+              extraNeeds.push('equipment_level');
+              check = checkSlots(topic, slots, extraNeeds);
+      }
       // Two different things, deliberately kept apart.
       //
       // askedQuestions is what the customer actually wanted to know. It is the

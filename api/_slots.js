@@ -94,10 +94,32 @@ export const SLOTS = {
               },
               fallback: { value: 'none', announce: 'no children in the group' },
       },
+      // The level is the single commonest reason a real quote request never
+      // gets a price.
+      //
+      // Measured on 1809 quote-tagged mails from the last two seasons: 84% of
+      // customers never state a level, and it blocks 519 of them. That is not a
+      // reading failure - the words are simply not in the mail - so no amount of
+      // extraction work will ever recover them. The requirement itself was the
+      // problem.
+      //
+      // Benjamin's decision (Sep 2026): quote the mid range by default and say
+      // so, because the quote is a starting point the customer edits - they can
+      // change any item, add one, remove one - not a final invoice. But the
+      // default applies ONLY when the level is the last thing missing. If the
+      // resort or the dates are missing too we are writing to the customer
+      // anyway, and the level costs nothing to add to that question.
+      //
+      // The conditional half lives in intent.js, which is the only place that
+      // knows what else is missing; here the slot simply declares both faces.
       equipment_level: {
               label: 'skis or snowboard and the level, person by person',
               ask: 'For each person separately, would they like skis or a snowboard, and are they a beginner, intermediate or expert? A group rarely rents the same tier throughout, and the tier is what sets the price.',
               looksValid: v => String(v || '').trim().length >= 3,
+              fallback: {
+                        value: 'intermediate',
+                        announce: 'mid-range (4-star) equipment at intermediate level for everyone',
+              },
       },
       // The three accessories below are asked for one reason: they are priced,
       // and until v5 the quote silently assumed boots-and-helmets-for-everyone
@@ -204,8 +226,8 @@ export const ROUTES = {
       // holds the whole quote hostage is not helpfulness, it is a queue.
       QUOTE: {
               flow: 'Quote Generator',
-              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'equipment_level'],
-              assumes: ['children_ages', 'boots', 'helmets', 'insurance'],
+              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults'],
+              assumes: ['children_ages', 'equipment_level', 'boots', 'helmets', 'insurance'],
       },
       REQUOTE: {
               flow: 'Requote from booking',
@@ -390,7 +412,9 @@ export function checkSlots(topic, slots, extraNeeds) {
               const last = parts.pop();
               assumedSentence = 'We have assumed ' +
                         (parts.length ? parts.join(', ') + ' and ' + last : last) +
-                        '. Tell us if that is wrong and we will re-price it.';
+                        '. Nothing here is fixed: the quote is a starting point you can change ' +
+                        'item by item — swap a level, add something, take something out — and ' +
+                        'we will re-price it. Just tell us what to change.';
       }
 
       return {
