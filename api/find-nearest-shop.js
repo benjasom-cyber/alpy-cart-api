@@ -281,6 +281,27 @@ function expandBlob(raw) {
   }
   const LC = { startdate: 'startDate', enddate: 'endDate', accommodationaddress: 'accommodationAddress' };
   for (const [lc, cc] of Object.entries(LC)) if (b[lc] !== undefined && b[cc] === undefined) b[cc] = b[lc];
+
+  // THE NAMES THE QUOTE FLOW ACTUALLY SENDS (11 septembre 2026).
+  //
+  // The Zendesk custom action passes preferred_resort_town / rental_start_date /
+  // rental_end_date; this endpoint reads resort / start / end. Nothing errors:
+  // `resort` is simply empty, so the answer is always "Which resort will you be
+  // staying in?" - and that is the reply 14 of 15 quote requests received on the
+  // 26 January corpus, including one whose subject was "Ski rent in Pinzolo" and
+  // whose extraction had already produced {"resort":"Pinzolo"}.
+  const ALIAS = {
+    preferred_resort_town: 'resort', preferredresorttown: 'resort',
+    resort_name: 'resort', resortname: 'resort', town: 'resort',
+    rental_start_date: 'start', rentalstartdate: 'start', start_date: 'start', startdate: 'start',
+    rental_end_date: 'end', rentalenddate: 'end', end_date: 'end', enddate: 'end',
+    accommodation_address: 'accommodation', accommodationaddress: 'accommodation',
+  };
+  for (const [from, to] of Object.entries(ALIAS)) {
+    const v = b[from];
+    if (v !== undefined && v !== null && String(v).trim() !== '' &&
+        (b[to] === undefined || b[to] === null || String(b[to]).trim() === '')) b[to] = v;
+  }
   return b;
 }
 
