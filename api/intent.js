@@ -265,6 +265,21 @@ const KEYWORDS = [
       { topic: 'PARTIAL_CANCELLATION',
         re: /^(?![\s\S]*\b(?:cover\w*|couvre|couvert|include\w*|inclu\w*|what\s+is|what\s+does|c.est\s+quoi|was\s+deckt|abgedeckt|kostet|co[uû]te|cost\w*)\b)(?![\s\S]*\b(?:whole|entire|complete|toute\s+la|toute\s+ma|enti[eè]re|ganze|gesamte|komplette|intera|completa|toda\s+la)\s+(?:booking|reservation|r[eé]servation|buchung|prenotazione|reserva)\b)(?![\s\S]*\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*)\s+(?:of\s+)?(?:my|the|our|this|ma|la|notre|cette|meine|die|unsere|la\s+mia|mi)\s+(?:booking|reservation|r[eé]servation|order|buchung|prenotazione|reserva)\b)(?=[\s\S]*(?:\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b[\s\S]{0,60}\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b|\b(?:insurance|versicherung|assurance|protection|schutz|assicurazione|seguro|alpin\s*safety(?:\s+plus)?|alpin\s*guaranty|alpin\s*flexi|snow\s*flexi|snow\s*guaranty|ski\s*flexi|ski\s*guaranty|helmets?|casques?|helm|helme|boots?|chaussures?|schuhe|scarponi|botas|poles?|b[aâ]tons?|st[oö]cke|modelchange|one\s+(?:person|pair|item)|une\s+personne|une\s+paire|eine\s+person|ein\s+paar|(?:la\s+|le\s+|the\s+)?personne\s*(?:n[°o]\s*)?\d|person\s*(?:no\.?\s*)?\d|skier\s*\d|skieur\s*\d|(?:la\s+)?deuxi[eè]me\s+personne|(?:the\s+)?second\s+person|(?:die\s+)?zweite\s+person|one\s+of\s+(?:the\s+)?(?:people|persons|skiers)|un\s+des\s+skieurs|une\s+des\s+personnes|(?:skis?|snowboards?)\s+(?:for|of|de|pour|von|f[uü]r)\s+\w+)\b[\s\S]{0,40}\b(?:cancel\w*|annul\w*|storn\w*|stornier\w*|remove|removing|retir\w*|enlev\w*|supprim\w*|rausnehmen|raus|entfern\w*|streich\w*|delete|drop|rimuov\w*|elimin\w*|quitar)\b))/i },
       { topic: 'CANCELLATION',  re: /\b(cancel(?:l?ing|lation)?\s+(?:of\s+)?(?:my|the|our|these|those|this|that|both|all)?\s*(?:\w+\s+){0,2}(bookings?|reservations?|orders?|rentals?)|cancel(?:l?ing)?\s+(?:the\s+)?(?:booking\s+)?(?:under\s+(?:confirmation|reference)\s+)?B[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}|annul(?:er|ation|ations|[eé]e?s?)\s+(?:de\s+)?(?:ma|mes|la|les|notre|nos|cette|ces|deux)?\s*(?:\w+\s+){0,2}r[eé]servations?|storno\w*|stornier\w*)\b/i },
+      // CANCELLING IN THE OTHER HALF OF EUROPE (11 septembre 2026).
+      //
+      // The rule above knows English, French and German. It knows nothing of
+      // Italian, Dutch, Spanish, Danish or Polish - and until the quoted-text
+      // cut was tightened, that gap was invisible: the confirmation e-mail
+      // quoted underneath the customer's own words carried the missing keyword,
+      // so these mails were routed CORRECTLY BY ACCIDENT. With the quote gone,
+      // "Purtroppo sono costretta all'annullamento" and "ik zou graag boeking
+      // BDZ36A willen annuleren" both fell through to the model.
+      //
+      // Measured on the 314 mails of 26 January: five mails move from OTHER to
+      // CANCELLATION, every one of them a real cancellation, and the rule fires
+      // on NO mail that another rule already routes.
+      { topic: 'CANCELLATION',
+        re: /\b(annullare|annullamento|annullazione|disdire|disdetta|cancellare\s+(?:la\s+|il\s+|l['’])?\s*(?:prenotazione|ordine|noleggio)|annuleren|annulering|annuleer|annuleert|anular\s+(?:mi\s+|la\s+)?reserva|cancelar\s+(?:mi\s+|la\s+)?reserva|annullere|afbestille|afbestilling|anulowa\w+|anulacj\w+)\b/i },
       // A double booking IS a cancellation request, and it is one of the most
       // common ones: the payment page errored, the customer tried again, and now
       // they hold two. Nothing about that sentence says "cancel my booking" in
