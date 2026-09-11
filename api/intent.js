@@ -834,6 +834,18 @@ function dateInSeason(day, month, year, now) {
  * a date, a phone number "06-42980629" reads as a date, and a shoe size "42.5"
  * reads as a date. Each of those appeared in real mail.
  */
+// A number followed by one of these is a quantity, never a date.
+const UNIT_AFTER = new RegExp(
+      '^\\s*(?:' +
+      'days?|nights?|hours?|weeks?|persons?|people|adults?|children|kids?|pax|' +
+      'jours?|nuits?|heures?|semaines?|personnes?|adultes?|enfants?|' +
+      'tage?n?|n[äa]chte?|stunden?|wochen?|personen|erwachsene|kinder|' +
+      'dagen?|nachten|uur|weken|personen|volwassenen|kinderen|' +
+      'giorni|notti|ore|settimane|persone|adulti|bambini|' +
+      'd[ií]as?|noches|horas|semanas|personas|adultos|ni[ñn]os|' +
+      'cm|kg|mm|km|eur|euros?|%' +
+      ')\\b', 'i');
+
 function findDateTokens(text) {
       const m = String(text || '');
       const out = [];
@@ -859,6 +871,11 @@ function findDateTokens(text) {
               // Both readings impossible - a height, a size, a price.
               if (b > 31 || a > 31) continue;
               if (sep === '.' && bRaw.length < 2 && !trailingDot && !x[5] && !x[6]) continue;
+              // "a 3-4 day training course (4-5 hours per day)" is a duration and
+              // a headcount, not 3 April and 4 May. #512144 was quoted for a
+              // month-long rental because of it. What follows the pair says
+              // which it is.
+              if (UNIT_AFTER.test(m.slice(x.index + x[0].length, x.index + x[0].length + 16))) continue;
               out.push({
                         at: x.index, to: x.index + x[0].length,
                         day: a, month: b, year: x[5] ? +x[5] : (x[6] ? 2000 + +x[6] : null),
@@ -1324,6 +1341,12 @@ const PAIR_PHRASES = new RegExp(
         '\\bich und (?:meine frau|mein mann|meine partnerin|mein partner)\\b',
         '\\bik en (?:mijn man|mijn vrouw|mijn partner)\\b',
         '\\bmoi et (?:mon mari|ma femme|mon compagnon|ma compagne)\\b',
+        // The two halves of a couple with a clause between them: "louer des skis
+        // pour mon mari et des chaussures pour moi" (#553869). Bounded to one
+        // clause, because at any greater distance the two are not a pair.
+        '\\b(?:mon mari|ma femme|my husband|my wife|my partner|mein mann|meine frau|' +
+          'mijn man|mijn vrouw|mio marito|mia moglie|mi marido|mi mujer)\\b[^.!?]{0,45}?' +
+          '\\b(?:moi|myself|ich|ik|io|yo)\\b',
       ].join('|'), 'i');
 
 /** "Nobody under 18 is coming", said outright. */
@@ -1477,6 +1500,9 @@ function findParty(text) {
                 new RegExp('\\b(\\d{1,3})\\s*[x×]\\s*' + GEAR + '\\b', 'i'),
                 // "a group of 6", "un groupe de 12", "eine Gruppe von 8"
                 new RegExp('\\b(?:group|groupe|gruppe|groep|gruppo|grupo)\\s+(?:of|de|von|van|di)\\s+(\\d{1,3}|' + NUM_WORD_RE + ')\\b', 'i'),
+                // "Nous sommes un groupe (14)" - the count in brackets right
+                // after the word, which #532624 wrote and we read as one person.
+                new RegExp('\\b(?:group|groupe|gruppe|groep|gruppo|grupo)\\s*\\(\\s*(\\d{1,3})\\s*\\)', 'i'),
                 // "we are 5", "nous sommes 4", "wir sind 6", "siamo in 3"
                 new RegExp('\\b(?:we are|there (?:are|will be)|nous sommes|nous serons|on est|wir sind|wir waren|' +
                            'wij zijn|we zijn|siamo(?: in)?|somos|seremos)\\s+(\\d{1,3}|' + NUM_WORD_RE + ')\\b', 'i'),
@@ -1488,6 +1514,11 @@ function findParty(text) {
                         if (!hit) continue;
                         const n = countAt(hit[1]);
                         if (n == null || n < 1 || n > 60) continue;
+                        // "un pack complet" is a count of one, and the weakest
+                        // signal there is. When the same sentence also names a
+                        // couple - "des skis pour mon mari et des chaussures pour
+                        // moi ... un pack complet" (#553869) - the couple wins.
+                        if (n === 1 && PAIR_PHRASES.test(m)) break;
                         // Everyone counted, minus the children we can name.
                         const kids = uniqueAges.length;
                         const grown = kids && n > kids ? n - kids : n;
