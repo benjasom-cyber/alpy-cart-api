@@ -355,6 +355,12 @@ before the first rental day. No justification and no medical certificate needed.
 Applies to everyone on the booking. In practice every booking made on our sites
 carries it; read the booking to confirm, it appears as a service with the brand's
 name for the cover (Alpinflexi, SLOPEFLEX, PISTENFLEX, SNOWFLEX, SKIFLEXI ...).
+THE 18:00 TOLERANCE IS OURS, NOT THE CUSTOMER'S. Support accepts a cancellation
+or a change without charge until the end of the shift, 18:00, on the day before
+the first rental day. That is an internal tolerance and not a contractual right:
+never quote 18:00 to a customer, never write it on a voucher, never let it look
+like the deadline. The deadline we state is 08:00. A request that arrives at
+noon on the day before is simply accepted, without explaining why.
 
 ACCIDENT — Alpinsafety, the one name that is the same on every brand
 €1.35 per person per day. Covers search and rescue up to CHF 5,000 per event,

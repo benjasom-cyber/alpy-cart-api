@@ -432,7 +432,7 @@ function parseVerdict(raw) {
   return { verdict, severity: sev, category: cat, reason, fix, parsed: found.length > 0 };
 }
 
-async function judge(prompt) {
+async function judge(prompt, maxTokens) {
   if (!ANTHROPIC_KEY) throw new Error('ANTHROPIC_API_KEY is not configured');
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 25000);
@@ -446,7 +446,7 @@ async function judge(prompt) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 400,
+        max_tokens: maxTokens || 400,
         temperature: 0,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -572,6 +572,116 @@ function alreadyReviewed(comments, commentId) {
   return comments.some(c => !c.public && String(c.plain_body || c.body || '').indexOf(needle) > -1);
 }
 
+/* --------------------------------------------------------------- the draft
+ *
+ * THE SECOND RING: write the reply, do not send it.
+ *
+ * Finding a bad answer and describing what is wrong with it saves an agent
+ * nothing but the diagnosis. The work is still theirs: read the thread, look up
+ * the booking, decide what is true, write it in the customer's language. That is
+ * ten minutes, and it is ten minutes we have already spent - the reader has just
+ * read all of it.
+ *
+ * So on a failure the reader also writes the message the customer should have
+ * received, as an internal note, ready to be sent in one click or corrected in
+ * two. It is never sent automatically, and the note says so in its first line,
+ * because a draft that could be mistaken for something already gone out is worse
+ * than no draft at all.
+ *
+ * WHY THIS IS THE STEP THAT EARNS THE NEXT ONE
+ *
+ * Every draft carries a fingerprint of its own text. When an agent later sends a
+ * public reply, comparing it to the fingerprint answers the only question that
+ * matters before anything is allowed to answer customers on its own: how often
+ * is the draft good enough to send unchanged, and for which kind of ticket. A
+ * capability promoted on that number is promoted on evidence. Promoted on a
+ * hunch, it is an outage waiting for a Saturday.
+ *
+ * WHAT THE DRAFT MAY NOT DO
+ *
+ * It answers only from the same answer book the flow was given. A fact that is
+ * not in the book is not a fact it may state - and when the book does not cover
+ * the question, the honest draft is the sentence that says so, addressed to the
+ * agent, not an invented answer addressed to the customer. The rule is the same
+ * one that makes the reader trustworthy: silence beats a confident guess.
+ */
+const DRAFT_MARK = 'SKIBOT-DRAFT';
+
+/** A short, stable fingerprint of the draft, for the acceptance measurement. */
+function fingerprint(text) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+const DRAFT_RULES = [
+  'You are writing the reply an Alpy.com support agent will send to this customer.',
+  'The automatic reply above was judged wrong. Yours replaces it in the agent\'s hands:',
+  'they will read it and either send it as it stands or correct it.',
+  '',
+  'HARD RULES.',
+  '1. Answer ONLY from the reference material below. It is the whole of what we can',
+  '   state. If the answer is not in it, do not invent one.',
+  '2. If you cannot answer from the material, reply with exactly:',
+  '     HANDOVER: <one sentence, to the agent, naming what is missing>',
+  '   That is a complete and correct outcome. A confident guess is not.',
+  '3. Write in the language the customer wrote in.',
+  '4. No markdown, no bullet characters, no headings - this is an email.',
+  '5. Do not promise a refund, a price, a date or an exception that is not in the',
+  '   material or already stated on the ticket.',
+  '6. Do not apologise more than once, and never explain our internal process.',
+  '7. Address what the customer actually asked before anything else.',
+  '',
+  'Write only the message body. No subject, no signature, no preamble of your own.',
+].join('\n');
+
+async function writeDraft(ctx) {
+  const prompt = [
+    DRAFT_RULES,
+    '',
+    '=== WHAT WAS WRONG WITH THE AUTOMATIC REPLY ===',
+    ctx.reason || '(not stated)',
+    '',
+    '=== THE REFERENCE MATERIAL YOU MAY USE ===',
+    ctx.knowledge || '(none - you may state no product name and no rule at all)',
+    '',
+    '=== WHAT THE FLOW HAD READ ABOUT THIS BOOKING (internal notes) ===',
+    ctx.flowNotes || '(nothing)',
+    '',
+    '=== THE CONVERSATION, oldest first ===',
+    ctx.transcript || '(the reply below is the first message on the ticket)',
+    '',
+    '=== THE AUTOMATIC REPLY THAT WAS SENT AND IS WRONG ===',
+    ctx.message,
+  ].join('\n');
+
+  const raw = await judge(prompt, 900);
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  if (/^HANDOVER\s*:/i.test(text)) {
+    return { handover: true, reason: text.replace(/^HANDOVER\s*:\s*/i, '').trim() };
+  }
+  return { handover: false, text, print: fingerprint(text) };
+}
+
+function draftNote(draft, commentId) {
+  if (draft.handover) {
+    return DRAFT_MARK + ' c=' + commentId + ' HANDOVER\n\n' +
+      'No reply could be written from the answer book, so none is proposed here. ' +
+      'What is missing: ' + draft.reason + '\n\n' +
+      'Nothing has been sent to the customer.';
+  }
+  return DRAFT_MARK + ' c=' + commentId + ' d=' + draft.print + '\n\n' +
+    'PROPOSED REPLY - it has NOT been sent. Read it, then send it as it stands or ' +
+    'change what you disagree with. Sending it unchanged is a vote that this kind of ' +
+    'ticket can eventually be answered without you; changing it is the more useful ' +
+    'answer of the two.\n\n' +
+    '----- copy from here -----\n' +
+    draft.text + '\n' +
+    '----- to here -----';
+}
+
 function noteFor(v, commentId) {
   const head = MARK + ' c=' + commentId + ' ' + v.verdict + (v.severity ? ' ' + v.severity : '');
   if (v.verdict === 'PASS') {
@@ -674,6 +784,11 @@ async function reviewTicket(ticket, opts) {
   const add = t => { if (tags.indexOf(t) === -1) tags.push(t); };
   add(T_REVIEWED);
 
+  // Zendesk takes one comment per update, so a draft is a second call. It is
+  // posted AFTER the diagnosis on purpose: an agent opening the ticket reads
+  // what is wrong first and the proposed wording second.
+  const extraNotes = [];
+
   const update = {
     comment: { body: noteFor(v, commentId), public: false },
   };
@@ -682,6 +797,26 @@ async function reviewTicket(ticket, opts) {
     add(T_FAILED);
     add(T_HUMAN);
     if (v.category) add('ai_fail__' + v.category.toLowerCase());
+
+    // The reply the agent should send, written now while everything needed to
+    // write it is already loaded. Failing to produce one is not a reason to
+    // fail the whole review: the diagnosis note above still goes out, and an
+    // agent with a diagnosis is better off than an agent with nothing.
+    if (!opts.noDraft) {
+      try {
+        const draft = await writeDraft({
+          reason: v.reason, knowledge, flowNotes, transcript, message,
+        });
+        if (draft) {
+          out.draft = draft.handover ? 'handover' : 'written';
+          out.draftPrint = draft.print || '';
+          extraNotes.push(draftNote(draft, commentId));
+          add(draft.handover ? 'skibot_draft__none' : 'skibot_draft');
+        }
+      } catch (e) {
+        out.draftError = String(e && e.message || e).slice(0, 140);
+      }
+    }
     // Reopen so it lands back in the queue. Solved and closed tickets are left
     // where they are - reopening a closed conversation days later reads to the
     // customer as a new problem, and Zendesk will not reopen a closed one anyway.
@@ -694,6 +829,15 @@ async function reviewTicket(ticket, opts) {
 
   update.tags = tags;
   await zd('/api/v2/tickets/' + id + '.json', { method: 'PUT', body: { ticket: update } });
+  for (const body of extraNotes) {
+    // A draft that fails to post must not undo the review that did post.
+    try {
+      await zd('/api/v2/tickets/' + id + '.json',
+               { method: 'PUT', body: { ticket: { comment: { body, public: false } } } });
+    } catch (e) {
+      out.draftError = String(e && e.message || e).slice(0, 140);
+    }
+  }
   out.applied = true;
   return out;
 }
@@ -707,6 +851,9 @@ async function runReview(req, res) {
   // be generous: it bounds Zendesk reads, the clock bounds Claude calls.
   const limit = Math.min(Math.max(parseInt(q.limit, 10) || 60, 1), 120);
   const dry = String(q.dry || '') === '1' || q.dry === true;
+  // Drafting doubles the model calls, so it can be turned off for a fast pass
+  // that only wants the verdicts (draft=0).
+  const noDraft = String(q.draft || '') === '0' || q.draft === false;
 
   // Zendesk search granularity is a day, so we over-fetch and filter on the real
   // timestamp. A reply sent inside the window always updated its ticket inside
@@ -740,13 +887,35 @@ async function runReview(req, res) {
     if (Date.now() - began > BUDGET_MS) { cut = candidates.length - i; break; }
     const slice = candidates.slice(i, i + CONCURRENCY);
     const done = await Promise.all(slice.map(async t => {
-      try { return await reviewTicket(t, { dry, start }); }
+      try { return await reviewTicket(t, { dry, start, noDraft }); }
       catch (e) { return { ticket: t.id, error: String(e && e.message || e).slice(0, 300) }; }
     }));
     for (const r of done) results.push(r);
   }
 
   const failures = results.filter(r => r.verdict === 'FAIL');
+
+  // The brief, composed from this run's own results - not from a second search.
+  // Off with brief=0; on by default for a real (non-dry) run, because a report
+  // nobody switched on is a report nobody reads.
+  const stats = {
+    reviewed: results.filter(r => r.verdict).length,
+    passed: results.filter(r => r.verdict === 'PASS').length,
+    drafted: results.filter(r => r.draft === 'written').length,
+    draftHandover: results.filter(r => r.draft === 'handover').length,
+  };
+  let brief = null, briefDelivery = null;
+  if (String(q.brief || '') !== '0') {
+    brief = composeBrief(stats, failures.map(f => ({
+      ticket: f.ticket, url: f.url, severity: f.severity,
+      category: f.category, reason: f.reason, fix: f.fix,
+    })), new Date());
+    if (!dry) {
+      try { briefDelivery = await deliverBrief(brief, new Date()); }
+      catch (e) { briefDelivery = { delivered: false, reason: String(e && e.message || e).slice(0, 200) }; }
+    }
+  }
+
   return res.status(200).json({
     ok: true,
     window: { from: start.toISOString(), to: new Date().toISOString() },
@@ -767,13 +936,127 @@ async function runReview(req, res) {
     passed: results.filter(r => r.verdict === 'PASS').length,
     failed: failures.length,
     reopened: failures.filter(r => r.applied).length,
+    // The second ring: how many failures left a reply ready to send, and how
+    // many honestly could not.
+    drafted: results.filter(r => r.draft === 'written').length,
+    draftHandover: results.filter(r => r.draft === 'handover').length,
+    draftErrors: results.filter(r => r.draftError).length,
     // The correction list, which is the point of the whole thing.
     corrections: failures.map(f => ({
       ticket: f.ticket, url: f.url, severity: f.severity,
       category: f.category, reason: f.reason, fix: f.fix,
     })),
+    brief,
+    briefDelivery,
     results,
   });
+}
+
+/* -------------------------------------------------------- the morning brief
+ *
+ * WHY THIS LIVES HERE AND NOT IN A SCHEDULED CLAUDE SESSION
+ *
+ * The morning report was a scheduled Claude task that drove Benjamin's own
+ * Chrome to read Zendesk. It has been suspended since 3 September with
+ * `device_absent`: at six in the morning his laptop is shut, so the report that
+ * exists to be read before the day starts is the one thing that cannot run
+ * before the day starts.
+ *
+ * Everything it needed was already here. This module holds the Zendesk token,
+ * it already reads the review notes back in runDigest, and it already runs on
+ * Vercel's clock. So the brief is composed here, in French, from data this
+ * process fetched itself - no browser, no laptop, no session, no new secret -
+ * and delivered where Benjamin already is: as a ticket in Zendesk.
+ *
+ * DELIVERY IS OPT-IN. Nothing is written to Zendesk unless BRIEF_TO_ZENDESK is
+ * set in the Vercel project. Until then the brief comes back in the response
+ * body, which is enough to read it and decide whether the wording is right
+ * before it starts appearing in the queue every morning.
+ */
+const BRIEF_TAG = 'skibot_brief';
+
+function frDate(d) {
+  const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+                'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  return d.getUTCDate() + ' ' + MOIS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+
+/**
+ * The brief itself: what happened, what a human must pick up, what to fix.
+ *
+ * Written as plain text and deliberately short. It is read standing up, between
+ * two tickets, on a phone - so the first line has to carry the whole answer and
+ * everything after it has to be skippable.
+ */
+function composeBrief(stats, items, when) {
+  const L = [];
+  const day = frDate(when);
+
+  if (!stats.reviewed) {
+    return 'Rapport SKIBOT du ' + day + '\n\n' +
+           'Aucune réponse automatique n\'a été envoyée hier. Rien à relire.';
+  }
+
+  const high = items.filter(i => /HIGH/i.test(i.severity));
+  L.push('Rapport SKIBOT du ' + day);
+  L.push('');
+  L.push(stats.reviewed + ' réponses automatiques relues, ' + stats.passed + ' correctes, ' +
+         items.length + ' à reprendre par un humain' +
+         (high.length ? ' dont ' + high.length + ' en urgence.' : '.'));
+
+  if (stats.drafted) {
+    L.push(stats.drafted + ' de ces tickets portent déjà une proposition de réponse en note interne : ' +
+           'à relire et envoyer, ou corriger.');
+  }
+  if (stats.draftHandover) {
+    L.push(stats.draftHandover + ' n\'ont pas pu être rédigés — la réponse n\'est pas dans le livre de règles.');
+  }
+
+  if (!items.length) {
+    L.push('');
+    L.push('Rien à reprendre. Bonne journée.');
+    return L.join('\n');
+  }
+
+  L.push('');
+  L.push('À REPRENDRE');
+  for (const i of items.slice(0, 25)) {
+    L.push('#' + i.ticket + '  ' + (i.severity || '') + '  ' + (i.reason || '').slice(0, 180));
+    L.push('   ' + i.url);
+  }
+  if (items.length > 25) L.push('… et ' + (items.length - 25) + ' autres.');
+
+  // Grouped by category, commonest first: this is the half that improves the
+  // system rather than clearing the queue.
+  const byCat = {};
+  for (const i of items) if (i.fix) (byCat[i.category || 'AUTRE'] = byCat[i.category || 'AUTRE'] || []).push(i.fix);
+  const cats = Object.keys(byCat).sort((a, b) => byCat[b].length - byCat[a].length);
+  if (cats.length) {
+    L.push('');
+    L.push('À CORRIGER DANS LES FLOWS');
+    for (const c of cats) {
+      L.push(c + ' (' + byCat[c].length + ')');
+      // The same fix suggested five times is one fix, not five lines.
+      for (const f of [...new Set(byCat[c])].slice(0, 3)) L.push('   - ' + f.slice(0, 240));
+    }
+  }
+  return L.join('\n');
+}
+
+/** Put the brief where Benjamin already looks. Opt-in, and never noisy. */
+async function deliverBrief(text, when) {
+  if (!String(process.env.BRIEF_TO_ZENDESK || '').trim()) return { delivered: false, reason: 'BRIEF_TO_ZENDESK not set' };
+  const subject = 'SKIBOT — rapport du matin du ' + frDate(when);
+  const ticket = {
+    subject,
+    tags: [BRIEF_TAG],
+    status: 'open',
+    comment: { body: text, public: false },
+  };
+  const gid = parseInt(String(process.env.BRIEF_GROUP_ID || ''), 10);
+  if (Number.isFinite(gid)) ticket.group_id = gid;
+  const created = await zd('/api/v2/tickets.json', { method: 'POST', body: { ticket } });
+  return { delivered: true, ticket: created && created.ticket ? created.ticket.id : null };
 }
 
 /**
