@@ -621,6 +621,10 @@ async function runFlow(wf, mail, opts) {
         const content = await askModel(prompt, opts.model, opts.maxTokens);
         scope[cursor] = { output: withLowercaseMirror({ content }) };
         entry.chars = content.length;
+        // In verbose mode, keep what the model actually answered. Without it a
+        // mis-extraction is invisible: the trace shows a prompt ran and a step
+        // read nothing, with no way to tell which of the two was wrong.
+        if (opts.verbose) entry.content = String(content).slice(0, 1500);
         // A flow's refusal is the single word HANDOVER coming out of the model,
         // and the ticket then gets a note instead of a reply. Read it here: by
         // the time the run ends there is no public comment to read it off.
