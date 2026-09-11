@@ -96,6 +96,12 @@ const KEYWORDS = [
       // holding two of them.
       { topic: 'DUPLICATE_BOOKING',
         re: /^(?![\s\S]*\b(?:twice|two\s+times|2\s+times|deux\s+fois|zweimal|due\s+volte|dos\s+veces)\b[\s\S]{0,70}\b(?:ticket\w*|chat\w*|bot|e-?mail\w*|contact\w*|call\w*|phon\w*|rais\w*|ask\w*|enquir\w*|wrote|writ\w*|messag\w*|reminder\w*|relanc\w*|appel\w*|[eé]crit|demand\w*|support\s+team)\b)(?![\s\S]*\b(?:ticket\w*|chat\w*|bot|e-?mail\w*|contact\w*|call\w*|phon\w*|rais\w*|ask\w*|enquir\w*|wrote|writ\w*|messag\w*|reminder\w*|relanc\w*|appel\w*|[eé]crit|demand\w*)\b[\s\S]{0,40}\b(?:twice|two\s+times|2\s+times|deux\s+fois|zweimal|due\s+volte|dos\s+veces)\b)(?![\s\S]*\b(?:not|never|no|n.ai\s+pas|jamais|nicht|kein\w*|aucun\w*)\b[\s\S]{0,50}\b(?:received|receiv\w*|re[cç]u\w*|erhalten|got|bekommen)\b[\s\S]{0,80}\b(?:confirmation|booking\s+reference|voucher|buchungsnummer|num[eé]ro\s+de\s+r[eé]servation)\b)(?=[\s\S]*(?:\b(?:duplicate|duplicated|duplicat\w*|doubl\w*|twice|two\s+times|2\s+times|deux\s+fois|en\s+double|doppelt|zweimal|due\s+volte|dos\s+veces|same\s+booking\s+again|by\s+mistake|par\s+erreur|aus\s+versehen|versehentlich|accidentally|accidentellement)\b[\s\S]{0,120}\b(?:booking|bookings|reservation|reservations|r[eé]servations?|buchung\w*|prenotazion\w*|reservas?|order|commande|bestellung)\b|\b(?:booking|bookings|reservation|reservations|r[eé]servations?|buchung\w*|prenotazion\w*|reservas?|order|commande|bestellung)\b[\s\S]{0,120}\b(?:duplicate|duplicated|duplicat\w*|doubl\w*|twice|two\s+times|2\s+times|deux\s+fois|en\s+double|doppelt|zweimal|due\s+volte|dos\s+veces|same\s+booking\s+again|by\s+mistake|par\s+erreur|aus\s+versehen|versehentlich|accidentally|accidentellement)\b))(?=[\s\S]*\b(?:refund\w*|rembours\w*|erstatt\w*|r[uü]ckerstatt\w*|rimbors\w*|reembols\w*|cancel\w*|annul\w*|stornier\w*|charged|d[eé]bit[eé]\w*|abgebucht|paid|pay[eé]\w*|payment|paiement|zahlung)\b)/i },
+      // A DOUBLE BOOKING, SAID IN DUTCH, SPANISH OR ITALIAN (11 septembre 2026).
+      // "dubbel geboekt", "dos veces por error", "due volte" - none of the three
+      // was in the rule above, and the Dutch one was routed as a plain
+      // cancellation, which would have cancelled the wrong thing.
+      { topic: 'DUPLICATE_BOOKING',
+        re: /(?=[\s\S]*\b(?:dubbel\w*|twee\s+identieke|dos\s+veces|duplicad\w*|due\s+volte|doppia\s+prenotazione)\b)(?=[\s\S]*\b(?:annul\w*|anul\w*|cancel\w*|storn\w*|rimbors\w*|reembols\w*|terugbetal\w*)\b)/i },
 
       // STOLEN OR DAMAGED EQUIPMENT IS A CLAIM, NOT A LOCKER QUESTION.
       //
@@ -342,12 +348,6 @@ const KEYWORDS = [
       // alone is a statement, duplicate plus a cancel or refund word is a request.
       { topic: 'CANCELLATION',
         re: /\b(duplicate|duplicated|double|twice|two\s+(?:identical|same)\s+bookings?|en\s+double|deux\s+fois|doppelt|doppelte)\b[\s\S]{0,300}\b(cancel\w*|annul\w*|storn\w*|refund\w*|rembours\w*|erstatt\w*)/i },
-      // A DOUBLE BOOKING, SAID IN DUTCH, SPANISH OR ITALIAN (11 septembre 2026).
-      // "dubbel geboekt", "dos veces por error", "due volte" - none of the three
-      // was in the rule above, and the Dutch one was routed as a plain
-      // cancellation, which would have cancelled the wrong thing.
-      { topic: 'DUPLICATE_BOOKING',
-        re: /(?=[\s\S]*\b(?:dubbel\w*|twee\s+identieke|dos\s+veces|duplicad\w*|due\s+volte|doppia\s+prenotazione)\b)(?=[\s\S]*\b(?:annul\w*|anul\w*|cancel\w*|storn\w*|rimbors\w*|reembols\w*|terugbetal\w*)\b)/i },
       { topic: 'DATE_CHANGE',   re: /\b(change\s+(my|the)\s+dates?|move\s+(my|the)\s+booking|postpone|d[eé]caler|changer\s+(mes|les)\s+dates?|different\s+dates?)\b/i },
       // "Pouvez-vous modifier la reservation svp ? je me suis trompee de date"
       //
