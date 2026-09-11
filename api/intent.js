@@ -280,6 +280,30 @@ const KEYWORDS = [
       // on NO mail that another rule already routes.
       { topic: 'CANCELLATION',
         re: /\b(annullare|annullamento|annullazione|disdire|disdetta|cancellare\s+(?:la\s+|il\s+|l['’])?\s*(?:prenotazione|ordine|noleggio)|annuleren|annulering|annuleer|annuleert|anular\s+(?:mi\s+|la\s+)?reserva|cancelar\s+(?:mi\s+|la\s+)?reserva|annullere|afbestille|afbestilling|anulowa\w+|anulacj\w+)\b/i },
+      // ASKING THE PRICE IN A LANGUAGE THAT GLUES ITS NOUNS TOGETHER (11 septembre 2026).
+      //
+      // The main QUOTE rule above works on "Ski Verleih" and fails on
+      // "Skiverleih": its rental words are anchored with \b, and a German or
+      // Dutch compound offers no boundary before the second half. Measured:
+      // "was kostet der Ski Verleih" routes QUOTE, "was kostet der Skiverleih"
+      // routes nothing. Dutch "huren" and "verhuur" were absent altogether, and
+      // the head-count list knew adultes but not adulti, adultos, volwassenen.
+      //
+      // So: a price word and a rental word WITHIN THIRTY CHARACTERS of each
+      // other - which is how the question is actually asked - plus a head count
+      // or a date range. The proximity is what keeps a complaint out: 542789
+      // ("een vraag over de kwaliteit van de ski's") has all three words spread
+      // over a page, and matched until the distance was added.
+      //
+      // Not a new quote if the customer is talking about a booking they already
+      // have - same guard as the rule above.
+      { topic: 'QUOTE',
+        re: /^(?![\s\S]*(?:\b[Bb][123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b|\b(?:my|our|meine?|unsere?|ma|notre|mon|mijn|onze|la\s+mia|mi)\s+(?:booking|buchung|r[eé]servation|reservierung|boeking|prenotazione|reserva)\b))(?=[\s\S]*(?:(?:kost\w*|preis\w*|prijs|prijzen|tarief|tarieven|prezz\w*|preci\w*|cuesta|cost[ao]|quanto\s+cost\w*|angebot|offerte|preventivo|presupuesto)[\s\S]{0,30}?(?:verleih\w*|vermiet\w*|mieten|verhuur\w*|huren|huur\b|noleggi\w*|affitt\w*|alquil\w*)|(?:verleih\w*|vermiet\w*|mieten|verhuur\w*|huren|huur\b|noleggi\w*|affitt\w*|alquil\w*)[\s\S]{0,30}?(?:kost\w*|preis\w*|prijs|prijzen|tarief|tarieven|prezz\w*|preci\w*|cuesta|cost[ao]|quanto\s+cost\w*|angebot|offerte|preventivo|presupuesto)))(?=[\s\S]*(?:\d{1,3}\s*(?:erwachsene\w*|kinder|personen|volwassene\w*|kinderen|adulti|bambini|persone|adultos|ni[nñ]os|personas)\b|(?:vom|van|dal|del)\s+\d{1,2}\.?\s*(?:bis|tot|al)\s+\d{1,2}))/i },
+      // The voucher, asked for in Spanish (11 septembre 2026). "bono" and
+      // "reenviar" were the two words missing; every other language already
+      // routed this correctly.
+      { topic: 'VOUCHER_RESEND',
+        re: /\b(?:reenv[ií]\w*|volver\s+a\s+enviar|env[ií]en?me)\b[\s\S]{0,40}?\b(?:bono|comprobante|confirmaci[oó]n|justificante)\b|\b(?:bono|comprobante|justificante)\b[\s\S]{0,40}?\b(?:reserva|alquiler)\b[\s\S]{0,60}?\b(?:reenv[ií]\w*|enviar|mandar)\b/i },
       // A double booking IS a cancellation request, and it is one of the most
       // common ones: the payment page errored, the customer tried again, and now
       // they hold two. Nothing about that sentence says "cancel my booking" in
