@@ -283,6 +283,17 @@ lift. Virtual shop: a partner with no shop in the town shown, which either
 delivers to the accommodation or shuttles the customer to its real shop and
 back. The "i" next to each shop lists that shop's own advantages.
 
+VERY TALL OR VERY SMALL SKIERS - THE SITE'S LIMIT IS NOT THE SHOP'S
+The booking form stops at 1.80 m. That ceiling belongs to the form, not to the
+equipment: the shops carry longer skis and larger boots, and a skier of two
+metres is equipped without difficulty. So the answer to "do you have anything
+for someone taller than 1.80 m" is yes, plainly, and the booking goes ahead at
+the highest height the form accepts - the shop fits the real person when they
+collect. Never answer that it depends on the shop, never make the height a
+reason to ask a question before quoting, and never hand the ticket to a human
+over it. The same applies at the other end: small children below the form's
+lowest height are equipped from the children's range.
+
 DELIVERY TO THE ACCOMMODATION
 Sold by shops that offer it, and the customer fills in the mandatory
 measurements when booking: name, height, weight, shoe size and level. The

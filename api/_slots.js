@@ -59,11 +59,29 @@ export const SLOTS = {
               ask: 'How many adults is the equipment for?',
               looksValid: v => Number.isFinite(parseInt(v, 10)) && parseInt(v, 10) >= 0,
       },
-      // The one slot that is never optional on a quote, and the reason this file
-      // exists at all. generate-quote will happily price a child as a 35-year-old
-      // if the age is absent - it defaults to ADULT_DEFAULT_AGE. The quote comes
-      // out plausible, the customer accepts it, and the real price appears at the
-      // till. "No children" is a perfectly good answer; a silent guess is not.
+      // Children are priced on their exact age, so an age we invent is a wrong
+      // price discovered at the till. That is why this slot exists, and why for
+      // a long time it was required.
+      //
+      // WHAT CHANGED (582304). Requiring it turned every silent mail into a
+      // question. Emma wrote "I would be renting just for me and my husband",
+      // gave the resort, the dates and both levels - and got no quote, because
+      // she had not written the sentence "there are no children". She had said
+      // it: "just for me and my husband" says it exactly. Hundreds of mails
+      // arrive in that shape, and holding all of them for a question about
+      // children who do not exist is the single largest source of unanswered
+      // quotes we have measured.
+      //
+      // So the slot moves to `assumes` with a fallback of "none", and the
+      // assumption is printed in the reply where one word corrects it. The
+      // safety it used to provide is kept, and made sharper, by the extractor:
+      // a message that MENTIONS a child without giving an age puts the slot
+      // straight back into `needs` (see childrenNeedAsking in intent.js), so
+      // the only case that is ever assumed is the case where nobody has
+      // mentioned a child at all.
+      //
+      // Silence about children now means no children. Mentioning one and
+      // withholding the age still stops the quote, exactly as before.
       children_ages: {
               label: 'age of each child',
               ask: 'How old is each child skiing with you? We need every age — a child is priced on their age, so a quote without them would be wrong. If there are no children, just say so.',
@@ -74,6 +92,7 @@ export const SLOTS = {
                         const ages = s.split(/[^0-9]+/).filter(x => x !== '').map(Number);
                         return ages.length > 0 && ages.every(a => a >= 0 && a < 100);
               },
+              fallback: { value: 'none', announce: 'no children in the group' },
       },
       equipment_level: {
               label: 'skis or snowboard and the level, person by person',
@@ -185,8 +204,8 @@ export const ROUTES = {
       // holds the whole quote hostage is not helpfulness, it is a queue.
       QUOTE: {
               flow: 'Quote Generator',
-              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'children_ages', 'equipment_level'],
-              assumes: ['boots', 'helmets', 'insurance'],
+              needs: ['resort_name|shop_name', 'start_date', 'end_date', 'adults', 'equipment_level'],
+              assumes: ['children_ages', 'boots', 'helmets', 'insurance'],
       },
       REQUOTE: {
               flow: 'Requote from booking',
@@ -277,13 +296,30 @@ export const ROUTES = {
  * One question at a time, in the order the capability declares them. Asking a
  * customer for six things in one message is how you get two of them back.
  */
-export function checkSlots(topic, slots) {
+/**
+ * extraNeeds: requirements the CALLER discovered in the message itself, added
+ * to the ones the route declares.
+ *
+ * One caller, one reason. children_ages is assumed to be "none" when nobody
+ * mentions a child, but a message that names a child without giving an age has
+ * to be asked - and only the extractor, which read the message, knows which of
+ * the two happened. Rather than duplicate the route table for that single
+ * case, the caller hands the requirement back in.
+ *
+ * A slot named here is also removed from the assumed list: a requirement and
+ * an assumption about the same value would contradict each other, and the
+ * requirement is the stricter of the two.
+ */
+export function checkSlots(topic, slots, extraNeeds) {
       const route = ROUTES[topic] || ROUTES.OTHER;
       const values = slots || {};
       const missing = [];
       const satisfied = [];
 
-      for (const requirement of route.needs) {
+      const added = (extraNeeds || []).filter(n => SLOTS[n] && !route.needs.includes(n));
+      const needs = route.needs.concat(added);
+
+      for (const requirement of needs) {
               const alternatives = requirement.split('|');
               const met = alternatives.find(name => {
                         const def = SLOTS[name];
@@ -341,7 +377,7 @@ export function checkSlots(topic, slots) {
       // customer can correct it in one word.
       const assumed = [];
       const values2 = values;
-      for (const name of (route.assumes || [])) {
+      for (const name of (route.assumes || []).filter(n => !added.includes(n))) {
               const def = SLOTS[name];
               if (!def || !def.fallback) continue;
               if (def.looksValid(values2[name])) continue;

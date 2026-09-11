@@ -165,7 +165,19 @@ const KEYWORDS = [
       // require the two words welded together ("model change") or "switch my
       // skis", so a customer writing the sentence the natural way matched
       // nothing at all.
-      { topic: 'DEPOT_SWITCH', re: /\b(modelchange|model\s+change|change\s+(?:the\s+|my\s+)?model|changement\s+d.?[eé]quipement|changer\s+(?:le\s+)?mod[eè]le|modell\s*(?:wechsel|tausch)|modell\s+(?:zu\s+)?[aä]ndern|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard)|changer\s+de\s+(?:skis?|mat[eé]riel|[eé]quipement|snowboard|planche)|change\s+(?:our|my|the)\s+(?:skis|equipment|gear)|mod[eè]le\s+ne\s+(?:nous\s+|me\s+)?convient\s+pas)\b/i },
+      // ... but only about a booking that exists.
+      //
+      // "Changement de l'équipement" is also the name of a PAID OPTION on the
+      // website, and a customer requesting a quote lists it beside boots and
+      // insurance: on 582304 Emma wrote "Ski's, boots, with change model and
+      // insurance" and this rule claimed her, sending a brand-new quote request
+      // to the flow that swaps equipment on an existing rental. She had no
+      // booking to swap anything on.
+      //
+      // So the rule now requires a booking to be in the room - a reference, or
+      // the customer's own words about their booking. Wanting the option is a
+      // quote; wanting a different pair of skis is a model change.
+      { topic: 'DEPOT_SWITCH', re: /^(?=[\s\S]*(?:\bB[123456789ABCDEFGHJKLMNPQRSTUVWXYZ]{5}\b|\b(?:my|our|the|this|mein\w*|unser\w*|dies\w*|ihr\w*|ma|mon|mes|notre|nos|cette|mijn|onze|deze|mia|mio|nostra|nostro|questa|questo|mi|mis|nuestr\w*|est[ae])\s+(?:booking|reservation|r[eé]servation|buchung|reservierung|boeking|reservering|prenotazione|reserva|order|commande|bestellung|bestelling|ordine|pedido)\b|\bbooking\s+(?:number|reference|ref|code)\b|\bbereits\s+gebucht\b|\bd[eé]j[aà]\s+r[eé]serv[eé]))[\s\S]*\b(modelchange|model\s+change|change\s+(?:the\s+|my\s+)?model|changement\s+d.?[eé]quipement|changer\s+(?:le\s+)?mod[eè]le|modell\s*(?:wechsel|tausch)|modell\s+(?:zu\s+)?[aä]ndern|switch\s+(my|the|from)?\s?(skis?|snowboard)|[eé]changer\s+(les|mes)\s+skis|swap\s+(my|the)\s+(skis?|snowboard)|changer\s+de\s+(?:skis?|mat[eé]riel|[eé]quipement|snowboard|planche)|change\s+(?:our|my|the)\s+(?:skis|equipment|gear)|mod[eè]le\s+ne\s+(?:nous\s+|me\s+)?convient\s+pas)\b/i },
       { topic: 'VOUCHER_RESEND', re: /\b(voucher|bon\s+de\s+r[eé]servation|renvoyer\s+le\s+voucher|resend\s+(the\s+)?voucher|confirmation\s+email\s+again)\b/i },
       // THE DOCUMENTS OF A PROTECTION ARE VOUCHERS TOO (581968).
       //
@@ -729,6 +741,609 @@ function wantsHuman(message) {
       return WANTS_HUMAN_RE.test(m);
 }
 
+/* ==========================================================================
+ * Reading a rental request written the way people actually write one.
+ *
+ * WHY THIS EXISTS (582304, and the several hundred mails a season shaped like
+ * it). Emma wrote, in four lines: the resort, the dates, who was coming, and
+ * both levels. Everything a quote needs. The extractor found none of it,
+ * because it only ever read ISO dates and booking references, so the flow
+ * reported six missing slots, the anti-loop guard saw a second turn with the
+ * same holes, and the mail went to a human without a single automatic reply.
+ *
+ * What defeated it, line by line:
+ *
+ *   "Astenblick Apartment in Winterberg, Germany"  the resort is buried in the
+ *                                                  name of a holiday flat
+ *   "26-02  -  01-03"                              day-month, no year, spaced
+ *   "just for me and my husband"                   a headcount with no digit
+ *   "I am 1.73 m, Intermediate / He is 1.98 m"     levels attached to heights
+ *
+ * None of that is exotic. It is how a customer writes. So the rule for
+ * everything below is: read what people write, in the six languages we serve,
+ * and take nothing we are not sure of - a wrong date or a wrong headcount is a
+ * wrong price, which is worse than a question.
+ * ========================================================================== */
+
+/** Accent-free lower case, for matching only. Never for output. */
+function flat(x) {
+      return String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+// Month names in the six languages we answer in, plus the abbreviations that
+// turn up in real mail. Keys are accent-free.
+const MONTH_WORDS = {
+      jan: 1, january: 1, janvier: 1, januar: 1, januari: 1, gennaio: 1, enero: 1, ene: 1, genn: 1,
+      feb: 2, february: 2, fevrier: 2, fev: 2, februar: 2, februari: 2, febbraio: 2, febrero: 2, febr: 2,
+      mar: 3, march: 3, mars: 3, marz: 3, maerz: 3, maart: 3, marzo: 3,
+      apr: 4, april: 4, avril: 4, avr: 4, aprile: 4, abril: 4,
+      may: 5, mai: 5, mei: 5, maggio: 5, mayo: 5, magg: 5,
+      jun: 6, june: 6, juin: 6, juni: 6, giugno: 6, junio: 6, giu: 6,
+      jul: 7, july: 7, juillet: 7, juli: 7, luglio: 7, julio: 7, lug: 7, juil: 7,
+      aug: 8, august: 8, aout: 8, augustus: 8, agosto: 8, ago: 8, ag: 8,
+      sep: 9, sept: 9, september: 9, septembre: 9, settembre: 9, septiembre: 9, set: 9, settembr: 9,
+      oct: 10, october: 10, octobre: 10, oktober: 10, ottobre: 10, octubre: 10, ott: 10, okt: 10,
+      nov: 11, november: 11, novembre: 11, noviembre: 11,
+      dec: 12, december: 12, decembre: 12, dezember: 12, dicembre: 12, diciembre: 12, dic: 12, dez: 12, dicembr: 12,
+};
+
+/**
+ * The bookable window, and the whole reason a year is optional.
+ *
+ * Benjamin's rule, stated plainly: a customer can only book from now until the
+ * end of June 2027, and 100% of them want a date inside that window. So a
+ * customer who writes "26-02" has told us the date - there is exactly one
+ * 26 February in the window, and asking which year would be asking them to
+ * confirm the only possible answer.
+ *
+ * Same computation as generate-quote.js, on purpose: the two must never
+ * disagree about which season we are in.
+ */
+function seasonWindow(now) {
+      const today = now || new Date();
+      const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+      const y = start.getUTCFullYear() + (start.getUTCMonth() >= 6 ? 1 : 0);
+      return { start, end: new Date(Date.UTC(y, 5, 30)) };
+}
+
+/** ISO string for a day/month, with the year the season window implies. */
+function dateInSeason(day, month, year, now) {
+      if (!(month >= 1 && month <= 12) || !(day >= 1 && day <= 31)) return null;
+      const win = seasonWindow(now);
+      const candidates = year
+        ? [year < 100 ? 2000 + year : year]
+        : [win.start.getUTCFullYear(), win.start.getUTCFullYear() + 1];
+      for (const y of candidates) {
+              const d = new Date(Date.UTC(y, month - 1, day));
+              // Rejects 31 February and friends: the roll-over changes the month.
+              if (d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) continue;
+              if (year) return d.toISOString().slice(0, 10);
+              if (d >= win.start && d <= win.end) return d.toISOString().slice(0, 10);
+      }
+      return null;
+}
+
+/**
+ * Every date the message states, oldest first, as {day, month, year|null}.
+ *
+ * Numeric pairs are read day-first. That is not a coin toss: our customers are
+ * European and write 26-02, and the two-figure pairs that would be ambiguous
+ * (03-01) are resolved by the pair test below rather than by a guess.
+ *
+ * The lookarounds matter more than the pattern. Without them "1.98 m" reads as
+ * a date, a phone number "06-42980629" reads as a date, and a shoe size "42.5"
+ * reads as a date. Each of those appeared in real mail.
+ */
+function findDateTokens(text) {
+      const m = String(text || '');
+      const out = [];
+
+      // 1. ISO, unambiguous, wins wherever it appears.
+      const iso = /(?<![\d/-])(\d{4})-(\d{2})-(\d{2})(?![\d-])/g;
+      let x;
+      while ((x = iso.exec(m))) {
+              out.push({ at: x.index, to: x.index + x[0].length, day: +x[3], month: +x[2], year: +x[1] });
+      }
+
+      // 2. Numeric day/month, with an optional four-figure year. A two-figure
+      //    tail is NOT read as a year: in "26-02 - 01-03" it would swallow the
+      //    start of the second date.
+      //    A full stop is also a decimal point, and that cost us #542168: a mail
+      //    listing boot sizes "25.5", "23.5", "27.5" was read as three dates in
+      //    May. So a dot-separated pair only counts as a date when it is written
+      //    the way a date is written - a two-figure month (19.06) or the German
+      //    trailing dot (26.2.) - which no shoe size ever is.
+      const num = /(?<![\d.,/-])(\d{1,2})\s*([./-])\s*(\d{1,2})(\.?)(?:\s*[./-]?\s*(20\d{2}|[2-4]\d(?![\d.,/-])))?(?![\d.,]*\d)/g;
+      while ((x = num.exec(m))) {
+              const a = +x[1], sep = x[2], bRaw = x[3], b = +bRaw, trailingDot = x[4] === '.';
+              // Both readings impossible - a height, a size, a price.
+              if (b > 31 || a > 31) continue;
+              if (sep === '.' && bRaw.length < 2 && !trailingDot && !x[5]) continue;
+              out.push({
+                        at: x.index, to: x.index + x[0].length,
+                        day: a, month: b, year: x[5] ? +x[5] : null,
+                        swappable: a <= 12 && b <= 12,
+              });
+      }
+
+      // 3. "26 February", "26th Feb", "1er mars", "26. Februar", "26 febbraio".
+      const dayFirst = /(?<![\d.,])(\d{1,2})\s*(?:st|nd|rd|th|er|eme|ème|\.)?\s*(?:of\s+|de\s+|di\s+|del\s+)?([A-Za-zÀ-ɏ]{3,12})\.?/g;
+      while ((x = dayFirst.exec(m))) {
+              const mo = MONTH_WORDS[flat(x[2])];
+              if (!mo) continue;
+              const tail = m.slice(x.index + x[0].length, x.index + x[0].length + 7);
+              const year = (tail.match(/^[\s,]*(\d{4})/) || [])[1];
+              out.push({
+                        at: x.index,
+                        to: x.index + x[0].length + (year ? tail.indexOf(year) + 4 : 0),
+                        day: +x[1], month: mo, year: year ? +year : null,
+              });
+      }
+
+      // 4. "February 26", "Feb 26th" - the American order, common from UK and
+      //    US customers and harmless to accept.
+      const monthFirst = /([A-Za-zÀ-ɏ]{3,12})\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?![\d.,]*\d)/g;
+      while ((x = monthFirst.exec(m))) {
+              const mo = MONTH_WORDS[flat(x[1])];
+              if (!mo) continue;
+              if (+x[2] > 31) continue;
+              if (out.some(d => Math.abs(d.at - x.index) < 14)) continue;   // already read as day-first
+              // "January 18, 2026" - the year sits after the comma, and without
+              // reading it we dated a January 2026 accident to January 2027.
+              const tail = m.slice(x.index + x[0].length, x.index + x[0].length + 7);
+              const year = (tail.match(/^[\s,]*(\d{4})/) || [])[1];
+              out.push({
+                        at: x.index,
+                        to: x.index + x[0].length + (year ? tail.indexOf(year) + 4 : 0),
+                        day: +x[2], month: mo, year: year ? +year : null,
+              });
+      }
+
+      out.sort((p, q) => p.at - q.at);
+      return out;
+}
+
+/**
+ * The rental period, when the message states one.
+ *
+ * Two dates make a period; one alone does not, because it could be either end
+ * and a guessed check-out is a wrong price. The pair has to make sense as a
+ * ski holiday: in order, inside the bookable window, and no longer than a
+ * month - which is what stops an invoice date or a birthday from being read as
+ * a rental.
+ */
+function findPeriod(text, now) {
+      const tokens = findDateTokens(text);
+      if (tokens.length < 2) return null;
+
+      const tryPair = (a, b) => {
+              const s = dateInSeason(a.day, a.month, a.year, now);
+              const e = dateInSeason(b.day, b.month, b.year, now);
+              if (!s || !e) return null;
+              const days = (new Date(e) - new Date(s)) / 86400000;
+              if (days < 0 || days > 31) return null;
+              // Nobody asks to rent in the past. A period that has already ended
+              // is a customer telling us about a previous holiday - #542686,
+              // "I hired from you twice last year, 28th December 2024-4th
+              // January 2025" - and reading it as a request is how a quote comes
+              // out for a week that is over.
+              if (new Date(e) < seasonWindow(now).start) return null;
+              return { start_date: s, end_date: e };
+      };
+
+      const read = (a, b) => {
+              const straight = tryPair(a, b);
+              if (straight) return straight;
+              // "03-01 - 09-01" written month-first by an English customer: both
+              // halves are ambiguous, so try the other reading rather than lose
+              // the period. Only when BOTH are swappable, and only if the
+              // day-first reading produced nothing at all.
+              if (a.swappable && b.swappable) {
+                        return tryPair(
+                          { day: a.month, month: a.day, year: a.year },
+                          { day: b.month, month: b.day, year: b.year });
+              }
+              return null;
+      };
+
+      /*
+       * Two dates in a mail are very often not the rental.
+       *
+       * #542387 said "J'ai effectué ce 24/01 une réservation ... du 22/02 au
+       * 27/02". Taking the first two gave 24 January to 22 February - the day
+       * she wrote to us, paired with the day her holiday starts. On a date
+       * change that is not a near miss, it is a booking moved to the wrong
+       * week.
+       *
+       * What separates a period from two dates that happen to be nearby is the
+       * word between them: "to", "au", "bis", "tot", "al", "hasta", or a plain
+       * dash. So a pair joined by one of those wins over a pair that is merely
+       * adjacent, and only if no pair is joined at all do we fall back to
+       * position.
+       *
+       * Among joined pairs the LAST one wins, which is what #542115 needs:
+       * "instead of from 29 January to 1 February, I need them from the 28th to
+       * the 31st" - the period the customer wants is the one they wrote second.
+       */
+      const JOINER = new RegExp(
+        '^[\\s,)]*(?:-|–|—|to|until|till|through|thru|and|' +
+        'au|jusqu(?:\'|’)?au|a|' +
+        'bis|bis zum|bis einschliesslich|und|' +
+        'tot|t/m|tot en met|en|' +
+        'al|fino al|fino a|' +
+        'hasta|hasta el|)?[\\s,(]*$', 'i');
+
+      const joined = [];
+      for (let i = 0; i + 1 < tokens.length; i++) {
+              const a = tokens[i], b = tokens[i + 1];
+              if (b.at < (a.to || a.at)) continue;             // overlapping reads of one date
+              const gap = String(text).slice(a.to || a.at, b.at);
+              if (gap.length > 24 || /\d/.test(gap)) continue;
+              if (!JOINER.test(gap)) continue;
+              const got = read(a, b);
+              if (got) joined.push(got);
+      }
+      if (joined.length) return joined[joined.length - 1];
+
+      // Nothing joined. Fall back to position, but not blindly: #542447 wrote
+      // "am 19.06." in the subject and again in the first line, and two
+      // mentions of one day fifty characters apart is a booking date said
+      // twice, not a rental that starts and ends on the same morning. A real
+      // single-day rental is written as a joined pair and was caught above.
+      for (let i = 0; i + 1 < tokens.length; i++) {
+              const a = tokens[i], b = tokens[i + 1];
+              if (b.at < (a.to || a.at)) continue;
+              const got = read(a, b);
+              if (got && got.start_date === got.end_date) continue;
+              if (got) return got;
+      }
+      return null;
+}
+
+// Number words, 1 to 12, in the six languages. Written out because "two
+// adults" is far commoner in mail than "2 adults".
+const NUM_WORDS = {
+      one: 1, un: 1, une: 1, ein: 1, eine: 1, einen: 1, een: 1, uno: 1, una: 1,
+      two: 2, deux: 2, zwei: 2, twee: 2, due: 2, dos: 2,
+      three: 3, trois: 3, drei: 3, drie: 3, tre: 3, tres: 3,
+      four: 4, quatre: 4, vier: 4, quattro: 4, cuatro: 4,
+      five: 5, cinq: 5, funf: 5, fuenf: 5, vijf: 5, cinque: 5, cinco: 5,
+      six: 6, sechs: 6, zes: 6, sei: 6, seis: 6,
+      seven: 7, sept: 7, sieben: 7, zeven: 7, sette: 7, siete: 7,
+      eight: 8, huit: 8, acht: 8, otto: 8, ocho: 8,
+      nine: 9, neuf: 9, neun: 9, negen: 9, nove: 9, nueve: 9,
+      ten: 10, dix: 10, zehn: 10, tien: 10, dieci: 10, diez: 10,
+      eleven: 11, onze: 11, elf: 11, undici: 11, once: 11,
+      twelve: 12, douze: 12, zwolf: 12, zwaalf: 12, twaalf: 12, dodici: 12, doce: 12,
+};
+
+const NUM_WORD_RE = Object.keys(NUM_WORDS).join('|');
+
+/** A count written either way: "3", "three", "trois", "drei". */
+function countAt(token) {
+      const t = flat(token).trim();
+      if (/^\d{1,3}$/.test(t)) return +t;
+      return NUM_WORDS[t] || null;
+}
+
+const ADULT_WORDS = 'adults?|adultes?|erwachsene[nr]?|volwassenen?|adulti|adulto|adultos?';
+const PERSON_WORDS = 'people|persons?|pax|skiers?|guests?|personnes?|personen|persone|personas|mensen|gente';
+/**
+ * Words that mean "a person under 18", in three tiers, because a flat list of
+ * them is a false-positive machine.
+ *
+ * 582304 was the demonstration: Emma signed off "Kind regards", the German
+ * word Kind was in the list, and a couple with no children was recorded as
+ * mentioning one - which put the ages back into `needs` and blocked the very
+ * quote this work exists to produce.
+ *
+ * So:
+ *   CHILD_PLAIN     unambiguous in every language we read, matched anywhere.
+ *   CHILD_CAPITAL   German nouns that are ordinary English words in lower
+ *                   case. Matched only when capitalised, which is how German
+ *                   writes them and English does not.
+ *   CHILD_POSSESSED "son", "fille", "figlio" - each of them a common word in
+ *                   some other language on this list ("son mari", "sei"), so
+ *                   each needs a possessive in front to count.
+ */
+const CHILD_PLAIN =
+      'children|kids?|teenagers?|toddlers?|infants?|' +
+      'enfants?|gamins?|adolescents?|' +
+      'kinder|kindern|jugendliche[rn]?|' +
+      'kinderen|kindje|' +
+      'bambini|bambino|bambina|ragazzi|ragazze|' +
+      'ninos?|ninas?|chicos?|chicas?|' +
+      'child|daughters?|dochters?|tochter';
+
+const CHILD_CAPITAL = 'Kind|Kindes|Kinder|Kindern|Sohn|Tochter';
+
+const POSSESSIVE =
+      'my|our|his|her|their|mon|ma|mes|notre|nos|son|sa|ses|leur|leurs|' +
+      'mein|meine|meinen|unser|unsere|unseren|ihr|ihre|sein|seine|' +
+      'mijn|onze|zijn|haar|' +
+      'mio|mia|miei|mie|nostro|nostra|nostri|nostre|suo|sua|' +
+      'mi|mis|nuestro|nuestra|nuestros|nuestras|su|sus';
+
+const CHILD_POSSESSED = 'sons?|fils|filles?|zoons?|hijos?|hijas?|figli|figlio|figlia';
+
+const CHILD_WORDS = CHILD_PLAIN + '|(?:(?:' + POSSESSIVE + ')\\s+(?:' + CHILD_POSSESSED + '))';
+
+/** Does this text talk about a child at all? */
+function mentionsAChild(raw) {
+      const m = flat(raw);
+      if (new RegExp('\\b(?:' + CHILD_PLAIN + ')\\b', 'i').test(m)) return true;
+      if (new RegExp('\\b(?:' + POSSESSIVE + ')\\s+(?:' + CHILD_POSSESSED + ')\\b', 'i').test(m)) return true;
+      // German capitalisation is the only thing separating Kind from "Kind
+      // regards", so this one test runs on the original text.
+      // ... and "Kind regards" is not a child. It is how half of our English
+      // mail ends, and it is what blocked 582304.
+      if (new RegExp('\\b(?:' + CHILD_CAPITAL + ')\\b(?!\\s*(?:regards|regard|rgds))', 'i')
+            .test(String(raw || '')) &&
+          new RegExp('\\b(?:' + CHILD_CAPITAL + ')\\b(?!\\s*(?:regards|regard|rgds))')
+            .test(String(raw || ''))) return true;
+      return false;
+}
+
+/**
+ * Where to look for an age, once we already know a child is in the message.
+ *
+ * Wider than the detector above on purpose: the capitalised German nouns and
+ * the bare possessed nouns belong here, because at this point the question is
+ * no longer "is there a child" but "where in the sentence is the number".
+ */
+const CHILD_SCAN = CHILD_PLAIN + '|' + CHILD_POSSESSED + '|' + flat(CHILD_CAPITAL);
+
+/**
+ * "Just the two of us" and everything that means the same in six languages.
+ *
+ * A pair phrase carries two facts at once: two adults, and - because the
+ * sentence names the whole party - no children. Both are recorded, and the
+ * second is the one that unblocks the quote. It is withdrawn later if a child
+ * turns up anywhere else in the message.
+ */
+const PAIR_PHRASES = new RegExp(
+      [
+        // English
+        '\\b(?:just |only )?(?:for |it(?:\'|’)?s |we are |we\'re )?(?:the |us )?two of us\\b',
+        '\\b(?:me|myself) and my (?:husband|wife|partner|boyfriend|girlfriend|spouse)\\b',
+        '\\bmy (?:husband|wife|partner|boyfriend|girlfriend|spouse) and (?:i|me|myself)\\b',
+        '\\bfor (?:me and )?my (?:husband|wife|partner) (?:and (?:me|i|myself))?\\b',
+        '\\bjust (?:the )?(?:two|2) of (?:us|them)\\b',
+        '\\b(?:a )?couple\\b(?=[^.]{0,30}\\b(?:rent|ski|equipment|gear))',
+        // French
+        '\\bnous (?:sommes )?(?:que )?deux\\b', '\\b(?:a|pour) deux\\b', '\\bmon mari et moi\\b',
+        '\\bma femme et moi\\b', '\\bmoi et mon mari\\b', '\\bmoi et ma femme\\b',
+        '\\bmon (?:compagnon|conjoint|copain) et moi\\b', '\\bma (?:compagne|conjointe|copine) et moi\\b',
+        '\\bnous deux\\b', '\\bjuste (?:nous )?deux\\b',
+        // German
+        '\\bzu zweit\\b', '\\bwir (?:sind )?zu zweit\\b',
+        '\\bmein mann und ich\\b', '\\bmeine frau und ich\\b',
+        '\\bmein (?:partner|freund) und ich\\b', '\\bmeine (?:partnerin|freundin) und ich\\b',
+        '\\bnur (?:wir )?(?:zwei|beide)\\b', '\\bwir beide\\b',
+        // Dutch
+        '\\bmet (?:z\'n|zijn|ons) (?:tweeen|twee)\\b', '\\bmijn man en ik\\b', '\\bmijn vrouw en ik\\b',
+        '\\bmijn (?:partner|vriend|vriendin) en ik\\b', '\\bwij (?:met )?(?:z\'n )?tweeen\\b',
+        '\\balleen wij (?:tweeen|twee)\\b',
+        // Italian
+        '\\bnoi due\\b', '\\bin due\\b',
+        '\\b(?:mio marito|mia moglie|il mio compagno|la mia compagna|il mio ragazzo|la mia ragazza) e(?:d)? io\\b',
+        '\\bio e(?:d)? (?:mio marito|mia moglie|il mio compagno|la mia compagna|il mio ragazzo|la mia ragazza)\\b',
+        '\\bsolo (?:noi )?(?:due|in due)\\b',
+        // Spanish
+        '\\bmi (?:marido|mujer|esposa|esposo|pareja|novio|novia) y yo\\b',
+        '\\byo y mi (?:marido|mujer|esposa|esposo|pareja|novio|novia)\\b',
+        '\\bnosotros dos\\b', '\\blos dos\\b', '\\bsolo (?:nosotros )?dos\\b',
+        // The mirror image of every "X and I" above: "I and my wife" is not
+        // elegant in any of these languages, and customers write it constantly.
+        '\\b(?:i|ich|ik|moi|io|yo)\\s+(?:and|und|en|et|e|y)\\s+my\\b',
+        '\\bich und (?:meine frau|mein mann|meine partnerin|mein partner)\\b',
+        '\\bik en (?:mijn man|mijn vrouw|mijn partner)\\b',
+        '\\bmoi et (?:mon mari|ma femme|mon compagnon|ma compagne)\\b',
+      ].join('|'), 'i');
+
+/** "Nobody under 18 is coming", said outright. */
+const NO_CHILDREN = new RegExp(
+      [
+        'no (?:children|kids|child|minors)', 'without children', 'there are no children',
+        'we have no (?:children|kids)', 'no (?:children|kids) (?:with us|in the group|are coming)',
+        'child(?:ren)?:?\\s*(?:none|no|0)\\b', 'adults only',
+        'pas d(?:\'|e )enfants?', 'sans enfants?', 'aucun enfant', 'que des adultes', 'uniquement des adultes',
+        'keine kinder', 'ohne kinder', 'nur erwachsene',
+        'geen kinderen', 'zonder kinderen', 'alleen volwassenen',
+        'nessun bambino', 'senza bambini', 'niente bambini', 'solo adulti',
+        'sin ninos', 'ningun nino', 'solo adultos',
+      ].join('|'), 'i');
+
+/**
+ * How many adults, how many children and how old they are, from a sentence.
+ *
+ * Returns what it is sure of and nothing else. Three shapes are read, in
+ * descending order of certainty:
+ *
+ *   1. counted outright        "2 adults and 1 child aged 9", "zwei Erwachsene"
+ *   2. a party with a total    "we are 4, one is 7 years old"
+ *   3. a pair phrase           "just for me and my husband"
+ *
+ * The ages are the delicate part. An age is only taken from a phrase that
+ * names a child, so "she is 1.73 m" and "we booked 8 days" cannot become the
+ * age of a child who does not exist.
+ */
+function findParty(text) {
+      const raw = String(text || '');
+      const m = flat(raw);
+      const out = {};
+
+      // --- children, first: an adult count is only safe once we know whether
+      //     the message is talking about children at all.
+      const mentionsChild = mentionsAChild(raw);
+
+      const ages = [];
+      if (mentionsChild) {
+              // "aged 7 and 10", "de 7 et 10 ans", "7 und 10 Jahre", "di 7 e 10 anni",
+              // "my son is 8", "kids (6, 9)". The age words anchor the numbers so a
+              // shoe size or a height cannot drift in.
+              // "12-jährigen Sohn" and "a 12-year-old" hyphenate the age onto the
+              // cue, which is why the separator below is [\s-]* and not \s*.
+              const AGE_CUE = '(?:aged?|age[sn]?|ans?|jahr\\w*|anni|annos?|anos?|jaar|jarige?|years?[\\s-]*old|year[\\s-]*old|yo|y\\.?o\\.?|old)';
+              const JOIN = '(?:,|and|et|und|en|e|y|&|\\+|/)';
+              const nearChild = [];
+              const cre = new RegExp('(?:' + CHILD_SCAN + ')', 'gi');
+              let c;
+              while ((c = cre.exec(m))) {
+                        nearChild.push(m.slice(Math.max(0, c.index - 40), c.index + 120));
+              }
+              for (const window of nearChild) {
+                        // Both orders. "7 and 10 ans" puts the numbers before the
+                        // cue, "aged 7 and 10" puts them after, and mail contains
+                        // each about equally often.
+                        const before = new RegExp('(\\d{1,2})[\\s-]*(?:' + JOIN + ')?[\\s-]*(?:(\\d{1,2})[\\s-]*)?(?:' + AGE_CUE + ')\\b', 'gi');
+                        const after = new RegExp('\\b(?:' + AGE_CUE + ')\\s*:?\\s*(\\d{1,2})(?:\\s*(?:' + JOIN + ')\\s*(\\d{1,2}))?', 'gi');
+                        for (const re of [before, after]) {
+                                  let a;
+                                  while ((a = re.exec(window))) {
+                                            for (const g of [a[1], a[2]]) {
+                                                      const v = g == null ? null : +g;
+                                                      if (v != null && v >= 0 && v <= 17) ages.push(v);
+                                            }
+                                  }
+                        }
+                        // "children 6, 9 and 12" - a bare list right after the word.
+                        const bare = window.match(new RegExp('(?:' + CHILD_SCAN + ')\\s*[:( ]\\s*((?:\\d{1,2}\\s*(?:,|and|et|und|en|e|y|&|\\+)?\\s*){1,6})', 'i'));
+                        if (bare) {
+                                  for (const g of bare[1].match(/\d{1,2}/g) || []) {
+                                            const v = +g;
+                                            if (v >= 0 && v <= 17) ages.push(v);
+                                  }
+                        }
+              }
+      }
+      const uniqueAges = [...new Set(ages)];
+      if (uniqueAges.length) out.children_ages = uniqueAges.join(', ');
+      else if (NO_CHILDREN.test(m)) out.children_ages = 'none';
+
+      // A child named without an age is the one case that must still be asked.
+      if (mentionsChild && !uniqueAges.length && out.children_ages !== 'none') {
+              out._children_no_age = 'yes';
+      }
+
+      // --- adults
+      const adultCount = m.match(new RegExp('\\b(\\d{1,3}|' + NUM_WORD_RE + ')\\s+(?:' + ADULT_WORDS + ')\\b', 'i'))
+                      || m.match(new RegExp('(?:' + ADULT_WORDS + ')\\s*[:=]?\\s*(\\d{1,3})\\b', 'i'));
+      if (adultCount) {
+              const n = countAt(adultCount[1]);
+              if (n != null && n >= 1 && n <= 60) out.adults = String(n);
+      }
+
+      if (!out.adults) {
+              const people = m.match(new RegExp('\\b(?:we are|nous sommes|wir sind|wij zijn|siamo|somos|for|pour|fur|voor|per|para)?\\s*(\\d{1,3}|' + NUM_WORD_RE + ')\\s+(?:' + PERSON_WORDS + ')\\b', 'i'));
+              if (people) {
+                        const n = countAt(people[1]);
+                        // A total is only an adult count once we know the children,
+                        // and it is only usable when there are none.
+                        if (n != null && n >= 1 && n <= 60 && out.children_ages === 'none') out.adults = String(n);
+                        else if (n != null && n >= 1 && n <= 60 && uniqueAges.length && n > uniqueAges.length) {
+                                  out.adults = String(n - uniqueAges.length);
+                        }
+              }
+      }
+
+      if (!out.adults && PAIR_PHRASES.test(m)) {
+              out.adults = '2';
+              // The phrase names the whole party. If a child is mentioned anywhere
+              // else in the message the sentence was not exhaustive, so the claim
+              // is dropped rather than trusted.
+              if (!mentionsChild) out.children_ages = 'none';
+      }
+
+      return out;
+}
+
+const SKI_WORDS = 'skis?|skiing|ski-?set|skier|skien|sci|esqui|esquis|schi';
+const BOARD_WORDS = 'snowboards?|boarding|board|snowboarden|tavola|snow';
+/*
+ * Levels come in two kinds, and mixing them is what produced twenty-one
+ * "advanced skiers" in a corpus of complaints and missing confirmations.
+ *
+ * Measured on the 314 mails of 26 January: "avance" fired nine times, all of
+ * them on "à l'avance"; "confirme" seven times, every one of them the word
+ * confirmation; "konnen" seven times, always the German verb; "profi" once,
+ * inside "profil". Not one of the twenty-four was a skier's level.
+ *
+ * So the unambiguous words match anywhere, and the words that are ordinary
+ * vocabulary in one of our six languages have to be introduced - by "niveau",
+ * "level", "livello", or by naming a skier. A wrong level is a wrong price
+ * tier, which is a wrong quote.
+ */
+const LEVEL_PLAIN = [
+      ['beginner', '(?:beginners?|novices?|debutant(?:e|s|es)?|anf(?:a|ae)nger(?:in)?|einsteiger(?:in)?|' +
+                    'principiant[eio]s?|novatos?|beginnend|first[\\s-]?time[rs]?)'],
+      ['intermediate', '(?:intermediates?|intermediaires?|fortgeschritten(?:e|er)?|gevorderde?n?|' +
+                       'intermedi[oa]s?)'],
+      ['advanced', '(?:advanced|experts?|esperto|experto|avanzad[oa]s?|avanzat[oa]s?|ervarene?)'],
+];
+
+const LEVEL_CONTEXTUAL = [
+      ['intermediate', '(?:moyen(?:ne)?s?|medi[oa]s?|mittel)'],
+      ['advanced', '(?:avance(?:e|s|es)?|confirme(?:e|s|es)?|profis?|konner)'],
+];
+
+// What has to sit next to a contextual level word for it to count.
+const LEVEL_CUE = '(?:niveau|niveaus|level|levels|livello|livelli|nivel|niveles|koennen|' +
+                  'ski(?:er|eur|euse|fahrer|fahrerin)?s?|snowboarder?s?|rider|piste)';
+
+/**
+ * What they want to ride and how well they ride it.
+ *
+ * Kept as a sentence rather than a structure, because that is what the slot
+ * declares and what the quote reads. The value is only produced when BOTH
+ * halves are present: a message that says "skis" and nothing about level is
+ * still missing the thing that sets the price tier, and must be asked.
+ */
+function findEquipmentLevel(text) {
+      const m = flat(text);
+      const kinds = [];
+      if (new RegExp('\\b(?:' + SKI_WORDS + ')\\b', 'i').test(m)) kinds.push('skis');
+      if (new RegExp('\\b(?:' + BOARD_WORDS + ')\\b', 'i').test(m)) kinds.push('snowboard');
+      if (!kinds.length) return null;
+
+      const levels = [];
+      for (const [tier, pattern] of LEVEL_PLAIN) {
+              if (new RegExp('\\b' + pattern + '\\b', 'i').test(m)) levels.push(tier);
+      }
+      for (const [tier, pattern] of LEVEL_CONTEXTUAL) {
+              const near = new RegExp(
+                '(?:' + LEVEL_CUE + ')[^.!?]{0,25}\\b' + pattern + '\\b' +
+                '|\\b' + pattern + '\\b[^.!?]{0,25}(?:' + LEVEL_CUE + ')', 'i');
+              if (near.test(m)) levels.push(tier);
+      }
+      if (!levels.length) return null;
+
+      const order = ['beginner', 'intermediate', 'advanced'];
+      const seen = order.filter(t => levels.includes(t));
+      return kinds.join(' and ') + ', ' + seen.join(' and ');
+}
+
+/** Paid extras the customer named outright, in any of the six languages. */
+function findExtras(text) {
+      const m = flat(text);
+      const out = {};
+      const yes = w => new RegExp('\\b' + w + '\\b', 'i').test(m);
+      const refused = w => new RegExp('\\b(?:no|not|without|pas de|sans|keine?|ohne|geen|zonder|nessun\\w*|senza|sin|ningun\\w*)\\s+(?:\\w+\\s+){0,2}' + w, 'i').test(m);
+
+      const BOOTS = '(?:boots?|ski ?boots?|chaussures?|schuhe|skischuhe|schoenen|skischoenen|scarponi|botas)';
+      const HELMET = '(?:helmets?|casques?|helme?|helmen|caschi|casco|cascos)';
+      // Not "protection" and not "cover" on their own: both are ordinary
+      // English and would put 15% on a quote because somebody asked us to cover
+      // a cost.
+      const INSUR = '(?:insurance|damage (?:and|&) theft|assurance|versicherung|verzekering|' +
+                    'assicurazione|seguro|alpinguaranty|alpin ?guaranty|alpinflexi)';
+
+      if (yes(BOOTS)) out.boots = refused(BOOTS) ? 'nobody' : 'everyone';
+      if (yes(HELMET)) out.helmets = refused(HELMET) ? 'nobody' : 'everyone';
+      if (yes(INSUR)) out.insurance = refused(INSUR) ? 'no' : 'yes';
+      return out;
+}
+
 /**
  * Slots the message states outright.
  *
@@ -738,10 +1353,9 @@ function wantsHuman(message) {
  * had just written. That is the same insult as asking someone to resend their
  * own message, and it is worse than not asking at all.
  *
- * Deliberately narrow: only patterns that cannot be mistaken for prose. A
- * booking reference is 6 alphanumerics with at least one digit, which excludes
- * ordinary words; dates are ISO only. Anything looser belongs to the model, and
- * the model's values still go through looksValid.
+ * Narrow where being wrong is expensive - a booking reference, a date, a
+ * headcount - and silent everywhere else. Anything this function is not sure
+ * of it leaves out, and the model's values still go through looksValid.
  */
 function extractFromMessage(message) {
       const m = String(message || '');
@@ -781,14 +1395,24 @@ function extractFromMessage(message) {
       // list lets the handler say so and hand over, which is the honest answer.
       if (refs.length > 1) found._booking_refs = refs.join(', ');
 
-      // Two ISO dates in order are a period. One alone is ambiguous - it could be
-      // a start or an end - so we take nothing.
-      const dates = m.match(/\b\d{4}-\d{2}-\d{2}\b/g) || [];
-      if (dates.length >= 2) {
-              const sorted = dates.slice(0, 2).sort();
-              found.start_date = sorted[0];
-              found.end_date = sorted[1];
+      // Two dates in order are a period. One alone is ambiguous - it could be a
+      // start or an end - so we take nothing. findPeriod reads ISO, day-month
+      // and written-out months, and fills the year from the bookable season.
+      const period = findPeriod(m);
+      if (period) {
+              found.start_date = period.start_date;
+              found.end_date = period.end_date;
       }
+
+      // Who is coming, and how old the children are when there are any.
+      Object.assign(found, findParty(m));
+
+      // Skis or a board, and the level - only when the message states both.
+      const gear = findEquipmentLevel(m);
+      if (gear) found.equipment_level = gear;
+
+      // Boots, helmets and protection, named or refused outright.
+      Object.assign(found, findExtras(m));
 
       return found;
 }
@@ -1033,6 +1657,7 @@ function deaccent(x) {
 }
 
 let _shopTowns = null;
+let _townSpelling = null;
 
 async function loadShopPlaces() {
   if (_shopPlaces) return _shopPlaces;
@@ -1043,19 +1668,34 @@ async function loadShopPlaces() {
     clearTimeout(t);
     if (!r.ok) return (_shopPlaces = []);
     const rows = await r.json();
+    // A town's name is not a shop's identifier, even when a shop wears it.
+    //
+    // "Celso Sport Bormio 2000" contributed the token "bormio", so an Italian
+    // customer writing "saremo a Bormio" - the town, plainly - was resolved to
+    // the resort Bormio 2000, which is a different place up the mountain. The
+    // token that names a town is dropped here; the town resolver below reads
+    // it properly, and "Celso" still identifies the shop.
+    const townWords = new Set();
+    for (const row of (Array.isArray(rows) ? rows : [])) {
+      for (const w of deaccent(row.town).split(/[^a-z0-9]+/)) if (w.length >= 4) townWords.add(w);
+    }
     _shopPlaces = (Array.isArray(rows) ? rows : []).map(row => ({
       name: row.name,
       town: row.town,
       tokens: deaccent(row.name).split(/[^a-z0-9]+/)
-        .filter(w => w.length >= 5 && !GENERIC_SHOP_WORDS.has(w)),
+        .filter(w => w.length >= 5 && !GENERIC_SHOP_WORDS.has(w) && !townWords.has(w)),
     })).filter(x => x.tokens.length);
     // The same rows also carry the town and its country, which is the only way
     // to know whether a big group is a FRENCH big group. Built here so the
     // large-group check below costs no second request.
     _shopTowns = new Map();
+    _townSpelling = new Map();
     for (const row of (Array.isArray(rows) ? rows : [])) {
       const t = deaccent(String(row.town || '')).trim();
       if (t.length >= 4 && !_shopTowns.has(t)) _shopTowns.set(t, String(row.country || '').toLowerCase());
+      // The town as the table spells it, so a resolved resort goes back to the
+      // customer as "Söll" and not "soll".
+      if (t && !_townSpelling.has(t)) _townSpelling.set(t, String(row.town || '').trim());
     }
     return _shopPlaces;
   } catch {
@@ -1096,6 +1736,68 @@ async function resolvePlaceFromShops(text) {
 
   if (byTown.size !== 1) return null;   // nothing, or ambiguous - ask instead
   return byTown.values().next().value;
+}
+
+/**
+ * The resort, when the customer names the resort rather than a shop.
+ *
+ * resolvePlaceFromShops above reads SHOP names, which is the right tool for
+ * "not the Cianross" but blind to the far commoner case: the customer names
+ * the town. On 582304 the town was written plainly - "Astenblick Apartment in
+ * Winterberg, Germany" - and we asked her which resort she was going to.
+ *
+ * Matching a town list against free text is easy to get wrong in one specific
+ * way: some of our towns are ordinary words in the languages we serve. Söll
+ * deaccents to "soll", which is in every second German sentence; Vent is wind
+ * in French; Stumm is an adjective. Three guards, cheap and sufficient:
+ *
+ *   - at least five characters, which drops Kals, Vars, Fiss, Oetz and the
+ *     rest of the four-letter towns rather than risk them;
+ *   - a short name must be capitalised where it appears, because a customer
+ *     writing the resort writes Söll and a customer writing German writes
+ *     soll;
+ *   - two different towns resolve to nothing at all. A guess about where
+ *     somebody is skiing is worse than a question.
+ *
+ * "Astenblick" is not in the list, "Germany" is not in the list, "Winterberg"
+ * is - which is exactly the discrimination that was missing.
+ */
+const TOWN_LOOKALIKES = new Set(['soll', 'stumm', 'lenk', 'bila', 'itter', 'vent', 'moena']);
+
+async function resolveTownFromShops(text) {
+  const raw = String(text || '');
+  if (raw.length < 6) return null;
+  await loadShopPlaces();
+  if (!_shopTowns || !_shopTowns.size) return null;
+
+  const hay = flat(raw);
+  const hits = new Map();
+
+  for (const town of _shopTowns.keys()) {
+    if (town.length < 5 || TOWN_LOOKALIKES.has(town)) continue;
+    let at = hay.indexOf(town);
+    while (at >= 0) {
+      const before = at === 0 ? ' ' : hay.charAt(at - 1);
+      const after = hay.charAt(at + town.length) || ' ';
+      const wordBoundary = !/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after);
+      // A short town has to look like a proper noun in the original text.
+      const capitalised = /^[A-ZÀ-Þ]/.test(raw.charAt(at) || '');
+      if (wordBoundary && (town.length >= 7 || capitalised) && !mentionIsRefused(hay, at)) {
+        hits.set(town, at);
+        break;
+      }
+      at = hay.indexOf(town, at + 1);
+    }
+  }
+
+  if (hits.size !== 1) return null;
+  const found = [...hits.keys()][0];
+  // Give back the town as it is spelled in the shop table, not deaccented.
+  return { town: originalTownSpelling(found) || found, shops: [], refused: [] };
+}
+
+function originalTownSpelling(flatName) {
+  return (_townSpelling && _townSpelling.get(flatName)) || null;
 }
 
 
@@ -1931,6 +2633,46 @@ export default async function handler(req, res) {
       else if (llm) decision = llm;
       else decision = { topic: 'OTHER', source: 'none', blocked: false };
 
+      /*
+       * A rental request is a rental request even when it never says "quote".
+       *
+       * Every layer above matches WORDS. Emma's second mail contained none of
+       * ours - no "quote", no "price", no "how much" - and yet it was a
+       * complete rental request: a resort, a period, a party and two levels.
+       * Word-matching had nothing to catch, so it fell to OTHER and a human
+       * read a mail we could have priced.
+       *
+       * This last layer matches SHAPE instead. When nothing else claimed the
+       * message and the customer has stated the facts a quote is built from,
+       * that is a quote request whatever vocabulary they used, in any
+       * language - which is the point, because the shape is the same in all
+       * six.
+       *
+       * Three conditions, and all three are needed:
+       *   - a period, which is what separates a rental from a question;
+       *   - a place, or a headcount, so we are not reading a stray date;
+       *   - a word about renting or equipment, so a hotel confirmation
+       *     forwarded to us does not become a quote.
+       * A message naming an existing booking is excluded outright: that is a
+       * change to something that exists, and the flows that handle it match on
+       * words for good reasons.
+       */
+      if (decision.topic === 'OTHER' && !decision.blocked) {
+              const stated = extractFromMessage(message);
+              const RENT_CUE = new RegExp(
+                'rent(?:al|ing|s)?|hire|equipment|gear|\\bski\\b|skis|snowboard|' +
+                'lou(?:er|ons|ation)|location de|mat[eé]riel|' +
+                'mieten|miete|verleih|ausr[uü]stung|ausleihen|' +
+                'huren|verhuur|uitrusting|' +
+                'noleggi\\w*|attrezzatura|' +
+                'alquil\\w*|equipo', 'i');
+              if (stated.start_date && stated.end_date && !stated.booking_ref &&
+                  (stated.adults || stated.equipment_level) &&
+                  RENT_CUE.test(String(message))) {
+                        decision = { topic: 'QUOTE', source: 'quote_by_shape', blocked: false };
+              }
+      }
+
       let topic = decision.topic;
 
       // Apply the history reference, but only where it is safe (see above).
@@ -1962,7 +2704,10 @@ export default async function handler(req, res) {
           !slots.resort_name && !slots.shop_name) {
               const wholeThread = [thread.subject, message]
                 .concat(thread.turns || []).filter(Boolean).join('\n');
-              placeFound = await resolvePlaceFromShops(wholeThread);
+              // A shop name first - it pins the town exactly and often the shop
+              // too. Then the town itself, which is what most customers write.
+              placeFound = await resolvePlaceFromShops(wholeThread)
+                        || await resolveTownFromShops(wholeThread);
               if (placeFound) {
                         slots.resort_name = placeFound.town;
                         historyApplied.push('resort_name_from_shop');
@@ -2007,9 +2752,30 @@ export default async function handler(req, res) {
               }
       }
 
+      // Children: assumed absent when nobody mentions one, asked for when
+      // somebody does.
+      //
+      // The slot sits in `assumes` now, so silence means "no children" and the
+      // quote goes out with that assumption printed. What must NOT be assumed
+      // is a child the customer has actually told us about: "us two and our
+      // son" is a party of three, and pricing the son as an adult is the wrong
+      // price at the till that this slot was written to prevent.
+      //
+      // Only the extractor can tell the two apart, because only it read the
+      // message. So it flags a child-without-an-age, and the requirement is
+      // handed back to checkSlots for that case alone. Computed over the whole
+      // thread: the child may have been mentioned in the first mail and the
+      // dates in the second.
+      const partyText = [thread.subject, message].concat(thread.turns || [])
+        .filter(Boolean).join('\n');
+      const childrenNeedAsking =
+        findParty(partyText)._children_no_age === 'yes' &&
+        !SLOTS.children_ages.looksValid(slots.children_ages);
+      const extraNeeds = childrenNeedAsking ? ['children_ages'] : [];
+
       // Not const: a second pass over an unanswered paid option rewrites this.
       // See the declineUnstatedExtras block below.
-      let check = checkSlots(topic, slots);
+      let check = checkSlots(topic, slots, extraNeeds);
       // Two different things, deliberately kept apart.
       //
       // askedQuestions is what the customer actually wanted to know. It is the
@@ -2094,7 +2860,7 @@ export default async function handler(req, res) {
               // references they named are context - on 581832, "First booking:
               // B91NDK" was the customer telling us which one to keep.
               slots.booking_ref = targets[0];
-              check = checkSlots(topic, slots);
+              check = checkSlots(topic, slots, extraNeeds);
               action = check.ready ? 'RUN' : 'ASK';
               escalation = null;
       } else if (targets.length > 1 && topic === 'CANCELLATION') {
@@ -2113,7 +2879,7 @@ export default async function handler(req, res) {
               // targetRefsText, and the flow re-derives it from the customer's own
               // words with the same rule this file uses.
               slots.booking_ref = targets[0];
-              check = checkSlots(topic, slots);
+              check = checkSlots(topic, slots, extraNeeds);
               action = check.ready ? 'RUN' : 'ASK';
               escalation = null;
       } else if (targets.length > 1) {
@@ -2178,7 +2944,7 @@ export default async function handler(req, res) {
                         // keywords picked first. Re-check them against the one
                         // we are actually about to run, or a ready request looks
                         // incomplete and a missing reference goes unnoticed.
-                        check = checkSlots(topic, slots);
+                        check = checkSlots(topic, slots, extraNeeds);
                         action = check.ready ? 'RUN' : 'ASK';
                         escalation = null;
               } else {
@@ -2259,7 +3025,7 @@ export default async function handler(req, res) {
       if (action === 'ASK' && alreadyAsked &&
               check.missing.length && check.missing.every(req => OPTIONAL_EXTRAS.includes(req))) {
               check.missing.forEach(req => { slots[req] = 'no'; });
-              check = checkSlots(topic, slots);
+              check = checkSlots(topic, slots, extraNeeds);
               action = check.ready ? 'RUN' : action;
       }
 
