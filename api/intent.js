@@ -114,6 +114,38 @@ const KEYWORDS = [
       // equipment or protection word decides before "locker" is even read.
       // It routes to GENERAL_QUESTION, whose knowledge base holds the
       // protections and knows to hand a claim over rather than improvise.
+      /*
+       * "CASSE ET VOL" IS THE NAME OF THE PRODUCT, NOT AN ACCIDENT (582316).
+       *
+       * Madame Vienne wrote: "j'ai omis de souscrire à l'assurance contre casse
+       * et vol du matériel. Y a-t-il possibilité de souscrire en magasin ou
+       * faut-il l'ajouter au préalable ?" Nothing has been broken and nothing
+       * has been stolen. She wants to BUY the cover she forgot - which is the
+       * exact case requote-booking was written for, down to the ticket it cites.
+       *
+       * The claim rule below reads "casse" and "vol" next to "matériel" and
+       * calls it a claim, because damage and theft are literally the product's
+       * name: "assurance contre casse et vol", "damage & theft protection",
+       * "Bruch- und Diebstahlschutz". So this rule runs first and asks the only
+       * question that separates the two: is the customer TAKING OUT the cover,
+       * or REPORTING something that happened?
+       *
+       * Taking it out is a requote - a fresh cart with the protection included
+       * and the old booking cancelled - and never a paragraph of knowledge.
+       */
+      { topic: 'REQUOTE',
+        re: new RegExp(
+          '(?=[\\s\\S]*\\b(?:souscrire|souscription|ajouter|rajouter|prendre|inclure|' +
+          'add|subscribe|take\\s+out|purchase|buy|include|' +
+          'hinzuf[uü]gen|abschlie[sß]en|dazubuchen|nachbuchen|' +
+          'toevoegen|afsluiten|bijboeken|' +
+          'aggiungere|sottoscrivere|' +
+          'a[nñ]adir|contratar|incluir)\\b)' +
+          '(?=[\\s\\S]*\\b(?:assurance|insurance|protection|versicherung|verzekering|' +
+          'assicurazione|seguro|garantie|guaranty|alpin\\s?guaranty|alpin\\s?flexi|alpin\\s?safety)\\b)' +
+          '(?![\\s\\S]*(?:ont\\s+[eé]t[eé]\\s+vol[eé]|a\\s+[eé]t[eé]\\s+vol[eé]|' +
+          'j(?:\'|’)ai\\s+cass[eé]|were\\s+stolen|was\\s+stolen|has\\s+been\\s+stolen|' +
+          'i\\s+broke|wurde\\s+gestohlen|sono\\s+stati\\s+rubati|me\\s+robaron))', 'i') },
       { topic: 'GENERAL_QUESTION',
         re: /(?=[\s\S]*\b(?:stolen|theft|thie(?:f|ves)|robbed|vol[eé]e?s?\b|d[eé]rob[eé]\w*|gestohlen|diebstahl|entwendet|rubat[oi]|furto|robad[oa]s?|robo\b|damaged|broken\s+(?:ski|boot|board|helmet|binding|pole)|snapped|cass[eé]e?s?\b|endommag[eé]\w*|besch[aä]digt|kaputt|danneggiat\w*|da[nñ]ad[oa]s?|rot[oa]s?\b|sinistre|claim\b|r[eé]clamation|schaden(?:s?fall|meldung)?))(?=[\s\S]*\b(?:skis?|boots?|snowboard|board|helmet|casque|chaussures?|mat[eé]riel|equipment|Ski|Schuhe|Helm|Brett|attrezzatura|scarponi|equipo|botas|guaranty|guarantee|protection|assurance|insurance|versicherung|assicurazione|seguro|garantie))/i },
       // A PROSPECT WHO ALSO MENTIONS THE DEPOT IS STILL A PROSPECT (582033).
