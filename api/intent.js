@@ -698,7 +698,30 @@ const BIG_GROUP_MIN = 50;
 /** The largest headcount the customer states next to a word for people. */
 function statedGroupSize(message) {
   const m = deaccent(stripQuotedAndSignature(String(message || '')));
-  const WORD = 'personnes?|people|persons?|pax|adultes?|adults?|skieurs?|skiers?|participants?|teilnehmer|personen|erwachsene|persone|personas';
+  /*
+   * A school group counts its people in school words, not in "persons".
+   *
+   * #582321: "un devis pour 63 élèves de 5ème et 6 accompagnateurs" for
+   * Saint-Lary. Sixty-nine people in France, which is exactly the case this
+   * rule exists to catch - and it read a group size of zero, because neither
+   * "élèves" nor "accompagnateurs" was in the list. The mail fell through to
+   * the ordinary quote path and a collège was asked, by machine, for the ski
+   * level of each of its 63 pupils.
+   *
+   * School trips are a large share of the French groups Skitruck handles, so
+   * their vocabulary belongs here in all six languages, alongside the words for
+   * the adults who come with them.
+   */
+  const WORD = 'personnes?|people|persons?|pax|adultes?|adults?|skieurs?|skiers?|participants?|' +
+               'teilnehmer|personen|erwachsene|persone|personas|' +
+               // schoolchildren and students
+               'el[eè]ves?|etudiants?|coll[eé]giens?|lyc[eé]ens?|scolaires?|jeunes|ados|adolescents?|' +
+               'enfants?|pupils?|students?|schoolchildren|children|kids|teens?|' +
+               'sch[uü]ler(?:innen)?|studenten|leerlingen|studenti|alunni|ragazzi|alumnos?|estudiantes?|' +
+               // the adults who come with them
+               'accompagnateurs?|accompagnants?|encadrants?|animateurs?|professeurs?|enseignants?|' +
+               'chaperones?|teachers?|supervisors?|betreuer(?:innen)?|begleitpersonen?|' +
+               'begeleiders?|accompagnatori|acompa[nñ]antes?';
   let best = 0;
   const forward = new RegExp('\\b(\\d{2,4})\\s*(?:' + WORD + ')\\b', 'gi');
   const backward = new RegExp('\\b(?:groupe|group|gruppe|gruppo|grupo)\\s+(?:de\\s+|of\\s+|von\\s+)?(\\d{2,4})\\b', 'gi');
@@ -717,16 +740,25 @@ async function franceBigGroup(message) {
   if (size <= BIG_GROUP_MIN) return null;
   await loadShopPlaces();
   if (!_shopTowns || !_shopTowns.size) return { size, town: '', country: '' };
-  const hay = deaccent(stripQuotedAndSignature(String(message || '')));
+  /*
+   * A hyphen is not a difference of place.
+   *
+   * The customer wrote "Saint-Lary"; the table holds "Saint Lary (Village)" and
+   * "Le Pla d'Adet - Saint Lary". A literal indexOf finds neither, so a group of
+   * sixty-nine in France looked like a group of sixty-nine nowhere, the France
+   * test failed, and #582321 went to the ordinary quote path. Hyphens,
+   * apostrophes and the bracketed village suffix are punctuation, not identity:
+   * both sides are flattened to words before comparing.
+   */
+  const loose = s => deaccent(s).replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  const hay = ' ' + loose(stripQuotedAndSignature(String(message || ''))) + ' ';
   let found = null;
   for (const [town, country] of _shopTowns) {
-    const at = hay.indexOf(town);
-    if (at < 0) continue;
-    const before = at === 0 ? ' ' : hay.charAt(at - 1);
-    const after = hay.charAt(at + town.length) || ' ';
-    if (/[a-z0-9]/.test(before) || /[a-z0-9]/.test(after)) continue;
+    const needle = loose(town);
+    if (needle.length < 4) continue;
+    if (hay.indexOf(' ' + needle + ' ') < 0) continue;
     // Longest town name wins: "val thorens" over a shorter town inside it.
-    if (!found || town.length > found.town.length) found = { town, country };
+    if (!found || needle.length > found.len) found = { town, country, len: needle.length };
   }
   return { size, town: found ? found.town : '', country: found ? found.country : '' };
 }
@@ -1117,7 +1149,26 @@ function scorePeriod(text, at) {
       return score;
 }
 
+/*
+ * Days that are not a period.
+ *
+ * #582321 asked for three days of skiing "non consécutifs" - Monday the 15th,
+ * Tuesday the 16th and Thursday the 18th. Read as a range that is 15 to 18,
+ * four days, one of which the group is not skiing: a wrong quote and, on a date
+ * change, a booking moved to days nobody asked for.
+ *
+ * When the customer says outright that the days are separate, we take no period
+ * at all. There is no shape of quote we can build from it automatically anyway,
+ * and a person reading "non consécutifs" knows immediately what to do.
+ */
+const NON_CONSECUTIVE = new RegExp(
+      'non[\\s-]?cons[eé]cutifs?|pas\\s+cons[eé]cutifs?|non[\\s-]?consecutive|not\\s+consecutive|' +
+      'separate\\s+days|nicht\\s+aufeinanderfolgend|nicht\\s+zusammenh[aä]ngend|' +
+      'niet\\s+aaneengesloten|losse\\s+dagen|non\\s+consecutivi|giorni\\s+separati|' +
+      'no\\s+consecutivos|d[ií]as\\s+sueltos', 'i');
+
 function findPeriod(text, now) {
+      if (NON_CONSECUTIVE.test(String(text || ''))) return null;
       // "du 9 au 14 mars" first: it is one unambiguous statement of a period,
       // and stronger evidence than any two dates that merely sit near each
       // other. Reading it here also rescues the 387 mails where it is the only
